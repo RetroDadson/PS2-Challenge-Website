@@ -1,0 +1,412 @@
+@using PS2Challenge.Backend.Models
+@using PS2Challenge.Backend.Services
+@using PS2Challenge.Backend.Data.Repositories
+@using Microsoft.EntityFrameworkCore
+@using PS2Challenge.Backend.Data
+@using System.Net.Http.Json
+@inject IJSRuntime JSRuntime
+@inject IServiceScopeFactory ScopeFactory
+@inject GameService GameService
+@inject HttpClient HttpClient
+
+@if (IsVisible)
+{
+    <div class="modal-overlay" @onclick="HandleOverlayClick">
+        <div class="modal-content game-edit-modal" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h2>@(IsEditMode ? $"Edit Game: {Game?.Title}" : "Add New Game")</h2>
+                <button class="modal-close" @onclick="Close">&times;</button>
+            </div>
+            
+            <div class="modal-body">
+                @if (errorMessage != null)
+                {
+                    <div class="alert alert-error">
+                        @errorMessage
+                    </div>
+                }
+
+                <div class="form-container">
+                    <div class="form-field">
+                        <label>Title *</label>
+                        <input type="text" @bind="internalTitle" class="search-input" maxlength="150" />
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-field">
+                            <label>Developer *</label>
+                            <input type="text" @bind="internalDeveloper" class="search-input" maxlength="100" />
+                        </div>
+
+                        <div class="form-field">
+                            <label>Publisher *</label>
+                            <input type="text" @bind="internalPublisher" class="search-input" maxlength="100" />
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-field">
+                            <label>First Released</label>
+                            <input type="date" @bind="internalFirstReleased" class="search-input" />
+                        </div>
+
+                        <div class="form-field">
+                            <label>Region First Released *</label>
+                            <input type="text" @bind="internalRegion" class="search-input" maxlength="100" placeholder="e.g., NA, EU, JP" />
+                        </div>
+                    </div>
+
+                    <div class="form-field">
+                        <label>
+                            <input type="checkbox" @bind="internalReleasedInEuPalOrNa" />
+                            Released in EU/PAL or NA
+                        </label>
+                    </div>
+
+                    <hr class="section-divider" />
+
+                    <h3>Ownership Status</h3>
+                    <div class="form-field">
+                        <label>
+                            <input type="checkbox" @bind="internalOwnPhysicalCopy" />
+                            Own Physical Copy
+                        </label>
+                    </div>
+
+                    <div class="form-field">
+                        <label>Type Owned</label>
+                        @if (ownershipTypes.Any())
+                        {
+                            <select @bind="internalTypeOwned" class="search-input">
+                                <option value="">-- Select Type --</option>
+                                @foreach (var type in ownershipTypes)
+                                {
+                                    <option value="@type.TypeOwned">@type.TypeOwned</option>
+                                }
+                            </select>
+                        }
+                        else
+                        {
+                            <input type="text" @bind="internalTypeOwned" class="search-input" placeholder="Loading types..." disabled />
+                        }
+                    </div>
+
+                    <hr class="section-divider" />
+
+                    <h3>Exclusion Status</h3>
+                    <div class="form-field">
+                        <label>
+                            <input type="checkbox" @bind="internalIsExcluded" />
+                            Exclude from Challenge
+                        </label>
+                    </div>
+
+                    @if (internalIsExcluded)
+                    {
+                        <div class="form-field indent">
+                            <label>Exclusion Reason *</label>
+                            <textarea @bind="internalExclusionReason" class="search-input" rows="3" placeholder="Reason for exclusion..."></textarea>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                @if (IsEditMode)
+                {
+                    <button class="btn btn-danger" @onclick="DeleteGame" disabled="@isProcessing">Delete</button>
+                }
+                <button class="btn btn-secondary" @onclick="Close" disabled="@isProcessing">Cancel</button>
+                <button class="cta-button" @onclick="Save" disabled="@isProcessing">
+                    @if (isProcessing)
+                    {
+                        <span>Processing...</span>
+                    }
+                    else
+                    {
+                        <span>@(IsEditMode ? "Update" : "Create")</span>
+                    }
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsVisible { get; set; }
+    [Parameter] public bool IsEditMode { get; set; }
+    [Parameter] public GameDto? Game { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback OnSave { get; set; }
+    [Parameter] public EventCallback<int> OnDelete { get; set; }
+
+    private string? internalTitle;
+    private string? internalDeveloper;
+    private string? internalPublisher;
+    private DateTime? internalFirstReleased;
+    private string? internalRegion;
+    private bool internalReleasedInEuPalOrNa;
+    private bool internalOwnPhysicalCopy;
+    private string? internalTypeOwned;
+    private bool internalIsExcluded;
+    private string? internalExclusionReason;
+
+    private List<OwnershipType> ownershipTypes = new();
+    private string? errorMessage;
+    private bool isProcessing;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadOwnershipTypes();
+    }
+
+    private async Task LoadOwnershipTypes()
+    {
+        try
+        {
+            ownershipTypes = await HttpClient.GetFromJsonAsync<List<OwnershipType>>("/api/admin/games/ownership-types") ?? new();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading ownership types: {ex.Message}");
+            ownershipTypes = new();
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (IsVisible && Game != null)
+        {
+            internalTitle = Game.Title;
+            internalDeveloper = Game.Developer;
+            internalPublisher = Game.Publisher;
+            internalFirstReleased = Game.FirstReleased?.ToDateTime(TimeOnly.MinValue);
+            internalRegion = Game.RegionFirstReleasedIn;
+            internalReleasedInEuPalOrNa = Game.ReleasedInEuPalOrNa;
+            internalIsExcluded = Game.IsExcluded;
+            
+            // Load current ownership details if game is owned and in edit mode
+            if (IsEditMode && Game.IsOwned)
+            {
+                await LoadCurrentOwnership();
+            }
+            else
+            {
+                internalOwnPhysicalCopy = false;
+                internalTypeOwned = string.Empty;
+            }
+            
+            // Load current exclusion details if game is excluded and in edit mode
+            if (IsEditMode && Game.IsExcluded)
+            {
+                await LoadCurrentExclusion();
+            }
+            else
+            {
+                internalExclusionReason = string.Empty;
+            }
+        }
+        else if (IsVisible && !IsEditMode)
+        {
+            ResetForm();
+        }
+        errorMessage = null;
+    }
+
+    private async Task LoadCurrentOwnership()
+    {
+        try
+        {
+            using var scope = ScopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
+            
+            var ownership = await db.GamesOwned
+                .AsNoTracking()
+                .FirstOrDefaultAsync(o => o.GameId == Game!.Id);
+            
+            if (ownership != null)
+            {
+                internalOwnPhysicalCopy = ownership.OwnPhysicalCopy;
+                internalTypeOwned = ownership.TypeOwned;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading ownership details: {ex.Message}");
+        }
+    }
+
+    private async Task LoadCurrentExclusion()
+    {
+        try
+        {
+            using var scope = ScopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
+            
+            var exclusion = await db.ExcludedGames
+                .AsNoTracking()
+                .FirstOrDefaultAsync(e => e.GameId == Game!.Id);
+            
+            if (exclusion != null)
+            {
+                internalExclusionReason = exclusion.Reason;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading exclusion details: {ex.Message}");
+        }
+    }
+
+    private void ResetForm()
+    {
+        internalTitle = string.Empty;
+        internalDeveloper = string.Empty;
+        internalPublisher = string.Empty;
+        internalFirstReleased = null;
+        internalRegion = string.Empty;
+        internalReleasedInEuPalOrNa = false;
+        internalOwnPhysicalCopy = false;
+        internalTypeOwned = string.Empty;
+        internalIsExcluded = false;
+        internalExclusionReason = string.Empty;
+        errorMessage = null;
+    }
+
+    private async Task Close()
+    {
+        if (!isProcessing)
+        {
+            await OnClose.InvokeAsync();
+        }
+    }
+
+    private async Task HandleOverlayClick()
+    {
+        await Close();
+    }
+
+    private async Task Save()
+    {
+        errorMessage = null;
+
+        // Validation
+        if (string.IsNullOrWhiteSpace(internalTitle))
+        {
+            errorMessage = "Title is required";
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(internalDeveloper))
+        {
+            errorMessage = "Developer is required";
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(internalPublisher))
+        {
+            errorMessage = "Publisher is required";
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(internalRegion))
+        {
+            errorMessage = "Region is required";
+            return;
+        }
+        if (internalIsExcluded && string.IsNullOrWhiteSpace(internalExclusionReason))
+        {
+            errorMessage = "Exclusion reason is required when excluding a game";
+            return;
+        }
+
+        isProcessing = true;
+        try
+        {
+            using var scope = ScopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
+
+            if (IsEditMode && Game != null && Game.Id > 0)
+            {
+                // Update existing game
+                var gameDto = new GameDto
+                {
+                    Id = Game.Id,
+                    Title = internalTitle.Trim(),
+                    Developer = internalDeveloper.Trim(),
+                    Publisher = internalPublisher.Trim(),
+                    FirstReleased = internalFirstReleased.HasValue ? DateOnly.FromDateTime(internalFirstReleased.Value) : null,
+                    RegionFirstReleasedIn = internalRegion.Trim(),
+                    ReleasedInEuPalOrNa = internalReleasedInEuPalOrNa
+                };
+
+                await GameService.UpdateGameAsync(Game.Id, gameDto);
+
+                // Update ownership (service will determine if owned based on physical copy or type)
+                await GameService.UpdateOwnershipAsync(Game.Id, internalOwnPhysicalCopy, internalTypeOwned ?? string.Empty);
+
+                // Update exclusion
+                await GameService.UpdateExclusionAsync(Game.Id, internalIsExcluded, internalExclusionReason);
+            }
+            else
+            {
+                // Create new game
+                var gameDto = new GameDto
+                {
+                    Title = internalTitle.Trim(),
+                    Developer = internalDeveloper.Trim(),
+                    Publisher = internalPublisher.Trim(),
+                    FirstReleased = internalFirstReleased.HasValue ? DateOnly.FromDateTime(internalFirstReleased.Value) : null,
+                    RegionFirstReleasedIn = internalRegion.Trim(),
+                    ReleasedInEuPalOrNa = internalReleasedInEuPalOrNa
+                };
+
+                var createdGame = await GameService.AddGameAsync(gameDto);
+
+                // Set ownership (service will determine if owned based on physical copy or type)
+                await GameService.UpdateOwnershipAsync(createdGame.Id, internalOwnPhysicalCopy, internalTypeOwned ?? string.Empty);
+
+                // Set exclusion if needed
+                if (internalIsExcluded)
+                {
+                    await GameService.UpdateExclusionAsync(createdGame.Id, true, internalExclusionReason ?? "No reason provided");
+                }
+            }
+
+            await OnSave.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error saving game: {ex.Message}";
+            Console.WriteLine($"Error in GameEditModal.Save: {ex}");
+        }
+        finally
+        {
+            isProcessing = false;
+        }
+    }
+
+    private async Task DeleteGame()
+    {
+        if (Game == null || !IsEditMode) return;
+
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", 
+            $"Are you sure you want to delete '{Game.Title}'? This will also remove all related data (ownership, exclusions, progress).");
+
+        if (confirmed)
+        {
+            isProcessing = true;
+            try
+            {
+                await GameService.DeleteGameAsync(Game.Id);
+                await OnDelete.InvokeAsync(Game.Id);
+            }
+            catch (Exception ex)
+            {
+                errorMessage = $"Error deleting game: {ex.Message}";
+                Console.WriteLine($"Error in GameEditModal.DeleteGame: {ex}");
+            }
+            finally
+            {
+                isProcessing = false;
+            }
+        }
+    }
+}

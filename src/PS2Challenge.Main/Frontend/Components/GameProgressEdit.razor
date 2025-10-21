@@ -1,0 +1,271 @@
+@using Microsoft.EntityFrameworkCore
+@using PS2Challenge.Backend.Data
+@using PS2Challenge.Backend.Models
+@inject IServiceScopeFactory ScopeFactory
+
+@if (IsVisible)
+{
+    <div class="modal-overlay" @onclick="HandleOverlayClick">
+        <div class="modal-content" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h2>@(IsEditMode ? "Edit Game Progress" : "Add New Game Progress")</h2>
+                <button class="modal-close" @onclick="Close">&times;</button>
+            </div>
+            
+            <div class="modal-body">
+                <div class="form-container">
+                    <div class="form-field">
+                        <label>Game Title</label>
+                        <div style="position:relative;">
+                            <input placeholder="Game title"
+                                   value="@internalGameTitle"
+                                   @oninput="OnGameTitleInput"
+                                   class="search-input"
+                                   disabled="@IsEditMode" />
+
+                            @if (showTitleSuggestions && !IsEditMode)
+                            {
+                                <ul class="suggestions">
+                                    @foreach (var s in titleSuggestions)
+                                    {
+                                        <li @onclick="() => SelectTitleSuggestion(s)">@s</li>
+                                    }
+                                </ul>
+                            }
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-field">
+                            <label>Started</label>
+                            <input type="date" @bind="internalDateStarted" class="search-input" />
+                        </div>
+
+                        <div class="form-field">
+                            <label>Finished (optional)</label>
+                            <input type="date" @bind="internalDateFinished" class="search-input" />
+                        </div>
+                    </div>
+
+                    <div class="form-field">
+                        <label>Platform</label>
+                        <select @bind="internalPlatform" class="search-input">
+                            <option>Physical</option>
+                            <option>Emulated</option>
+                        </select>
+                    </div>
+
+                    <div class="form-field">
+                        <label>Beaten Criteria</label>
+                        <input type="text" @bind="internalBeatenCriteria" class="search-input" />
+                    </div>
+
+                    <div class="form-field">
+                        <label>Review</label>
+                        <textarea @bind="internalReview" class="search-input" rows="4"></textarea>
+                    </div>
+
+                    <div class="form-field">
+                        <label>Completion Time</label>
+                        <div class="time-input-group">
+                            <input type="number" min="0" @bind="internalCompletionHours" class="search-input time-input" />
+                            <span>hours</span>
+                            <input type="number" min="0" max="59" @bind="internalCompletionMinutes" class="search-input time-input" />
+                            <span>minutes</span>
+                            <input type="number" min="0" max="59" @bind="internalCompletionSeconds" class="search-input time-input" />
+                            <span>seconds</span>
+                        </div>
+                        <div class="help-text">Leave all zero to skip</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-footer">
+                <button class="btn btn-secondary" @onclick="Close">Cancel</button>
+                <button class="cta-button" @onclick="Save">@(IsEditMode ? "Update" : "Add")</button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsVisible { get; set; }
+    [Parameter] public bool IsEditMode { get; set; }
+    [Parameter] public int? ProgressId { get; set; }
+    [Parameter] public List<string> AllGameTitles { get; set; } = new();
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback OnSave { get; set; }
+
+    // Form fields - Parameters from parent
+    [Parameter] public string GameTitle { get; set; } = string.Empty;
+    [Parameter] public DateTime? DateStarted { get; set; }
+    [Parameter] public DateTime? DateFinished { get; set; }
+    [Parameter] public string Platform { get; set; } = "Physical";
+    [Parameter] public string? BeatenCriteria { get; set; }
+    [Parameter] public string? Review { get; set; }
+    [Parameter] public int CompletionHours { get; set; }
+    [Parameter] public int CompletionMinutes { get; set; }
+    [Parameter] public int CompletionSeconds { get; set; }
+
+    // Internal state for form fields
+    private string internalGameTitle = string.Empty;
+    private DateTime? internalDateStarted;
+    private DateTime? internalDateFinished;
+    private string internalPlatform = "Physical";
+    private string? internalBeatenCriteria;
+    private string? internalReview;
+    private int internalCompletionHours;
+    private int internalCompletionMinutes;
+    private int internalCompletionSeconds;
+
+    private List<string> titleSuggestions = new();
+    private bool showTitleSuggestions = false;
+    private const int SuggestionLimit = 8;
+
+    protected override void OnParametersSet()
+    {
+        // Sync internal state with parameters when they change
+        if (IsVisible)
+        {
+            internalGameTitle = GameTitle ?? string.Empty;
+            internalDateStarted = DateStarted;
+            internalDateFinished = DateFinished;
+            internalPlatform = Platform ?? "Physical";
+            internalBeatenCriteria = BeatenCriteria;
+            internalReview = Review;
+            internalCompletionHours = CompletionHours;
+            internalCompletionMinutes = CompletionMinutes;
+            internalCompletionSeconds = CompletionSeconds;
+        }
+    }
+
+    private void OnGameTitleInput(ChangeEventArgs e)
+    {
+        internalGameTitle = e?.Value?.ToString() ?? string.Empty;
+        if (!IsEditMode)
+        {
+            UpdateSuggestions(internalGameTitle);
+        }
+    }
+
+    private void UpdateSuggestions(string input)
+    {
+        titleSuggestions.Clear();
+        showTitleSuggestions = false;
+        var q = (input ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(q) || AllGameTitles == null || !AllGameTitles.Any()) return;
+
+        var lowered = q.ToLowerInvariant();
+        titleSuggestions = AllGameTitles
+            .Where(t => t.ToLowerInvariant().Contains(lowered))
+            .OrderBy(t => t, StringComparer.OrdinalIgnoreCase)
+            .Take(SuggestionLimit)
+            .ToList();
+
+        showTitleSuggestions = titleSuggestions.Any();
+    }
+
+    private void SelectTitleSuggestion(string title)
+    {
+        internalGameTitle = title;
+        showTitleSuggestions = false;
+    }
+
+    private async Task Close()
+    {
+        showTitleSuggestions = false;
+        await OnClose.InvokeAsync();
+    }
+
+    private async Task HandleOverlayClick()
+    {
+        await Close();
+    }
+
+    private async Task Save()
+    {
+        if (string.IsNullOrWhiteSpace(internalGameTitle)) return;
+
+        // Clamp values
+        if (internalCompletionMinutes < 0) internalCompletionMinutes = 0;
+        if (internalCompletionMinutes > 59) internalCompletionMinutes = 59;
+        if (internalCompletionSeconds < 0) internalCompletionSeconds = 0;
+        if (internalCompletionSeconds > 59) internalCompletionSeconds = 59;
+        if (internalCompletionHours < 0) internalCompletionHours = 0;
+
+        var started = internalDateStarted ?? DateTime.Now.Date;
+        DateOnly startedDateOnly = DateOnly.FromDateTime(started);
+
+        DateOnly? finishedDateOnly = null;
+        if (internalDateFinished.HasValue)
+        {
+            finishedDateOnly = DateOnly.FromDateTime(internalDateFinished.Value);
+        }
+
+        TimeSpan? completionTime = null;
+        if (internalCompletionHours > 0 || internalCompletionMinutes > 0 || internalCompletionSeconds > 0)
+        {
+            completionTime = TimeSpan.FromHours(internalCompletionHours) 
+                + TimeSpan.FromMinutes(internalCompletionMinutes)
+                + TimeSpan.FromSeconds(internalCompletionSeconds);
+        }
+
+        try
+        {
+            using var scope = ScopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
+
+            if (IsEditMode && ProgressId.HasValue)
+            {
+                var existingProgress = await db.GameProgress
+                    .FirstOrDefaultAsync(gp => gp.ProgressId == ProgressId.Value);
+                
+                if (existingProgress != null)
+                {
+                    existingProgress.DateStarted = startedDateOnly;
+                    existingProgress.DateFinished = finishedDateOnly;
+                    existingProgress.Platform = string.IsNullOrWhiteSpace(internalPlatform) ? "Physical" : internalPlatform;
+                    existingProgress.BeatenCriteria = string.IsNullOrWhiteSpace(internalBeatenCriteria) ? null : internalBeatenCriteria.Trim();
+                    existingProgress.Review = string.IsNullOrWhiteSpace(internalReview) ? null : internalReview.Trim();
+                    existingProgress.CompletionTime = completionTime;
+
+                    await db.SaveChangesAsync();
+                    Console.WriteLine($"Updated game progress for '{internalGameTitle}'");
+                }
+            }
+            else
+            {
+                var game = await db.Games
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(g => g.Title.ToLower() == internalGameTitle.Trim().ToLower());
+
+                if (game == null)
+                {
+                    Console.WriteLine($"Game '{internalGameTitle}' not found");
+                    return;
+                }
+
+                var newProgress = new GameProgress
+                {
+                    GameId = game.Id,
+                    DateStarted = startedDateOnly,
+                    DateFinished = finishedDateOnly,
+                    Platform = string.IsNullOrWhiteSpace(internalPlatform) ? "Physical" : internalPlatform,
+                    BeatenCriteria = string.IsNullOrWhiteSpace(internalBeatenCriteria) ? null : internalBeatenCriteria.Trim(),
+                    Review = string.IsNullOrWhiteSpace(internalReview) ? null : internalReview.Trim(),
+                    CompletionTime = completionTime
+                };
+
+                db.GameProgress.Add(newProgress);
+                await db.SaveChangesAsync();
+                Console.WriteLine($"Added new game progress for '{internalGameTitle}'");
+            }
+
+            await OnSave.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error saving game progress: {ex.Message}");
+        }
+    }
+}

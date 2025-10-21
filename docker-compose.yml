@@ -1,0 +1,112 @@
+# PS2 Challenge - Docker Compose
+# This compose file sets up the complete application stack including PostgreSQL database
+
+version: '3.8'
+
+services:
+  # ============================================================================
+  # PostgreSQL Database
+  # ============================================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: ps2challenge-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ps2challenge
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=en_GB.UTF-8"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./backups:/backups  # For database backups
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ps2challenge-network
+
+  # ============================================================================
+  # PS2 Challenge Application
+  # ============================================================================
+  ps2challenge:
+    image: ghcr.io/${GITHUB_USERNAME:-yourusername}/ps2-challenge-website:${IMAGE_TAG:-latest}
+    container_name: ps2challenge-app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "5001:5001"
+    environment:
+      # Database Configuration
+      DATABASE_CONNECTION_STRING: "Host=postgres;Port=5432;Database=ps2challenge;Username=postgres;Password=${DB_PASSWORD:-changeme};Include Error Detail=true"
+      
+      # Twitch OAuth Configuration
+      TWITCH_CLIENT_ID: ${TWITCH_CLIENT_ID}
+      TWITCH_CLIENT_SECRET: ${TWITCH_CLIENT_SECRET}
+      
+      # Admin API Key
+      ADMIN_API_KEY: ${ADMIN_API_KEY}
+      
+      # ASP.NET Core Configuration
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+      ASPNETCORE_URLS: http://+:5001
+      
+      # Logging Configuration
+      Logging__LogLevel__Default: ${LOG_LEVEL:-Information}
+      Logging__LogLevel__Microsoft: Warning
+      Logging__LogLevel__Microsoft.AspNetCore: Warning
+    volumes:
+      - app-logs:/app/logs  # Application logs
+    networks:
+      - ps2challenge-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5001/api/games"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ============================================================================
+  # Nginx Reverse Proxy (Optional - for HTTPS and load balancing)
+  # ============================================================================
+  nginx:
+    image: nginx:alpine
+    container_name: ps2challenge-nginx
+    restart: unless-stopped
+    depends_on:
+      - ps2challenge
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./nginx/logs:/var/log/nginx
+    networks:
+      - ps2challenge-network
+    profiles:
+      - production  # Only runs when production profile is active
+
+# ============================================================================
+# Networks
+# ============================================================================
+networks:
+  ps2challenge-network:
+    driver: bridge
+    name: ps2challenge-network
+
+# ============================================================================
+# Volumes
+# ============================================================================
+volumes:
+  postgres-data:
+    name: ps2challenge-postgres-data
+    driver: local
+  app-logs:
+    name: ps2challenge-app-logs
+    driver: local

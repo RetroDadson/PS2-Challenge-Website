@@ -9,16 +9,11 @@
   <ItemGroup>
     <PackageReference Include="FluentMigrator.Runner" Version="7.1.0" />
     <PackageReference Include="Npgsql" Version="9.0.4" />
-    <PackageReference Include="Dapper" Version="2.1.66" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\PS2Challenge.Database\PS2Challenge.Database.csproj" />
   </ItemGroup>
 
   <!-- Add these package references for Entity Framework Core and Npgsql EF provider -->
   <ItemGroup>
-    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.9" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="9.0.10" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.4" />
   </ItemGroup>
 

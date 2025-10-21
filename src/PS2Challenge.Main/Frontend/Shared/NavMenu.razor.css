@@ -1,0 +1,426 @@
+.navbar {
+    background-color: #000; /* keep dark background */
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+    position: relative;
+    z-index: 1000;
+}
+
+/* container */
+.nav-container {
+    width: 100%;
+    max-width: 100%;
+    padding: 0 2rem;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    position: relative;
+    z-index: 1001;
+    box-sizing: border-box;
+}
+
+/* container stacked: top row (brand + login) then nav row */
+.nav-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    align-items: stretch;
+}
+
+/* Top row with hamburger + brand + login */
+.nav-top {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.75rem 0;
+    background: #000;
+    z-index: 1002;
+}
+
+/* place the login/user block at the top-right on desktop */
+@media (min-width: 900px) {
+    .nav-container {
+        padding: 0 2rem;
+    }
+    
+    .nav-top-right {
+        position: absolute;
+        right: 0;
+        top: 0.6rem; /* tweak vertical alignment */
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    /* ensure hamburger is hidden on desktop (already set elsewhere) */
+    .nav-toggle { display: none; }
+    
+    /* Keep brand on the left on desktop */
+    .nav-brand {
+        text-align: left;
+        flex: 0;
+    }
+}
+
+/* Container for login */
+.nav-top-right {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-shrink: 0;
+}
+
+/* brand */
+.nav-brand {
+    color: #fff;
+    font-weight: 700;
+    font-size: 1.25rem;
+    text-decoration: none;
+    padding: 0.5rem 0;
+    white-space: nowrap;
+}
+
+/* hamburger (mobile) - moved to left */
+.nav-toggle {
+    display: none;
+    background: none;
+    border: 2px solid transparent;
+    cursor: pointer;
+    padding: 0.5rem;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+    order: -1; /* Ensures it stays on the left */
+}
+
+.nav-toggle:hover,
+.nav-toggle:focus {
+    background: rgba(233, 30, 99, 0.1);
+    border-color: var(--primary-color);
+}
+
+.nav-toggle-icon,
+.nav-toggle-icon::before,
+.nav-toggle-icon::after {
+    display: block;
+    width: 24px;
+    height: 3px;
+    background: #fff;
+    position: relative;
+    transition: all 0.3s ease;
+    border-radius: 2px;
+}
+.nav-toggle-icon::before { 
+    content:""; 
+    position:absolute; 
+    top:-8px; 
+    left:0; 
+    width:24px; 
+    height:3px; 
+    background:#fff; 
+    border-radius: 2px;
+}
+.nav-toggle-icon::after  { 
+    content:""; 
+    position:absolute; 
+    top:8px;  
+    left:0; 
+    width:24px; 
+    height:3px; 
+    background:#fff; 
+    border-radius: 2px;
+}
+
+/* Animated hamburger icon when menu is open */
+.nav-toggle[aria-expanded="true"] .nav-toggle-icon {
+    background: transparent;
+}
+
+.nav-toggle[aria-expanded="true"] .nav-toggle-icon::before {
+    transform: rotate(45deg);
+    top: 0;
+}
+
+.nav-toggle[aria-expanded="true"] .nav-toggle-icon::after {
+    transform: rotate(-45deg);
+    top: 0;
+}
+
+/* menu (desktop visible by default) */
+.nav-menu {
+    overflow: visible; /* allow dropdown to escape */
+    width: 100%;
+    transition: max-height 0.3s ease-in-out, opacity 0.3s ease-in-out;
+    background: #000;
+    position: relative;
+    z-index: 1001;
+}
+
+/* list layout (desktop row) */
+.nav-menu .nav-list {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0;
+    padding: 0 0 0.5rem 0;
+    list-style: none;
+    white-space: nowrap;
+}
+
+/* items */
+.nav-item { margin: 0; }
+
+/* login item pushed to right */
+.nav-item-login { margin-left: 0; }
+
+/* simple, consistent nav link styling — non-active uses text-secondary */
+.nav-link {
+    color: var(--text-secondary);
+    padding: 0.75rem 1rem;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    transition: color 150ms ease, background 150ms ease;
+    border-radius: 6px;
+}
+
+/* active & hover states */
+.nav-link.active,
+.nav-link[aria-current="page"] {
+    color: var(--primary-color);
+}
+.nav-link:hover,
+.nav-link:focus {
+    color: var(--primary-color);
+    text-decoration: none;
+    background: rgba(233, 30, 99, 0.1);
+}
+
+/* Dropdown container */
+.dropdown { position: relative; }
+
+/* Dropdown menu (hidden by default) */
+.dropdown .dropdown-menu {
+    display: none;
+    position: absolute;
+    top: 100%; /* sit directly below the trigger to avoid a hover gap */
+    left: 0;
+    min-width: 180px;
+    background: var(--background-card);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    /* remove default list bullet & spacing */
+    padding: 0.5rem 0;
+    margin: 0;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+    z-index: 1200;
+    opacity: 0;
+    /* translate up slightly while hidden so the menu overlaps the trigger area,
+       preventing accidental mouseout while moving into the menu */
+    transform: translateY(-8px);
+    transition: opacity 200ms ease, transform 200ms ease;
+    pointer-events: none;
+}
+
+/* dropdown items: remove default list markers and provide spacing on the link itself */
+.dropdown .dropdown-item {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.dropdown .dropdown-item .nav-link {
+    padding: 0.75rem 1rem;
+    color: var(--text-secondary);
+    display: block;
+    width: 100%;
+    border-radius: 0;
+}
+
+.dropdown .dropdown-item .nav-link:hover {
+    background: rgba(233, 30, 99, 0.15);
+    color: var(--primary-color);
+}
+
+/* Show dropdown on hover (desktop) */
+@media (hover: hover) and (min-width: 900px) {
+    .dropdown.hoverable:hover .dropdown-menu,
+    .dropdown.hoverable:focus-within .dropdown-menu {
+        display: block;
+        opacity: 1;
+        transform: translateY(0); /* slide into view smoothly */
+        pointer-events: auto;
+    }
+}
+
+/* Show dropdown when open (click/toggle fallback/mobile) */
+.dropdown.open .dropdown-menu {
+    display: block !important;
+    opacity: 1 !important;
+    transform: translateY(0) !important;
+    pointer-events: auto !important;
+}
+
+/* Mobile responsive behavior */
+@media (max-width: 899px) {
+    .navbar {
+        position: sticky;
+        top: 0;
+        z-index: 1000;
+    }
+    
+    .nav-container {
+        padding: 0 1rem;
+    }
+    
+    /* Show hamburger and position on left */
+    .nav-toggle { 
+        display: inline-flex;
+        min-width: 44px; /* Touch target minimum */
+        min-height: 44px;
+        align-items: center;
+        justify-content: center;
+        margin-right: 0.5rem;
+    }
+    
+    /* Center the brand on mobile when hamburger is visible */
+    .nav-brand {
+        text-align: center;
+        flex: 1;
+    }
+
+    /* collapsed class will hide the list */
+    .nav-menu.collapsed {
+        max-height: 0;
+        opacity: 0;
+        overflow: hidden;
+    }
+    
+    .nav-menu.collapsed .nav-list { 
+        display: none; 
+    }
+
+    /* when expanded stack the list */
+    .nav-menu {
+        background: #000;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+    }
+    
+    .nav-menu .nav-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+        background: #000;
+        margin: 0;
+        padding: 0 0 0.75rem 0;
+    }
+
+    .nav-item {
+        width: 100%;
+    }
+
+    .nav-link { 
+        padding: 1rem 1.25rem; 
+        border-top: 1px solid rgba(255,255,255,0.06);
+        width: 100%;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        min-height: 48px; /* Touch-friendly height */
+    }
+    
+    .nav-item:first-child .nav-link {
+        border-top: 1px solid rgba(255,255,255,0.06);
+    }
+
+    /* dropdown in mobile is in-flow (not absolute) */
+    .dropdown .dropdown-menu {
+        position: static;
+        transform: none;
+        opacity: 1;
+        pointer-events: auto;
+        box-shadow: none;
+        margin-left: 0;
+        background: rgba(233, 30, 99, 0.05);
+        border: none;
+        border-left: 3px solid var(--primary-color);
+        border-radius: 0;
+        padding: 0;
+    }
+    
+    .dropdown .dropdown-item .nav-link {
+        padding-left: 2rem;
+        border-top: 1px solid rgba(255,255,255,0.03);
+        min-height: 44px;
+    }
+    
+    .dropdown .dropdown-item:first-child .nav-link {
+        border-top: 1px solid rgba(255,255,255,0.03);
+    }
+    
+    /* Mobile dropdown toggle styling */
+    .dropdown-toggle {
+        width: 100%;
+        display: flex !important;
+        justify-content: space-between;
+        align-items: center;
+    }
+}
+
+/* minimal overrides to ensure dropdown toggle matches normal links */
+.dropdown-toggle {
+    background: transparent;
+    border: none;
+    color: inherit;
+    padding: 0.75rem 1rem;
+    cursor: pointer;
+    font-size: inherit;
+    font-family: inherit;
+    text-align: left;
+    border-radius: 6px;
+}
+
+/* Ensure dropdown toggle & wrapper use the same color rules as regular nav links.
+   Placed late to override prior rules that made Challenge appear different. */
+.navbar .nav-menu .nav-list .nav-link,
+.navbar .nav-menu .nav-list .nav-link:link,
+.navbar .nav-menu .nav-list .nav-link:visited,
+.navbar .nav-menu .nav-list .dropdown-toggle {
+	color: var(--text-secondary) !important;
+}
+
+/* Hover / focus and active states should match other nav links */
+.navbar .nav-menu .nav-list .nav-link:hover,
+.navbar .nav-menu .nav-list .nav-link:focus,
+.navbar .nav-menu .nav-list .dropdown-toggle:hover,
+.navbar .nav-menu .nav-list .dropdown-toggle:focus,
+.navbar .nav-menu .nav-list .nav-link.active,
+.navbar .nav-menu .nav-list .nav-link[aria-current="page"] {
+	color: var(--primary-color) !important;
+}
+
+/* Ensure the hoverable wrapper doesn't change the link color */
+.navbar .nav-menu .nav-list .dropdown.hoverable > .nav-link,
+.navbar .nav-menu .nav-list .dropdown.hoverable > .dropdown-toggle {
+	color: var(--text-secondary) !important;
+}
+
+/* Extra small screens */
+@media (max-width: 480px) {
+    .nav-container {
+        padding: 0 0.75rem;
+    }
+    
+    .nav-brand {
+        font-size: 1.1rem;
+    }
+    
+    .nav-link {
+        font-size: 0.95rem;
+    }
+}

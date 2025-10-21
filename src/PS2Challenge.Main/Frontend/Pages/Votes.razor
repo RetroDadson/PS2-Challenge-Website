@@ -1,0 +1,831 @@
+@page "/votes"
+@using System.Text.Json
+@using PS2Challenge.Backend.Models
+@using PS2Challenge.Backend.Services
+@using PS2Challenge.Main.Frontend.Components
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
+@using PS2Challenge.Backend.Data
+@using Microsoft.AspNetCore.SignalR
+@using Microsoft.AspNetCore.SignalR.Client
+@using PS2Challenge.Main.Api.Hubs
+@implements IAsyncDisposable
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IServiceScopeFactory ScopeFactory
+@inject IHubContext<VotesHub> HubContext
+@inject VoteService VoteService
+@inject NavigationManager NavigationManager
+
+<PageTitle>Vote History - Dadson's PS2 Tracker</PageTitle>
+
+<VoteArchiveModal IsVisible="showArchiveDialog" 
+                  OnClose="CloseArchiveDialog" 
+                  OnArchived="HandleArchived"
+                  CurrentVotes="currentVotes" />
+
+<div class="completed-games-container">
+    <h1>Votes</h1>
+
+    @if (isLoading)
+    {
+        <div class="loading-container">
+            <div class="loading"></div>
+            <p>Loading vote history...</p>
+        </div>
+    }
+    else
+    {
+        <div class="search-section" style="margin-bottom:1rem;">
+            <h3 style="margin:0 0 0.75rem 0;">Current Votes</h3>
+
+            @if (currentVotes == null)
+            {
+                <p>Loading current votes...</p>
+            }
+            else if (!currentVotes.Any())
+            {
+                @if (isAdmin)
+                {
+                    <p>No current votes configured. Add games below.</p>
+                }
+                else
+                {
+                    <p>No current votes configured.</p>
+                }
+            }
+            else
+            {
+                <div class="current-votes-row">
+                    <!-- left: table / editor -->
+                    <div class="current-votes-left">
+                        <div class="games-table-container" style="background:transparent;border:0;box-shadow:none;">
+                            <table class="games-table" style="min-width:400px;">
+                                <thead>
+                                    <tr>
+                                        <th>Game</th>
+                                        <th style="width:80px">Game#</th>
+                                        <th style="width:120px">Votes</th>
+                                        @if (isAdmin)
+                                        {
+                                            <th style="width:80px">Actions</th>
+                                        }
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var vote in currentVotes.OrderBy(v => v.GameNumber))
+                                    {
+                                        var title = vote.GameTitle;
+                                        <tr>
+                                            <td class="game-title" data-label="Game">@title</td>
+                                            <td data-label="Game#">@vote.GameNumber</td>
+                                            @if (isAdmin)
+                                            {
+                                                <td data-label="Votes">
+                                                    <input type="number"
+                                                           min="0"
+                                                           class="search-input"
+                                                           style="padding:.25rem;width:100px;"
+                                                           value="@vote.VoteCount"
+                                                           @oninput="(ChangeEventArgs e) => UpdateCurrentCountByTitle(title, e)"
+                                                           @onchange="(ChangeEventArgs e) => UpdateCurrentCountByTitle(title, e)" />
+                                                </td>
+                                                <td data-label="Actions">
+                                                    <button class="cta-button" style="padding:.5rem 1rem;font-size:0.9rem;" @onclick="async () => await RemoveCurrent(title)">Remove</button>
+                                                </td>
+                                            }
+                                            else
+                                            {
+                                                <td data-label="Votes">@vote.VoteCount</td>
+                                            }
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                        @* bottom-left single Refresh button *@
+                        <div class="current-votes-left-footer" style="margin-top:1rem;">
+                            <button class="cta-button" @onclick="LoadCurrentVotes">Refresh</button>
+                        </div>
+                    </div>
+
+                    <!-- right: pie chart -->
+                    <div class="current-votes-right">
+                        <svg class="pie-chart" viewBox="0 0 200 200" width="100%" height="100%" role="img" aria-label="Votes breakdown">
+                            <g transform="translate(100,100)">
+                                @foreach (var slice in PieSlices)
+                                {
+                                    <path d="@slice.Path" fill="@slice.Color" stroke="#ffffff" stroke-width="0.6">
+                                        <title>@($"{slice.Label}: {slice.Value} ({slice.Percent:0.0}% )")</title>
+                                    </path>
+                                }
+                                <circle cx="0" cy="0" r="36" fill="var(--background-card)"></circle>
+                            </g>
+                        </svg>
+
+                        <div class="pie-legend">
+                            @foreach (var slice in PieSlices)
+                            {
+                                <div class="legend-item">
+                                    <span class="legend-swatch" style="background:@slice.Color"></span>
+                                    <span class="legend-label">@slice.Label</span>
+                                    <span class="legend-value">@slice.Value (@(slice.Percent.ToString("0.0"))%)</span>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+
+            @* Admin controls always visible when admin *@
+            @if (isAdmin)
+            {
+                <div style="display:flex;gap:.5rem;margin-top:.75rem;align-items:center;flex-wrap:wrap;">
+                    <div style="position:relative; width:320px;">
+                        <input placeholder="Game title"
+                               value="@newCurrentTitle"
+                               @oninput="OnNewCurrentTitleInput"
+                               class="search-input"
+                               style="width:320px;padding:.5rem" />
+
+                        @if (showSuggestions)
+                        {
+                            <ul class="suggestions">
+                                @foreach (var s in suggestions)
+                                {
+                                    <li @onclick="() => SelectSuggestion(s)">@s</li>
+                                }
+                            </ul>
+                        }
+                    </div>
+
+                    <input type="number" min="0" @bind="newCurrentCount" class="search-input" style="width:120px;padding:.5rem" />
+                    <button class="cta-button" @onclick="AddCurrent">Add</button>
+                    
+                    @if (currentVotes != null && currentVotes.Any())
+                    {
+                        <button class="cta-button" @onclick="ShowArchiveDialog" style="margin-left:1rem;background:linear-gradient(135deg,#ff9800 0%,#f57c00 100%);">
+                            Archive to History
+                        </button>
+                    }
+                </div>
+            }
+        </div>
+        <!-- end current votes -->
+
+        <h2 class="section-subheader" style="margin:0 0 0.75rem 0;">Vote History</h2>
+        <div class="search-section">
+            <div class="search-box">
+                <input type="text"
+                       placeholder="Search by round or game title..."
+                       @bind="searchQuery"
+                       @bind:event="oninput"
+                       class="search-input" />
+                <span class="search-icon">🔍</span>
+            </div>
+
+            <div class="filter-controls">
+                <label>
+                    <input type="checkbox" checked="@showOnlyRoundsWithVotes" @onchange="ToggleShowOnlyRoundsWithVotes" />
+                    Show only rounds with votes
+                </label>
+            </div>
+
+            <div class="results-count">
+                <p>Showing @FilteredVotes.Count() of @voteRounds.Count rounds</p>
+            </div>
+        </div>
+
+        <div class="games-table-container">
+            <table class="games-table">
+                <thead>
+                    <tr>
+                        <th @onclick="() => SortBy(nameof(VoteRoundDto.VoteRound))">Round @GetSortIcon(nameof(VoteRoundDto.VoteRound))</th>
+                        <th @onclick="() => SortBy(nameof(VoteRoundDto.TopGameTitle))">Top Game @GetSortIcon(nameof(VoteRoundDto.TopGameTitle))</th>
+                        <th @onclick="() => SortBy(nameof(VoteRoundDto.TopVotes))">Top Votes @GetSortIcon(nameof(VoteRoundDto.TopVotes))</th>
+                        <th @onclick="() => SortBy(nameof(VoteRoundDto.SecondGameTitle))">2nd Game @GetSortIcon(nameof(VoteRoundDto.SecondGameTitle))</th>
+                        <th @onclick="() => SortBy(nameof(VoteRoundDto.SecondVotes))">2nd Votes @GetSortIcon(nameof(VoteRoundDto.SecondVotes))</th>
+                        <th @onclick="() => SortBy(nameof(VoteRoundDto.LastGameTitle))">Last Game @GetSortIcon(nameof(VoteRoundDto.LastGameTitle))</th>
+                        <th @onclick="() => SortBy(nameof(VoteRoundDto.LastVotes))">Last Votes @GetSortIcon(nameof(VoteRoundDto.LastVotes))</th>
+                        <th>Notes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var v in FilteredVotes)
+                    {
+                        <tr>
+                            <td>@v.VoteRound</td>
+                            <td class="game-title">
+                                @v.TopGameTitle
+                                @if (!v.TopPosition.HasValue && v.TopVotes == v.SecondVotes)
+                                {
+                                    <span style="color:var(--text-secondary);font-size:0.85em;"> (Tied)</span>
+                                }
+                            </td>
+                            <td>@v.TopVotes</td>
+                            <td class="game-title">
+                                @v.SecondGameTitle
+                                @if (!v.SecondPosition.HasValue && (v.SecondVotes == v.TopVotes || v.SecondVotes == v.LastVotes))
+                                {
+                                    <span style="color:var(--text-secondary);font-size:0.85em;"> (Tied)</span>
+                                }
+                            </td>
+                            <td>@v.SecondVotes</td>
+                            <td class="game-title">
+                                @v.LastGameTitle
+                                @if (!v.LastPosition.HasValue && v.LastVotes == v.SecondVotes)
+                                {
+                                    <span style="color:var(--text-secondary);font-size:0.85em;"> (Tied)</span>
+                                }
+                            </td>
+                            <td>@v.LastVotes</td>
+                            <td class="notes-cell">@(string.IsNullOrWhiteSpace(v.Notes) ? "-" : v.Notes)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@code {
+    // state
+    private List<VoteRoundDto> voteRounds = new();
+    private List<CurrentVoteDto> currentVotes = new();
+    private bool isLoading = true;
+
+    private string searchQuery = string.Empty;
+    private bool showOnlyRoundsWithVotes = false;
+    private string sortColumn = nameof(VoteRoundDto.VoteRound);
+    private bool sortAscending = false;
+
+    private string newCurrentTitle = string.Empty;
+    private int newCurrentCount = 0;
+
+    private bool isAdmin = false;
+
+    // suggestions
+    private List<string> allGameTitles = new();
+    private List<string> suggestions = new();
+    private bool showSuggestions = false;
+    private const int SuggestionLimit = 8;
+
+    // archive dialog
+    private bool showArchiveDialog = false;
+    
+    // debouncing for auto-save
+    private System.Threading.Timer? _debounceTimer;
+    private readonly int _debounceMilliseconds = 800;
+
+    // SignalR client connection
+    private HubConnection? hubConnection;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadUserInfo();
+        await LoadCurrentVotes();
+        await LoadVoteHistory();
+
+        if (isAdmin)
+        {
+            await LoadAllGameTitles();
+        }
+
+        // Set up SignalR client connection
+        await InitializeSignalRConnection();
+    }
+
+    private async Task InitializeSignalRConnection()
+    {
+        try
+        {
+            hubConnection = new HubConnectionBuilder()
+                .WithUrl(NavigationManager.ToAbsoluteUri("/votesHub"))
+                .WithAutomaticReconnect()
+                .Build();
+
+            // Subscribe to VotesUpdated event
+            hubConnection.On("VotesUpdated", async () =>
+            {
+                Console.WriteLine("SignalR: Received VotesUpdated notification");
+                await LoadCurrentVotes();
+                await LoadVoteHistory();
+                await InvokeAsync(StateHasChanged);
+            });
+
+            await hubConnection.StartAsync();
+            Console.WriteLine("SignalR: Connected to VotesHub");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"SignalR: Error connecting to hub: {ex.Message}");
+        }
+    }
+
+    private async Task LoadUserInfo()
+    {
+        try
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+
+            if (user.Identity?.IsAuthenticated == true)
+            {
+                var role = user.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
+                isAdmin = string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase);
+            }
+            else
+            {
+                isAdmin = false;
+            }
+        }
+        catch
+        {
+            isAdmin = false;
+        }
+    }
+
+    private async Task LoadVoteHistory()
+    {
+        try
+        {
+            isLoading = true;
+            voteRounds = await VoteService.GetVoteHistoryAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading vote history: {ex.Message}");
+            voteRounds = new List<VoteRoundDto>();
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task LoadCurrentVotes()
+    {
+        try
+        {
+            using var scope = ScopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
+
+            var current = await db.CurrentVotes.AsNoTracking().ToListAsync();
+            if (!current.Any())
+            {
+                currentVotes = new List<CurrentVoteDto>();
+                return;
+            }
+
+            var gameIds = current.Select(c => c.GameId).Distinct().ToList();
+            var games = await db.Games.AsNoTracking().Where(g => gameIds.Contains(g.Id)).ToListAsync();
+            var idToTitle = games.ToDictionary(g => g.Id, g => g.Title);
+
+            currentVotes = current
+                .Select(c => new CurrentVoteDto
+                {
+                    GameTitle = idToTitle.TryGetValue(c.GameId, out var t) ? t : string.Empty,
+                    VoteCount = c.VoteCount,
+                    GameNumber = c.GameNumber
+                })
+                .OrderBy(x => x.GameNumber)
+                .ThenByDescending(x => x.VoteCount)
+                .ThenBy(x => x.GameTitle)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading current votes: {ex.Message}");
+            currentVotes = new List<CurrentVoteDto>();
+        }
+    }
+
+    private async Task LoadAllGameTitles()
+    {
+        try
+        {
+            using var scope = ScopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
+
+            allGameTitles = await db.Games
+                .AsNoTracking()
+                .Select(g => g.Title)
+                .Where(t => !string.IsNullOrWhiteSpace(t))
+                .Distinct()
+                .ToListAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading game titles for suggestions: {ex.Message}");
+            allGameTitles = new List<string>();
+        }
+    }
+
+    private void UpdateSuggestions(string input)
+    {
+        suggestions.Clear();
+        showSuggestions = false;
+        var q = (input ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(q) || allGameTitles == null || !allGameTitles.Any()) return;
+
+        var lowered = q.ToLowerInvariant();
+        suggestions = allGameTitles
+            .Where(t => t.ToLowerInvariant().Contains(lowered))
+            .OrderBy(t => t, StringComparer.OrdinalIgnoreCase)
+            .Take(SuggestionLimit)
+            .ToList();
+
+        showSuggestions = suggestions.Any();
+    }
+
+    private void OnNewCurrentTitleInput(ChangeEventArgs e)
+    {
+        newCurrentTitle = e?.Value?.ToString() ?? string.Empty;
+        UpdateSuggestions(newCurrentTitle);
+    }
+
+    private void SelectSuggestion(string title)
+    {
+        newCurrentTitle = title;
+        showSuggestions = false;
+    }
+
+    private async Task AddCurrent()
+    {
+        if (string.IsNullOrWhiteSpace(newCurrentTitle)) return;
+        currentVotes ??= new List<CurrentVoteDto>();
+
+        // Find the lowest available game number (1-3)
+        var usedNumbers = currentVotes.Select(v => v.GameNumber).ToHashSet();
+        var gameNumber = 1;
+        for (int i = 1; i <= 3; i++)
+        {
+            if (!usedNumbers.Contains(i))
+            {
+                gameNumber = i;
+                break;
+            }
+        }
+
+        currentVotes.Add(new CurrentVoteDto
+        {
+            GameTitle = newCurrentTitle.Trim(),
+            VoteCount = Math.Max(0, newCurrentCount),
+            GameNumber = gameNumber
+        });
+        newCurrentTitle = string.Empty;
+        newCurrentCount = 0;
+        
+        // Auto-save the new entry
+        await SaveCurrentVotesAsync();
+    }
+
+    private void UpdateCurrentCountByTitle(string title, ChangeEventArgs e)
+    {
+        if (string.IsNullOrWhiteSpace(title) || currentVotes == null) return;
+        if (e?.Value == null) return;
+        if (!int.TryParse(e.Value.ToString(), out var val)) return;
+        val = Math.Max(0, val);
+
+        var item = currentVotes.FirstOrDefault(c => string.Equals(c.GameTitle, title, StringComparison.OrdinalIgnoreCase));
+        if (item != null)
+        {
+            item.VoteCount = val;
+            
+            // Debounce auto-save on input change
+            DebounceAutoSave();
+        }
+    }
+
+    private void DebounceAutoSave()
+    {
+        // Cancel existing timer if any
+        _debounceTimer?.Dispose();
+        
+        // Create new timer that will trigger save after delay
+        _debounceTimer = new System.Threading.Timer(async _ =>
+        {
+            await InvokeAsync(async () =>
+            {
+                await SaveCurrentVotesAsync();
+            });
+        }, null, _debounceMilliseconds, System.Threading.Timeout.Infinite);
+    }
+
+    private async Task RemoveCurrent(string title)
+    {
+        if (currentVotes == null || string.IsNullOrWhiteSpace(title)) return;
+        if (!isAdmin) return;
+
+        try
+        {
+            using var scope = ScopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
+
+            var game = await db.Games
+                .AsNoTracking()
+                .FirstOrDefaultAsync(g => g.Title.ToLower() == title.Trim().ToLower());
+
+            if (game == null)
+            {
+                Console.WriteLine($"Game '{title}' not found");
+                return;
+            }
+
+            var currentVote = await db.CurrentVotes
+                .FirstOrDefaultAsync(cv => cv.GameId == game.Id);
+
+            if (currentVote == null)
+            {
+                Console.WriteLine($"No current vote found for '{title}'");
+                return;
+            }
+
+            db.CurrentVotes.Remove(currentVote);
+            await db.SaveChangesAsync();
+
+            // Notify SignalR clients that votes were updated
+            await HubContext.Clients.All.SendAsync("VotesUpdated");
+
+            Console.WriteLine($"Successfully removed vote for '{title}'");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error removing vote for '{title}': {ex.Message}");
+        }
+        finally
+        {
+            await LoadCurrentVotes();
+        }
+    }
+
+    private async Task SaveCurrentVotesAsync()
+    {
+        if (currentVotes == null || !isAdmin) return;
+
+        try
+        {
+            using var scope = ScopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
+
+            var titles = currentVotes
+                .Select(v => v.GameTitle?.Trim() ?? string.Empty)
+                .Where(t => !string.IsNullOrEmpty(t))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (!titles.Any())
+            {
+                return;
+            }
+
+            var allGames = await db.Games.AsNoTracking().ToListAsync();
+            var titleToId = allGames
+                .Where(g => !string.IsNullOrWhiteSpace(g.Title))
+                .ToDictionary(g => g.Title.Trim(), g => g.Id, StringComparer.OrdinalIgnoreCase);
+
+            var missing = titles.Where(t => !titleToId.ContainsKey(t)).ToList();
+            if (missing.Any())
+            {
+                Console.WriteLine($"Some game titles were not found: {string.Join(", ", missing)}");
+                return;
+            }
+
+            var gameIds = titleToId.Values.Distinct().ToList();
+            var existingDict = await db.CurrentVotes
+                .Where(cv => gameIds.Contains(cv.GameId))
+                .ToDictionaryAsync(cv => cv.GameId, cv => cv);
+
+            var insertedCount = 0;
+            var updatedCount = 0;
+            var toInsert = new List<CurrentVote>();
+
+            foreach (var v in currentVotes)
+            {
+                var rawTitle = v.GameTitle?.Trim() ?? string.Empty;
+                if (string.IsNullOrEmpty(rawTitle) || v.VoteCount < 0 || v.GameNumber < 1 || v.GameNumber > 3)
+                    continue;
+
+                if (!titleToId.TryGetValue(rawTitle, out var gameId))
+                    continue;
+
+                if (existingDict.TryGetValue(gameId, out var existingRow))
+                {
+                    if (existingRow.VoteCount != v.VoteCount || existingRow.GameNumber != v.GameNumber)
+                    {
+                        existingRow.VoteCount = v.VoteCount;
+                        existingRow.GameNumber = v.GameNumber;
+                        updatedCount++;
+                    }
+                }
+                else
+                {
+                    toInsert.Add(new CurrentVote
+                    {
+                        GameId = gameId,
+                        VoteCount = v.VoteCount,
+                        GameNumber = v.GameNumber
+                    });
+                    insertedCount++;
+                }
+            }
+
+            if (toInsert.Any())
+            {
+                await db.CurrentVotes.AddRangeAsync(toInsert);
+            }
+
+            if (insertedCount > 0 || updatedCount > 0)
+            {
+                await db.SaveChangesAsync();
+
+                // Notify SignalR clients that votes were updated
+                await HubContext.Clients.All.SendAsync("VotesUpdated");
+
+                Console.WriteLine($"Auto-saved votes: inserted={insertedCount}, updated={updatedCount}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error auto-saving current votes: {ex.Message}");
+        }
+    }
+
+    private IEnumerable<VoteRoundDto> FilteredVotes
+    {
+        get
+        {
+            var filtered = voteRounds.AsEnumerable();
+
+            if (showOnlyRoundsWithVotes)
+            {
+                filtered = filtered.Where(r => (r.TopVotes + r.SecondVotes + r.LastVotes) > 0);
+            }
+
+            if (!string.IsNullOrWhiteSpace(searchQuery))
+            {
+                var q = searchQuery.Trim().ToLowerInvariant();
+                filtered = filtered.Where(r =>
+                    r.VoteRound.ToString().Contains(q) ||
+                    (r.TopGameTitle?.ToLowerInvariant().Contains(q) ?? false) ||
+                    (r.SecondGameTitle?.ToLowerInvariant().Contains(q) ?? false) ||
+                    (r.LastGameTitle?.ToLowerInvariant().Contains(q) ?? false) ||
+                    (r.Notes?.ToLowerInvariant().Contains(q) ?? false));
+            }
+
+            filtered = sortColumn switch
+            {
+                nameof(VoteRoundDto.TopVotes) => sortAscending ? filtered.OrderBy(r => r.TopVotes) : filtered.OrderByDescending(r => r.TopVotes),
+                nameof(VoteRoundDto.SecondVotes) => sortAscending ? filtered.OrderBy(r => r.SecondVotes) : filtered.OrderByDescending(r => r.SecondVotes),
+                nameof(VoteRoundDto.LastVotes) => sortAscending ? filtered.OrderBy(r => r.LastVotes) : filtered.OrderByDescending(r => r.LastVotes),
+                nameof(VoteRoundDto.TopGameTitle) => sortAscending ? filtered.OrderBy(r => r.TopGameTitle) : filtered.OrderByDescending(r => r.TopGameTitle),
+                _ => sortAscending ? filtered.OrderBy(r => r.VoteRound) : filtered.OrderByDescending(r => r.VoteRound),
+            };
+
+            return filtered;
+        }
+    }
+
+    private void SortBy(string column)
+    {
+        if (sortColumn == column)
+        {
+            sortAscending = !sortAscending;
+        }
+        else
+        {
+            sortColumn = column;
+            sortAscending = true;
+        }
+    }
+
+    private string GetSortIcon(string column) => sortColumn == column ? (sortAscending ? "▲" : "▼") : string.Empty;
+
+    private async Task ToggleShowOnlyRoundsWithVotes(ChangeEventArgs e)
+	{
+		showOnlyRoundsWithVotes = e.Value is bool b && b;
+		await Task.CompletedTask;
+	}
+
+    private void ShowArchiveDialog()
+    {
+        showArchiveDialog = true;
+    }
+
+    private void CloseArchiveDialog()
+    {
+        showArchiveDialog = false;
+    }
+
+    private async Task HandleArchived()
+    {
+        showArchiveDialog = false;
+        
+        // Reload both current votes and history
+        await LoadCurrentVotes();
+        await LoadVoteHistory();
+    }
+
+    public void Dispose()
+    {
+        _debounceTimer?.Dispose();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _debounceTimer?.Dispose();
+        
+        if (hubConnection != null)
+        {
+            await hubConnection.DisposeAsync();
+        }
+    }
+
+	// small user DTO for role check
+	private class UserInfo
+	{
+		public bool IsAuthenticated { get; set; }
+		public string? Username { get; set; }
+		public string? Role { get; set; }
+		public string? ProfileImageUrl { get; set; }
+	}
+
+	// Minimal shape used only to read titles from /api/games
+	private class GameTitleDto
+	{
+		public string? Title { get; set; }
+	}
+
+	private record PieSlice(string Path, string Color, string Label, int Value, double Percent);
+
+	private IEnumerable<PieSlice> PieSlices
+	{
+		get
+		{
+			var items = currentVotes ?? new List<CurrentVoteDto>();
+			var total = items.Sum(i => i.VoteCount);
+			if (total <= 0)
+			{
+				// single empty slice fallback
+				return new List<PieSlice> {
+					new PieSlice(SectorPath(0, 360, 70), "#e0e0e0", "No votes", 0, 100)
+				};
+			}
+
+			var colors = new[] { "#ff6384", "#36a2eb", "#ffce56", "#7bd389", "#a78be6", "#f4865c", "#6cd3d1", "#f07fb6" };
+			var slices = new List<PieSlice>();
+			double startAngle = -90; // start at top
+			int idx = 0;
+
+			// Count how many items have votes > 0
+			var itemsWithVotes = items.Where(i => i.VoteCount > 0).ToList();
+
+			foreach (var it in items)
+			{
+				var value = Math.Max(0, it.VoteCount);
+				if (value == 0) { idx++; continue; }
+				
+				var angle = (value / (double)total) * 360.0;
+				var endAngle = startAngle + angle;
+				
+				// Special case: if this is the only item with votes, draw a full circle
+				string path;
+				if (itemsWithVotes.Count == 1 && value == total)
+				{
+					path = FullCirclePath(70);
+				}
+				else
+				{
+					path = SectorPath(startAngle, endAngle, 70);
+				}
+				
+				var color = colors[idx % colors.Length];
+				var percent = (value / (double)total) * 100.0;
+				slices.Add(new PieSlice(path, color, it.GameTitle, value, percent));
+				startAngle = endAngle;
+				idx++;
+			}
+
+			return slices;
+		}
+	}
+
+	// Build SVG path for a pie slice from startAngle to endAngle with radius r
+	private static string SectorPath(double startAngleDeg, double endAngleDeg, double r)
+	{
+		double startRad = (Math.PI / 180.0) * startAngleDeg;
+		double endRad = (Math.PI / 180.0) * endAngleDeg;
+		double x1 = r * Math.Cos(startRad);
+		double y1 = r * Math.Sin(startRad);
+		double x2 = r * Math.Cos(endRad);
+		double y2 = r * Math.Sin(endRad);
+		var largeArc = (endAngleDeg - startAngleDeg) > 180 ? 1 : 0;
+		return $"M 0 0 L {x1:0.###} {y1:0.###} A {r:0.###} {r:0.###} 0 {largeArc} 1 {x2:0.###} {y2:0.###} Z";
+	}
+
+	// Build SVG path for a full circle with radius r
+	private static string FullCirclePath(double r)
+	{
+		// Draw a full circle as two semicircles
+		return $"M 0 {-r} A {r:0.###} {r:0.###} 0 0 1 0 {r:0.###} A {r:0.###} {r:0.###} 0 0 1 0 {-r:0.###} Z";
+	}
+}

@@ -1,0 +1,379 @@
+@page "/progress"
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
+@using PS2Challenge.Backend.Data
+@using PS2Challenge.Main.Frontend.Components
+@inject GameService GameService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IServiceScopeFactory ScopeFactory
+@using System.Globalization
+@using PS2Challenge.Backend.Models
+
+<PageTitle>Game Progress - Dadson's PS2 Tracker</PageTitle>
+
+<div class="completed-games-container">
+    <h1>Game Progress</h1>
+
+    @if (isAdmin)
+    {
+        <div style="margin-bottom:1rem;">
+            <button class="cta-button" @onclick="OpenAddModal">Add New Game</button>
+        </div>
+    }
+
+    @if (isLoading)
+    {
+        <div class="loading-container">
+            <div class="loading"></div>
+            <p>Loading game progress...</p>
+        </div>
+    }
+    else if (gamesWithProgress == null || !gamesWithProgress.Any())
+    {
+        <p>No games in progress found.</p>
+    }
+    else
+    {
+        <div class="search-section">
+            <div class="search-box">
+                <input type="text"
+                       placeholder="Search by title, criteria, or review..."
+                       @bind="searchQuery"
+                       @bind:event="oninput"
+                       class="search-input" />
+                <span class="search-icon">🔍</span>
+            </div>
+
+            <div class="filter-controls">
+                <label>
+                    <input type="checkbox" @bind="showCompletedOnly" />
+                    Show Completed Only
+                </label>
+                <label>
+                    <input type="checkbox" @bind="showInProgressOnly" />
+                    Show In Progress Only
+                </label>
+            </div>
+
+            <div class="results-count">
+                <p>Showing @FilteredGames.Count() of @gamesWithProgress.Count() games | Completed: @gamesWithProgress.Count(g => g.DateFinished.HasValue) | In Progress: @gamesWithProgress.Count(g => !g.DateFinished.HasValue)</p>
+            </div>
+        </div>
+
+        <div class="games-table-container">
+            <table class="games-table">
+                <thead>
+                    <tr>
+                        <th @onclick="() => SortBy(nameof(GameProgressDto.ProgressId))">
+                            Game Number @GetSortIcon(nameof(GameProgressDto.ProgressId))
+                        </th>
+                        <th @onclick='() => SortBy("Status")'>
+                            Status @GetSortIcon("Status")
+                        </th>
+                        <th @onclick="() => SortBy(nameof(GameProgressDto.GameTitle))">
+                            Title @GetSortIcon(nameof(GameProgressDto.GameTitle))
+                        </th>
+                        <th @onclick="() => SortBy(nameof(GameProgressDto.DateStarted))">
+                            Started @GetSortIcon(nameof(GameProgressDto.DateStarted))
+                        </th>
+                        <th @onclick="() => SortBy(nameof(GameProgressDto.DateFinished))">
+                            Finished @GetSortIcon(nameof(GameProgressDto.DateFinished))
+                        </th>
+                        <th @onclick="() => SortBy(nameof(GameProgressDto.CompletionTime))">
+                            Time @GetSortIcon(nameof(GameProgressDto.CompletionTime))
+                        </th>
+                        <th @onclick="() => SortBy(nameof(GameProgressDto.Platform))">
+                            Platform @GetSortIcon(nameof(GameProgressDto.Platform))
+                        </th>
+                        <th>Criteria</th>
+                        <th>Review</th>
+                        @if (isAdmin)
+                        {
+                            <th style="width:100px">Actions</th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var game in FilteredGames)
+                    {
+                        <tr class="@(game.DateFinished.HasValue ? "completed" : "in-progress")">
+                            <td>@game.ProgressId</td>
+                            <td>
+                                <span class="status-badge @(game.DateFinished.HasValue ? "status-completed" : "status-inprogress")">
+                                    @(game.DateFinished.HasValue ? "Completed" : "In Progress")
+                                </span>
+                            </td>
+                            <td class="game-title">@game.GameTitle</td>
+                            <td>@game.DateStarted.ToString("dd/MM/yyyy")</td>
+                            <td>@(game.DateFinished?.ToString("dd/MM/yyyy") ?? "-")</td>
+                            <td>@FormatCompletionTime(game.CompletionTime)</td>
+                            <td><span class="platform-badge platform-@game.Platform.ToLower()">@game.Platform</span></td>
+                            <td class="criteria">@(game.BeatenCriteria ?? "-")</td>
+                            <td class="review">@(game.Review ?? "-")</td>
+                            @if (isAdmin)
+                            {
+                                <td>
+                                    <button class="btn btn-link" @onclick="() => OpenEditModal(game)">Edit</button>
+                                </td>
+                            }
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+<GameProgressEdit IsVisible="@showModal"
+                  IsEditMode="@isEditMode"
+                  ProgressId="@editingProgressId"
+                  AllGameTitles="@allGameTitles"
+                  GameTitle="@editGameTitle"
+                  DateStarted="@editDateStarted"
+                  DateFinished="@editDateFinished"
+                  Platform="@editPlatform"
+                  BeatenCriteria="@editBeatenCriteria"
+                  Review="@editReview"
+                  CompletionHours="@editCompletionHours"
+                  CompletionMinutes="@editCompletionMinutes"
+                  CompletionSeconds="@editCompletionSeconds"
+                  OnClose="@CloseModal"
+                  OnSave="@HandleSave" />
+
+@code {
+    private IEnumerable<GameProgressDto>? gamesWithProgress;
+    private bool isLoading = true;
+    private bool isAdmin = false;
+    private string searchQuery = "";
+    private bool showCompletedOnly = false;
+    private bool showInProgressOnly = false;
+    private string sortColumn = "ProgressId";
+    private bool sortAscending = false;
+
+    // Modal state
+    private bool showModal = false;
+    private bool isEditMode = false;
+    private int? editingProgressId = null;
+
+    // Edit/Add form state
+    private string editGameTitle = string.Empty;
+    private DateTime? editDateStarted;
+    private DateTime? editDateFinished;
+    private string editPlatform = "Physical";
+    private string? editBeatenCriteria;
+    private string? editReview;
+    private int editCompletionHours = 0;
+    private int editCompletionMinutes = 0;
+    private int editCompletionSeconds = 0;
+
+    // suggestions
+    private List<string> allGameTitles = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CheckAdminStatus();
+        await LoadProgress();
+
+        if (isAdmin)
+        {
+            await LoadAllGameTitles();
+        }
+    }
+
+    private async Task CheckAdminStatus()
+    {
+        try
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+
+            if (user.Identity?.IsAuthenticated == true)
+            {
+                var role = user.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
+                isAdmin = string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase);
+            }
+        }
+        catch
+        {
+            isAdmin = false;
+        }
+    }
+
+    private async Task LoadProgress()
+    {
+        try
+        {
+            isLoading = true;
+            gamesWithProgress = await GameService.GetAllProgressAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading game progress: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task LoadAllGameTitles()
+    {
+        try
+        {
+            using var scope = ScopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
+
+            allGameTitles = await db.Games
+                .AsNoTracking()
+                .Select(g => g.Title)
+                .Where(t => !string.IsNullOrWhiteSpace(t))
+                .Distinct()
+                .ToListAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading game titles for suggestions: {ex.Message}");
+            allGameTitles = new List<string>();
+        }
+    }
+
+    private void OpenAddModal()
+    {
+        if (!isAdmin) return;
+
+        isEditMode = false;
+        editingProgressId = null;
+        ClearFormFields();
+        showModal = true;
+    }
+
+    private void OpenEditModal(GameProgressDto game)
+    {
+        if (!isAdmin) return;
+
+        isEditMode = true;
+        editingProgressId = game.ProgressId;
+        
+        editGameTitle = game.GameTitle;
+        editDateStarted = game.DateStarted.ToDateTime(TimeOnly.MinValue);
+        editDateFinished = game.DateFinished?.ToDateTime(TimeOnly.MinValue);
+        editPlatform = game.Platform ?? "Physical";
+        editBeatenCriteria = game.BeatenCriteria;
+        editReview = game.Review;
+
+        if (game.CompletionTime.HasValue)
+        {
+            editCompletionHours = (int)game.CompletionTime.Value.TotalHours;
+            editCompletionMinutes = game.CompletionTime.Value.Minutes;
+            editCompletionSeconds = game.CompletionTime.Value.Seconds;
+        }
+        else
+        {
+            editCompletionHours = 0;
+            editCompletionMinutes = 0;
+            editCompletionSeconds = 0;
+        }
+
+        showModal = true;
+    }
+
+    private void CloseModal()
+    {
+        showModal = false;
+        ClearFormFields();
+    }
+
+    private void ClearFormFields()
+    {
+        editGameTitle = string.Empty;
+        editDateStarted = null;
+        editDateFinished = null;
+        editPlatform = "Physical";
+        editBeatenCriteria = null;
+        editReview = null;
+        editCompletionHours = 0;
+        editCompletionMinutes = 0;
+        editCompletionSeconds = 0;
+        editingProgressId = null;
+    }
+
+    private async Task HandleSave()
+    {
+        await LoadProgress();
+        CloseModal();
+    }
+
+    private IEnumerable<GameProgressDto> FilteredGames
+    {
+        get
+        {
+            IEnumerable<GameProgressDto> filtered = gamesWithProgress ?? Enumerable.Empty<GameProgressDto>();
+
+            if (showCompletedOnly)
+            {
+                filtered = filtered.Where(g => g.DateFinished.HasValue);
+            }
+
+            if (showInProgressOnly)
+            {
+                filtered = filtered.Where(g => !g.DateFinished.HasValue);
+            }
+
+            if (!string.IsNullOrWhiteSpace(searchQuery))
+            {
+                filtered = filtered.Where(g =>
+                    g.GameTitle.Contains(searchQuery, StringComparison.OrdinalIgnoreCase) ||
+                    (g.BeatenCriteria != null && g.BeatenCriteria.Contains(searchQuery, StringComparison.OrdinalIgnoreCase)) ||
+                    (g.Review != null && g.Review.Contains(searchQuery, StringComparison.OrdinalIgnoreCase)));
+            }
+
+            filtered = sortColumn switch
+            {
+                nameof(GameProgressDto.ProgressId) => sortAscending ? filtered.OrderBy(g => g.ProgressId) : filtered.OrderByDescending(g => g.ProgressId),
+                "Status" => sortAscending ? filtered.OrderBy(g => g.DateFinished.HasValue).ThenBy(g => g.GameTitle) : filtered.OrderByDescending(g => g.DateFinished.HasValue).ThenByDescending(g => g.GameTitle),
+                nameof(GameProgressDto.GameTitle) => sortAscending ? filtered.OrderBy(g => g.GameTitle) : filtered.OrderByDescending(g => g.GameTitle),
+                nameof(GameProgressDto.DateStarted) => sortAscending ? filtered.OrderBy(g => g.DateStarted) : filtered.OrderByDescending(g => g.DateStarted),
+                nameof(GameProgressDto.DateFinished) => sortAscending ? filtered.OrderBy(g => g.DateFinished ?? DateOnly.MaxValue) : filtered.OrderByDescending(g => g.DateFinished ?? DateOnly.MinValue),
+                nameof(GameProgressDto.CompletionTime) => sortAscending ? filtered.OrderBy(g => g.CompletionTime) : filtered.OrderByDescending(g => g.CompletionTime),
+                nameof(GameProgressDto.Platform) => sortAscending ? filtered.OrderBy(g => g.Platform) : filtered.OrderByDescending(g => g.Platform),
+                _ => filtered.OrderByDescending(g => g.ProgressId)
+            };
+
+            return filtered;
+        }
+    }
+
+    private void SortBy(string column)
+    {
+        if (sortColumn == column)
+        {
+            sortAscending = !sortAscending;
+        }
+        else
+        {
+            sortColumn = column;
+            sortAscending = true;
+        }
+    }
+
+    private string GetSortIcon(string column)
+    {
+        if (sortColumn != column)
+        {
+            return "";
+        }
+
+        return sortAscending ? "▲" : "▼";
+    }
+
+    private string FormatCompletionTime(TimeSpan? timeSpan)
+    {
+        if (timeSpan == null) return "-";
+
+        var hours = (int)timeSpan.Value.TotalHours;
+        var minutes = timeSpan.Value.Minutes;
+        var seconds = timeSpan.Value.Seconds;
+
+        return $"{hours:D2}:{minutes:D2}:{seconds:D2}";
+    }
+}

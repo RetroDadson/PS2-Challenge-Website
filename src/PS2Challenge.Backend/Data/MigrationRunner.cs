@@ -1,6 +1,5 @@
 using FluentMigrator.Runner;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 
 namespace PS2Challenge.Backend.Data;
 

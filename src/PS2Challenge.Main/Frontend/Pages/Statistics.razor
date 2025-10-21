@@ -1,0 +1,562 @@
+@page "/statistics"
+@using PS2Challenge.Main.Frontend.Models
+@using GameProgressDto = PS2Challenge.Backend.Models.GameProgressDto
+@inject GameService GameService
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Statistics - Dadson's PS2 Challenge</PageTitle>
+
+<div class="statistics-container">
+    <h1>Challenge Statistics</h1>
+
+    @if (isLoading)
+    {
+        <div class="loading-container">
+            <div class="loading"></div>
+            <p>Loading statistics...</p>
+        </div>
+    }
+    else
+    {
+        <div class="stats-section">
+            <h2>Challenge Status</h2>
+            <div class="stats-cards">
+                <div class="stat-card completed">
+                    <div class="stat-icon"><i class="fas fa-check-circle"></i></div>
+                    <div class="stat-content">
+                        <div class="stat-value">@gamesCompletedCount</div>
+                        <div class="stat-label">Games Completed</div>
+                    </div>
+                </div>
+
+                <div class="stat-card challenge">
+                    <div class="stat-icon"><i class="fas fa-gamepad"></i></div>
+                    <div class="stat-content">
+                        <div class="stat-value">@gamesInChallengeCount</div>
+                        <div class="stat-label">Games in Challenge</div>
+                    </div>
+                </div>
+
+                <div class="stat-card games-remaining">
+                    <div class="stat-icon"><i class="fas fa-tasks"></i></div>
+                    <div class="stat-content">
+                        <div class="stat-value">@gamesRemainingCount</div>
+                        <div class="stat-label">Games Remaining</div>
+                    </div>
+                </div>
+
+                <div class="stat-card progress">
+                    <div class="stat-icon"><i class="fas fa-chart-line"></i></div>
+                    <div class="stat-content">
+                        <div class="stat-value">@percentageComplete.ToString("F1")%</div>
+                        <div class="stat-label">Challenge Complete</div>
+                        <div class="progress-bar-container">
+                            <div class="progress-bar" style="width: @percentageComplete%"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="stat-card duration">
+                    <div class="stat-icon"><i class="fas fa-clock"></i></div>
+                    <div class="stat-content">
+                        <div class="stat-value">@FormatAverageDuration()</div>
+                        <div class="stat-label">Average Game Duration</div>
+                    </div>
+                </div>
+
+                <div class="stat-card remaining">
+                    <div class="stat-icon"><i class="fas fa-hourglass-half"></i></div>
+                    <div class="stat-content">
+                        <div class="stat-value">@FormatEstimatedTimeRemaining()</div>
+                        <div class="stat-label">Estimated Time Remaining</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Game Duration Chart -->
+            @if (allProgress.Any(p => p.DateFinished.HasValue && p.CompletionTime.HasValue))
+            {
+                <div class="chart-container">
+                    <canvas id="durationChart"></canvas>
+                </div>
+                <div class="chart-controls">
+                    <button class="chart-btn" @onclick="ResetZoom">
+                        <i class="fas fa-search-minus"></i> Reset Zoom
+                    </button>
+                    <p class="chart-help">
+                        <i class="fas fa-info-circle"></i> 
+                        Scroll to zoom, drag to pan, or use pinch gestures on touch devices
+                    </p>
+                </div>
+            }
+            else
+            {
+                <p class="placeholder-text">No completed games with duration data yet. Complete some games to see the chart!</p>
+            }
+        </div>
+
+        <!-- Collection Statistics -->
+        <div class="stats-section">
+            <h2>Collection Statistics</h2>
+            <div class="stats-cards">
+                <div class="stat-card collection">
+                    <div class="stat-icon"><i class="fas fa-box-open"></i></div>
+                    <div class="stat-content">
+                        <div class="stat-value">@gamesCollectedInChallenge</div>
+                        <div class="stat-label">Games Collected in Challenge</div>
+                    </div>
+                </div>
+
+                <div class="stat-card excluded-collection">
+                    <div class="stat-icon"><i class="fas fa-box-archive"></i></div>
+                    <div class="stat-content">
+                        <div class="stat-value">@gamesCollectedButExcluded</div>
+                        <div class="stat-label">Collected but Excluded</div>
+                    </div>
+                </div>
+
+                <div class="stat-card total-owned">
+                    <div class="stat-icon"><i class="fas fa-boxes"></i></div>
+                    <div class="stat-content">
+                        <div class="stat-value">@totalGamesOwned</div>
+                        <div class="stat-label">Total Games Owned</div>
+                    </div>
+                </div>
+
+                <div class="stat-card collection-progress">
+                    <div class="stat-icon"><i class="fas fa-percentage"></i></div>
+                    <div class="stat-content">
+                        <div class="stat-value">@collectionPercentageInChallenge.ToString("F1")%</div>
+                        <div class="stat-label">Challenge Collection Rate</div>
+                        <div class="progress-bar-container">
+                            <div class="progress-bar" style="width: @collectionPercentageInChallenge%"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="stat-card total-collection-progress">
+                    <div class="stat-icon"><i class="fas fa-chart-pie"></i></div>
+                    <div class="stat-content">
+                        <div class="stat-value">@collectionPercentageTotal.ToString("F1")%</div>
+                        <div class="stat-label">Total Collection Rate</div>
+                        <div class="progress-bar-container">
+                            <div class="progress-bar" style="width: @collectionPercentageTotal%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Ownership Type Pie Chart -->
+            @if (ownedTypes.Any())
+            {
+                <div class="chart-row">
+                    <div class="thermometer-card">
+                        <h4>Challenge Collection Progress</h4>
+                        <div class="thermometer">
+                            <div class="thermometer-fill" style="height: @collectionPercentageInChallenge%">
+                            </div>
+                        </div>
+                        <div class="thermometer-stats">
+                            <span class="thermometer-label">@gamesCollectedInChallenge / @gamesInChallengeCount games</span>
+                            <span class="thermometer-percentage">@collectionPercentageInChallenge.ToString("F1")%</span>
+                        </div>
+                    </div>
+                    <div class="thermometer-card">
+                        <h4>Total Collection Progress</h4>
+                        <div class="thermometer">
+                            <div class="thermometer-fill" style="height: @collectionPercentageTotal%">
+                            </div>
+                        </div>
+                        <div class="thermometer-stats">
+                            <span class="thermometer-label">@totalGamesOwned / @allGames.Count games</span>
+                            <span class="thermometer-percentage">@collectionPercentageTotal.ToString("F1")%</span>
+                        </div>
+                    </div>
+                    <div class="ownership-pie-card">
+                        <h3 class="chart-title">Ownership Type Distribution</h3>
+                        <svg class="pie-chart" viewBox="0 0 200 200" width="100%" height="300" role="img" aria-label="Ownership type breakdown">
+                            <g transform="translate(100,100)">
+                                @foreach (var slice in OwnershipPieSlices)
+                                {
+                                    <path d="@slice.Path" fill="@slice.Color" stroke="#ffffff" stroke-width="0.6">
+                                        <title>@($"{slice.Label}: {slice.Value} ({slice.Percent:0.0}%)")</title>
+                                    </path>
+                                }
+                                <circle cx="0" cy="0" r="36" fill="var(--background-card)"></circle>
+                            </g>
+                        </svg>
+                        <div class="pie-legend">
+                            @foreach (var slice in OwnershipPieSlices)
+                            {
+                                <div class="legend-item">
+                                    <span class="legend-swatch" style="background:@slice.Color"></span>
+                                    <span class="legend-label">@slice.Label</span>
+                                    <span class="legend-value">@slice.Value (@(slice.Percent.ToString("0.0"))%)</span>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <p class="placeholder-text">No ownership data available yet.</p>
+            }
+        </div>
+
+        <!-- Placeholder for future statistics sections -->
+        <div class="stats-section">
+            <h2>More Statistics Coming Soon</h2>
+            <p class="placeholder-text">Additional graphs and statistics will be added here in future updates.</p>
+        </div>
+    }
+</div>
+
+@code {
+    private List<GameDto> allGames = new();
+    private List<GameProgressDto> allProgress = new();
+    private Dictionary<int, string> ownedTypes = new();
+    private int gamesCompletedCount = 0;
+    private int gamesInChallengeCount = 0;
+    private int gamesRemainingCount = 0;
+    private double percentageComplete = 0;
+    private TimeSpan? averageGameDuration = null;
+    private TimeSpan? estimatedTimeRemaining = null;
+    
+    // Collection statistics
+    private int gamesCollectedInChallenge = 0;
+    private int gamesCollectedButExcluded = 0;
+    private int totalGamesOwned = 0;
+    private double collectionPercentageInChallenge = 0;
+    private double collectionPercentageTotal = 0;
+    
+    private bool isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadStatistics();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !isLoading && allProgress.Any())
+        {
+            await RenderChart();
+        }
+    }
+
+    private async Task LoadStatistics()
+    {
+        try
+        {
+            isLoading = true;
+            StateHasChanged();
+
+            // Load all games
+            var gamesResult = await GameService.GetAllGamesAsync();
+            allGames = gamesResult?.ToList() ?? new List<GameDto>();
+
+            // Load all progress
+            var progressResult = await GameService.GetAllProgressAsync();
+            allProgress = progressResult?.ToList() ?? new List<GameProgressDto>();
+
+            // Load ownership types
+            ownedTypes = await GameService.GetOwnedTypesAsync();
+
+            // Calculate statistics
+            CalculateStatistics();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading statistics: {ex.Message}");
+            allGames = new List<GameDto>();
+            allProgress = new List<GameProgressDto>();
+            ownedTypes = new Dictionary<int, string>();
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+            
+            // Render charts after data is loaded and UI is updated
+            await Task.Delay(100); // Small delay to ensure DOM is ready
+            await RenderChart();
+        }
+    }
+
+    private void CalculateStatistics()
+    {
+        // Games in challenge = games that are not excluded
+        gamesInChallengeCount = allGames.Count(g => !g.IsExcluded);
+
+        // Games completed = progress entries with DateFinished
+        gamesCompletedCount = allProgress.Count(p => p.DateFinished.HasValue);
+
+        // Games remaining = games in challenge - games completed
+        gamesRemainingCount = gamesInChallengeCount - gamesCompletedCount;
+
+        // Calculate percentage complete
+        if (gamesInChallengeCount > 0)
+        {
+            percentageComplete = ((double)gamesCompletedCount / gamesInChallengeCount) * 100;
+        }
+        else
+        {
+            percentageComplete = 0;
+        }
+
+        // Calculate average game duration
+        var completedGamesWithTime = allProgress
+            .Where(p => p.DateFinished.HasValue && p.CompletionTime.HasValue)
+            .ToList();
+
+        if (completedGamesWithTime.Any())
+        {
+            var totalTicks = completedGamesWithTime.Sum(p => p.CompletionTime!.Value.Ticks);
+            var averageTicks = totalTicks / completedGamesWithTime.Count;
+            averageGameDuration = TimeSpan.FromTicks(averageTicks);
+
+            // Calculate estimated time remaining
+            // Games not completed = games in challenge - games completed
+            var gamesNotCompleted = gamesInChallengeCount - gamesCompletedCount;
+            if (gamesNotCompleted > 0)
+            {
+                estimatedTimeRemaining = TimeSpan.FromTicks(averageTicks * gamesNotCompleted);
+            }
+            else
+            {
+                estimatedTimeRemaining = TimeSpan.Zero;
+            }
+        }
+        else
+        {
+            estimatedTimeRemaining = null;
+        }
+
+        // Collection statistics
+        totalGamesOwned = allGames.Count(g => g.IsOwned);
+        gamesCollectedInChallenge = allGames.Count(g => g.IsOwned && !g.IsExcluded);
+        gamesCollectedButExcluded = allGames.Count(g => g.IsOwned && g.IsExcluded);
+
+        // Collection percentage for challenge games (owned & not excluded / total not excluded)
+        if (gamesInChallengeCount > 0)
+        {
+            collectionPercentageInChallenge = ((double)gamesCollectedInChallenge / gamesInChallengeCount) * 100;
+        }
+        else
+        {
+            collectionPercentageInChallenge = 0;
+        }
+
+        // Total collection percentage (total owned / total games)
+        if (allGames.Count > 0)
+        {
+            collectionPercentageTotal = ((double)totalGamesOwned / allGames.Count) * 100;
+        }
+        else
+        {
+            collectionPercentageTotal = 0;
+        }
+
+        // Calculate games remaining count
+        gamesRemainingCount = gamesInChallengeCount - gamesCompletedCount;
+    }
+
+    private string FormatAverageDuration()
+    {
+        if (!averageGameDuration.HasValue)
+        {
+            return "N/A";
+        }
+
+        var duration = averageGameDuration.Value;
+        var hours = (int)duration.TotalHours;
+        var minutes = duration.Minutes;
+
+        var parts = new List<string>();
+
+        if (hours > 0)
+        {
+            parts.Add($"{hours}h");
+        }
+        
+        if (minutes > 0 || hours == 0)
+        {
+            parts.Add($"{minutes}m");
+        }
+
+        return string.Join(" ", parts);
+    }
+
+    private string FormatEstimatedTimeRemaining()
+    {
+        if (!estimatedTimeRemaining.HasValue)
+        {
+            return "N/A";
+        }
+
+        var remaining = estimatedTimeRemaining.Value;
+        
+        if (remaining == TimeSpan.Zero)
+        {
+            return "Complete!";
+        }
+
+        var days = (int)remaining.TotalDays;
+        var hours = remaining.Hours;
+        var minutes = remaining.Minutes;
+        var seconds = remaining.Seconds;
+
+        var parts = new List<string>();
+        
+        if (days > 0)
+        {
+            parts.Add($"{days}d");
+        }
+        if (hours > 0)
+        {
+            parts.Add($"{hours}h");
+        }
+        if (minutes > 0)
+        {
+            parts.Add($"{minutes}m");
+        }
+        if (seconds > 0 || parts.Count == 0)
+        {
+            parts.Add($"{seconds}s");
+        }
+
+        return string.Join(" ", parts);
+    }
+
+    private async Task RenderChart()
+    {
+        try
+        {
+            // Get completed games with duration, ordered by completion date
+            var completedGames = allProgress
+                .Where(p => p.DateFinished.HasValue && p.CompletionTime.HasValue)
+                .OrderBy(p => p.DateFinished)
+                .Select((p, index) => new
+                {
+                    GameNumber = index + 1,
+                    p.GameTitle,
+                    CompletionDate = p.DateFinished!.Value.ToString("yyyy-MM-dd"),
+                    DurationHours = p.CompletionTime!.Value.TotalHours
+                })
+                .ToList();
+
+            if (!completedGames.Any())
+            {
+                return;
+            }
+
+            var chartData = new
+            {
+                labels = completedGames.Select(g => $"Game #{g.GameNumber}").ToArray(),
+                datasets = new[]
+                {
+                    new
+                    {
+                        label = "Game Duration (hours)",
+                        data = completedGames.Select(g => Math.Round(g.DurationHours, 2)).ToArray(),
+                        borderColor = "rgb(233, 30, 99)",
+                        backgroundColor = "rgba(233, 30, 99, 0.1)",
+                        borderWidth = 2,
+                        fill = true,
+                        tension = 0.4,
+                        pointRadius = 5,
+                        pointHoverRadius = 7,
+                        pointBackgroundColor = "rgb(233, 30, 99)",
+                        pointBorderColor = "rgb(255, 255, 255)",
+                        pointBorderWidth = 2,
+                        gameInfo = completedGames.Select(g => new { g.GameTitle, g.CompletionDate }).ToArray()
+                    }
+                }
+            };
+
+            await JSRuntime.InvokeVoidAsync("renderDurationChart", chartData);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error rendering chart: {ex.Message}");
+        }
+    }
+
+    private async Task ResetZoom()
+    {
+        await JSRuntime.InvokeVoidAsync("resetChartZoom");
+    }
+
+    // Pie chart helper classes and methods
+    private record PieSlice(string Path, string Color, string Label, int Value, double Percent);
+
+    private IEnumerable<PieSlice> OwnershipPieSlices
+    {
+        get
+        {
+            if (!ownedTypes.Any())
+            {
+                // Single empty slice fallback
+                return new List<PieSlice> {
+                    new PieSlice(SectorPath(0, 360, 70), "#e0e0e0", "No ownership data", 0, 100)
+                };
+            }
+
+            // Group ownership types and count occurrences
+            var ownershipCounts = ownedTypes
+                .GroupBy(kvp => string.IsNullOrWhiteSpace(kvp.Value) ? "Not Specified" : kvp.Value)
+                .Select(g => new
+                {
+                    Type = g.Key,
+                    Count = g.Count()
+                })
+                .OrderByDescending(x => x.Count)
+                .ToList();
+
+            var total = ownershipCounts.Sum(x => x.Count);
+            if (total <= 0)
+            {
+                return new List<PieSlice> {
+                    new PieSlice(SectorPath(0, 360, 70), "#e0e0e0", "No ownership data", 0, 100)
+                };
+            }
+
+            var colors = new[] { "#e91e63", "#9c27b0", "#2196f3", "#4caf50", "#ff9800", "#f44336", "#00bcd4", "#ffc107", "#795548", "#9e9e9e" };
+            var slices = new List<PieSlice>();
+            double startAngle = -90; // Start at top
+            int idx = 0;
+
+            foreach (var item in ownershipCounts)
+            {
+                var value = Math.Max(0, item.Count);
+                if (value == 0) { idx++; continue; }
+                
+                var angle = (value / (double)total) * 360.0;
+                var endAngle = startAngle + angle;
+                var path = SectorPath(startAngle, endAngle, 70);
+                var color = colors[idx % colors.Length];
+                var percent = (value / (double)total) * 100.0;
+                
+                slices.Add(new PieSlice(path, color, item.Type, value, percent));
+                startAngle = endAngle;
+                idx++;
+            }
+
+            return slices;
+        }
+    }
+
+    // Build SVG path for a pie slice from startAngle to endAngle with radius r
+    private static string SectorPath(double startAngleDeg, double endAngleDeg, double r)
+    {
+        double startRad = (Math.PI / 180.0) * startAngleDeg;
+        double endRad = (Math.PI / 180.0) * endAngleDeg;
+        double x1 = r * Math.Cos(startRad);
+        double y1 = r * Math.Sin(startRad);
+        double x2 = r * Math.Cos(endRad);
+        double y2 = r * Math.Sin(endRad);
+        var largeArc = (endAngleDeg - startAngleDeg) > 180 ? 1 : 0;
+        return $"M 0 0 L {x1:0.###} {y1:0.###} A {r:0.###} {r:0.###} 0 {largeArc} 1 {x2:0.###} {y2:0.###} Z";
+    }
+}

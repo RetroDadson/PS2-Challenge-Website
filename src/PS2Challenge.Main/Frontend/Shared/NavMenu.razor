@@ -1,0 +1,76 @@
+<nav class="navbar">
+    <div class="nav-container">
+        <!-- top row: hamburger + brand + login -->
+        <div class="nav-top">
+            <button class="nav-toggle" @onclick="ToggleNavMenu" aria-expanded="@(!collapseNavMenu)">
+                <span class="nav-toggle-icon"></span>
+            </button>
+            
+            <a href="/" class="nav-brand">PS2 Challenge</a>
+
+            <div class="nav-top-right">
+                <LoginDisplay @ref="loginDisplay" />
+            </div>
+        </div>
+
+        <!-- second row: nav items (below header/login) -->
+        <div class="nav-menu @NavMenuCssClass">
+            <ul class="nav-list">
+                <li class="nav-item">
+                    <NavLink class="nav-link" href="/" Match="NavLinkMatch.All">Home</NavLink>
+                </li>
+
+                <li class="nav-item dropdown hoverable @(challengeOpen ? "open" : "")">
+                    <a class="nav-link dropdown-toggle"
+                       href="#"
+                       @onclick="ToggleChallengeMenu"
+                       @onclick:preventDefault>
+                        Challenge ▾
+                    </a>
+                    <ul class="dropdown-menu">
+                        <li class="dropdown-item">
+                            <NavLink class="nav-link" href="/games" @onclick="CloseChallenge">All Games</NavLink>
+                        </li>
+                        <li class="dropdown-item">
+                            <NavLink class="nav-link" href="/progress" @onclick="CloseChallenge">Progress</NavLink>
+                        </li>
+                        <li class="dropdown-item">
+                            <NavLink class="nav-link" href="/statistics" @onclick="CloseChallenge">Statistics</NavLink>
+                        </li>
+                    </ul>
+                </li>
+
+                <li class="nav-item">
+                    <NavLink class="nav-link" href="/votes">Votes</NavLink>
+                </li>
+            </ul>
+        </div>
+    </div>
+</nav>
+
+@code {
+    // start expanded so the nav is visible by default
+    private bool collapseNavMenu = false;
+    private LoginDisplay? loginDisplay;
+    private bool challengeOpen = false;
+
+    private string? NavMenuCssClass => collapseNavMenu ? "collapsed" : null;
+
+    private void ToggleNavMenu()
+    {
+        collapseNavMenu = !collapseNavMenu;
+        // close challenge dropdown when menu closed
+        if (collapseNavMenu) challengeOpen = false;
+    }
+
+    private void ToggleChallengeMenu()
+    {
+        challengeOpen = !challengeOpen;
+    }
+
+    private void CloseChallenge()
+    {
+        // Close the dropdown when user navigates
+        challengeOpen = false;
+    }
+}

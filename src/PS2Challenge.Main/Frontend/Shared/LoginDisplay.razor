@@ -1,0 +1,86 @@
+@using Microsoft.AspNetCore.Components.Authorization
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager Navigation
+@implements IDisposable
+
+<div class="login-display">
+    <AuthorizeView>
+        <Authorized>
+            <span class="user-info">
+                @if (!string.IsNullOrEmpty(profileImageUrl))
+                {
+                    <img src="@profileImageUrl" alt="@context.User.Identity?.Name" class="twitch-icon" />
+                }
+                else
+                {
+                    <img src="assets/glitch_flat_purple.svg" alt="Twitch" class="twitch-icon" />
+                }
+                <a href="/user" class="username-link">@context.User.Identity?.Name</a>
+                @if (!string.IsNullOrEmpty(userRole) && userRole != "User")
+                {
+                    <span class="badge role-badge">@userRole</span>
+                }
+            </span>
+            @if (userRole == "Admin")
+            {
+                <a href="/admin" class="btn btn-link admin-link">Admin</a>
+            }
+            <a href="/api/auth/logout" class="btn btn-link">Logout</a>
+        </Authorized>
+        <NotAuthorized>
+            <a href="@GetLoginUrl()" class="btn btn-link">
+                <img src="assets/glitch_flat_purple.svg" alt="Twitch" class="twitch-icon-inline" />
+                Login with Twitch
+            </a>
+        </NotAuthorized>
+    </AuthorizeView>
+</div>
+
+@code {
+    private string? userRole;
+    private string? profileImageUrl;
+    private System.Threading.Timer? timer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadUserInfo();
+
+        timer = new System.Threading.Timer(async _ =>
+        {
+            await LoadUserInfo();
+            await InvokeAsync(StateHasChanged);
+        }, null, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5));
+    }
+
+    private async Task LoadUserInfo()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (user.Identity?.IsAuthenticated == true)
+        {
+            userRole = user.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
+            profileImageUrl = user.FindFirst("ProfileImageUrl")?.Value;
+
+            // Debug: Log the claims to see what's available
+            Console.WriteLine($"User authenticated: {user.Identity.Name}");
+            Console.WriteLine($"Profile Image URL claim: {profileImageUrl}");
+        }
+    }
+
+    private string GetLoginUrl()
+    {
+        // Get the full current URL
+        var currentUrl = Navigation.Uri;
+
+        // URL encode the entire current URL
+        var encodedReturn = Uri.EscapeDataString(currentUrl);
+
+        return $"/api/auth/login?returnUrl={encodedReturn}";
+    }
+
+    public void Dispose()
+    {
+        timer?.Dispose();
+    }
+}

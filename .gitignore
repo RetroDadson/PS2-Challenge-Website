@@ -33,3 +33,4 @@ bld/
 
 # Connection strings with sensitive data
 appsettings.Development.json
+launchSettings.json
