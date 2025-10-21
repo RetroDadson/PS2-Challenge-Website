@@ -14,6 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read #This is required for actions/checkout
+      checks: write #This is required for test-reporter to publish test results
 
     steps:
       - uses: actions/checkout@v4
