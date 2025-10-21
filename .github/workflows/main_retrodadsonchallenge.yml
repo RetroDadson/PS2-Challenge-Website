@@ -27,7 +27,15 @@ jobs:
         run: dotnet build --configuration Release
 
       - name: Test with dotnet
-        run: dotnet test --configuration Release --no-build
+        run: dotnet test --configuration Release --no-build --logger trx --results-directory ./TestResults
+
+      - name: Publish Test Results
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: .NET Tests
+          path: './TestResults/*.trx'
+          reporter: dotnet-trx
 
       - name: dotnet publish
         run: dotnet publish src/PS2Challenge.Main/PS2Challenge.Main.csproj -c Release -o ${{env.DOTNET_ROOT}}/myapp
