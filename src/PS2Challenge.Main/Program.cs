@@ -24,9 +24,11 @@ var builder = WebApplication.CreateBuilder(args);
 var isTesting = builder.Environment.EnvironmentName == "Testing";
 
 // Configure Kestrel to listen on HTTP
+// Use PORT environment variable if available (Azure), otherwise default to 5001
+var port = Environment.GetEnvironmentVariable("PORT") ?? "5001";
 builder.WebHost.ConfigureKestrel(options =>
 {
-    options.ListenAnyIP(5001); // HTTP
+    options.ListenAnyIP(int.Parse(port)); // HTTP
 });
 
 // Load and validate environment configuration (skip validation in testing)
@@ -290,7 +292,7 @@ if (!isTesting)
                     {
                         // Use the path from the URL
                         context.ReturnUri = path;
-                    }
+                      }
                 }
                 else
                 {
