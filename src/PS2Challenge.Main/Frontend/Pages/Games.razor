@@ -1,0 +1,463 @@
+@page "/games"
+@using System.Text.Json
+@using System.Text.Json.Serialization
+@using Microsoft.AspNetCore.Components.Authorization
+@using PS2Challenge.Main.Frontend.Components
+@using PS2Challenge.Main.Frontend.Shared
+@inject GameService GameService
+@inject IJSRuntime JSRuntime
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<PageTitle>Games - Dadson's PS2 Challenge</PageTitle>
+
+<div class="games-container">
+    <h1>PS2 Games Library</h1>
+
+    @if (isLoading)
+    {
+        <div class="loading-container">
+            <div class="loading"></div>
+            <p>Loading games...</p>
+        </div>
+    }
+    else if (allGames == null || !allGames.Any())
+    {
+        <p>No games found.</p>
+    }
+    else
+    {
+        <div class="search-section">
+            <div class="search-box">
+                <input type="text"
+                       placeholder="Search games by title, developer, or publisher..."
+                       @bind="searchQuery"
+                       @bind:event="oninput"
+                       class="search-input" />
+                <span class="search-icon">🔍</span>
+            </div>
+
+            <div class="filter-controls">
+                <label>
+                    <input type="checkbox" checked="@showOwnedOnly" @onchange="ToggleShowOwnedOnly" />
+                    Show Owned Only
+                </label>
+                <label>
+                    <input type="checkbox" checked="@showExcludedGames" @onchange="ToggleShowExcluded" />
+                    Show Excluded Games
+                </label>
+            </div>
+
+            <div class="results-count">
+                <p>Showing @FilteredGames.Count() of @allGames.Count games | Owned: @allGames.Count(g => g.IsOwned) | Excluded: @allGames.Count(g => g.IsExcluded) | Completed: @GetCompletedCount() | In Progress: @GetInProgressCount() | Not Started: @GetNotStartedCount()</p>
+            </div>
+
+            @if (isAdmin)
+            {
+                <div class="admin-actions">
+                    <button class="cta-button" @onclick="OpenAddModal">+ Add New Game</button>
+                </div>
+            }
+        </div>
+
+        <div class="games-table-container">
+            <table class="games-table">
+                <thead>
+                    <tr>
+                        @if (isAdmin)
+                        {
+                            <th style="width: 80px;">Actions</th>
+                        }
+                        <th @onclick="() => SortBy(nameof(GameDto.Title))">Title @GetSortIcon(nameof(GameDto.Title))</th>
+                        <th @onclick="() => SortBy(nameof(GameDto.Developer))">Developer @GetSortIcon(nameof(GameDto.Developer))</th>
+                        <th @onclick="() => SortBy(nameof(GameDto.Publisher))">Publisher @GetSortIcon(nameof(GameDto.Publisher))</th>
+                        <th>Release Date</th>
+                        <th>Region</th>
+                        <th @onclick='() => SortBy("IsExcluded")'>Excluded @GetSortIcon("IsExcluded")</th>
+                        <th @onclick='() => SortBy("IsOwned")'>Owned @GetSortIcon("IsOwned")</th>
+                        <th @onclick='() => SortBy("CompletionStatus")'>Status @GetSortIcon("CompletionStatus")</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var game in FilteredGames)
+                    {
+                        <tr class="@GetRowClass(game)">
+                            @if (isAdmin)
+                            {
+                                <td>
+                                    <button class="btn-icon" @onclick="() => OpenEditModal(game)" title="Edit">
+                                        ✏️
+                                    </button>
+                                </td>
+                            }
+                            <td>@game.Title</td>
+                            <td>@game.Developer</td>
+                            <td>@game.Publisher</td>
+                            <td>@(game.FirstReleased?.ToString("dd/MM/yyyy") ?? "Unknown")</td>
+                            <td>@game.RegionFirstReleasedIn</td>
+                            <td style="white-space: nowrap;">
+                                @if (game.IsExcluded)
+                                {
+                                    <HoverCard Content="@GetExclusionReason(game.Id)">
+                                        <span class="badge excluded-badge">Excluded</span>
+                                    </HoverCard>
+                                }
+                                else
+                                {
+                                    <span class="badge included-badge">Included</span>
+                                }
+                            </td>
+                            <td style="white-space: nowrap;">
+                                @if (game.IsOwned)
+                                {
+                                    <HoverCard Content="@GetTypeOwned(game.Id)">
+                                        <span class="badge owned-badge">✓ Owned</span>
+                                    </HoverCard>
+                                }
+                                else
+                                {
+                                    <span class="badge not-owned-badge">To Purchase</span>
+                                }
+                            </td>
+                            <td style="white-space: nowrap;">
+                                @{
+                                    var status = GetCompletionStatus(game.Id);
+                                }
+                                @if (status == "Completed")
+                                {
+                                    <span class="badge status-completed">✓ Completed</span>
+                                }
+                                else if (status == "In Progress")
+                                {
+                                    <span class="badge status-inprogress">⏳ In Progress</span>
+                                }
+                                else
+                                {
+                                    <span class="badge status-notstarted">Not Started</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+<GameEditModal 
+    IsVisible="@showModal"
+    IsEditMode="@isEditMode"
+    Game="@selectedGame"
+    OnClose="@CloseModal"
+    OnSave="@HandleSave"
+    OnDelete="@HandleDelete" />
+
+@code {
+    private List<GameDto> allGames = new();
+    private Dictionary<int, string> ownedTypes = new();
+    private Dictionary<int, string> exclusionReasons = new();
+    private Dictionary<int, string> completionStatus = new();
+    private string searchQuery = string.Empty;
+    private bool showOwnedOnly = false;
+    private bool showExcludedGames = false;
+    private string sortColumn = nameof(GameDto.Title);
+    private bool sortAscending = true;
+    private bool isLoading = true;
+    private bool isAdmin = false;
+
+    private bool showModal = false;
+    private bool isEditMode = false;
+    private GameDto? selectedGame = null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CheckAdminStatus();
+        await LoadPreferences();
+        await LoadGames();
+        await LoadOwnedTypes();
+        await LoadExclusionReasons();
+        await LoadCompletionStatus();
+    }
+
+    private async Task CheckAdminStatus()
+    {
+        try
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+
+            if (user.Identity?.IsAuthenticated == true)
+            {
+                var role = user.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
+                isAdmin = string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase);
+            }
+        }
+        catch
+        {
+            isAdmin = false;
+        }
+    }
+
+    private async Task LoadPreferences()
+    {
+        try
+        {
+            var ownedPref = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "showOwnedOnly");
+            var excludedPref = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "showExcludedGames");
+
+            if (!string.IsNullOrEmpty(ownedPref) && bool.TryParse(ownedPref, out var ownedVal))
+            {
+                showOwnedOnly = ownedVal;
+            }
+            if (!string.IsNullOrEmpty(excludedPref) && bool.TryParse(excludedPref, out var excludedVal))
+            {
+                showExcludedGames = excludedVal;
+            }
+        }
+        catch
+        {
+            // ignore errors reading preferences
+        }
+    }
+
+    private async Task SavePreferences()
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("localStorage.setItem", "showOwnedOnly", showOwnedOnly.ToString());
+            await JSRuntime.InvokeVoidAsync("localStorage.setItem", "showExcludedGames", showExcludedGames.ToString());
+        }
+        catch
+        {
+            // ignore
+        }
+    }
+
+    private async Task ToggleShowOwnedOnly(ChangeEventArgs e)
+    {
+        showOwnedOnly = e.Value is bool b && b;
+        await SavePreferences();
+    }
+
+    private async Task ToggleShowExcluded(ChangeEventArgs e)
+    {
+        showExcludedGames = e.Value is bool b && b;
+        await SavePreferences();
+    }
+
+    private async Task LoadGames()
+    {
+        try
+        {
+            isLoading = true;
+            var result = await GameService.GetAllGamesAsync();
+            allGames = result?.ToList() ?? new List<GameDto>();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading games: {ex.Message}");
+            allGames = new List<GameDto>();
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task LoadOwnedTypes()
+    {
+        try
+        {
+            ownedTypes = await GameService.GetOwnedTypesAsync();
+        }
+        catch
+        {
+            ownedTypes = new();
+        }
+    }
+
+    private async Task LoadExclusionReasons()
+    {
+        try
+        {
+            exclusionReasons = await GameService.GetExclusionReasonsAsync();
+        }
+        catch
+        {
+            exclusionReasons = new();
+        }
+    }
+
+    private async Task LoadCompletionStatus()
+    {
+        try
+        {
+            completionStatus = await GameService.GetCompletionStatusAsync();
+        }
+        catch
+        {
+            completionStatus = new();
+        }
+    }
+
+    private string GetTypeOwned(int gameId)
+    {
+        if (ownedTypes.TryGetValue(gameId, out var t))
+        {
+            return string.IsNullOrWhiteSpace(t) ? "Owned" : t;
+        }
+        return "Owned";
+    }
+
+    private string GetExclusionReason(int gameId)
+    {
+        if (exclusionReasons.TryGetValue(gameId, out var reason))
+        {
+            return reason;
+        }
+        return "No reason provided";
+    }
+
+    private string GetCompletionStatus(int gameId)
+    {
+        if (completionStatus.TryGetValue(gameId, out var status))
+        {
+            return status;
+        }
+        return "Not Started";
+    }
+
+    private int GetCompletedCount()
+    {
+        return allGames.Count(g => !g.IsExcluded && 
+                                   completionStatus.ContainsKey(g.Id) && 
+                                   completionStatus[g.Id] == "Completed");
+    }
+
+    private int GetInProgressCount()
+    {
+        return allGames.Count(g => !g.IsExcluded && 
+                                   completionStatus.ContainsKey(g.Id) && 
+                                   completionStatus[g.Id] == "In Progress");
+    }
+
+    private int GetNotStartedCount()
+    {
+        return allGames.Count(g => !g.IsExcluded && 
+                                   (!completionStatus.ContainsKey(g.Id) || 
+                                    completionStatus[g.Id] == "Not Started"));
+    }
+
+    private void OpenAddModal()
+    {
+        selectedGame = new GameDto();
+        isEditMode = false;
+        showModal = true;
+        StateHasChanged();
+    }
+
+    private void OpenEditModal(GameDto game)
+    {
+        selectedGame = game;
+        isEditMode = true;
+        showModal = true;
+        StateHasChanged();
+    }
+
+    private void CloseModal()
+    {
+        showModal = false;
+        selectedGame = null;
+        StateHasChanged();
+    }
+
+    private async Task HandleSave()
+    {
+        // Reload games list after save
+        await LoadGames();
+        await LoadOwnedTypes();
+        await LoadExclusionReasons();
+        await LoadCompletionStatus();
+        CloseModal();
+    }
+
+    private async Task HandleDelete(int gameId)
+    {
+        // Reload games list after delete
+        await LoadGames();
+        await LoadOwnedTypes();
+        await LoadExclusionReasons();
+        await LoadCompletionStatus();
+        CloseModal();
+    }
+
+    private IEnumerable<GameDto> FilteredGames
+    {
+        get
+        {
+            var filtered = allGames.AsEnumerable();
+
+            // search
+            if (!string.IsNullOrWhiteSpace(searchQuery))
+            {
+                var q = searchQuery.ToLowerInvariant();
+                filtered = filtered.Where(g =>
+                    (g.Title?.ToLowerInvariant().Contains(q) ?? false) ||
+                    (g.Developer?.ToLowerInvariant().Contains(q) ?? false) ||
+                    (g.Publisher?.ToLowerInvariant().Contains(q) ?? false));
+            }
+
+            // owned filter
+            if (showOwnedOnly)
+            {
+                filtered = filtered.Where(g => g.IsOwned);
+            }
+
+            // excluded filter
+            if (!showExcludedGames)
+            {
+                filtered = filtered.Where(g => !g.IsExcluded);
+            }
+
+            // sorting
+            filtered = sortColumn switch
+            {
+                nameof(GameDto.Developer) => sortAscending ? filtered.OrderBy(g => g.Developer) : filtered.OrderByDescending(g => g.Developer),
+                nameof(GameDto.Publisher) => sortAscending ? filtered.OrderBy(g => g.Publisher) : filtered.OrderByDescending(g => g.Publisher),
+                "IsExcluded" => sortAscending ? filtered.OrderBy(g => g.IsExcluded) : filtered.OrderByDescending(g => g.IsExcluded),
+                "IsOwned" => sortAscending ? filtered.OrderBy(g => g.IsOwned) : filtered.OrderByDescending(g => g.IsOwned),
+                "CompletionStatus" => sortAscending 
+                    ? filtered.OrderBy(g => GetCompletionStatus(g.Id)) 
+                    : filtered.OrderByDescending(g => GetCompletionStatus(g.Id)),
+                _ => sortAscending ? filtered.OrderBy(g => g.Title) : filtered.OrderByDescending(g => g.Title),
+            };
+
+            return filtered;
+        }
+    }
+
+    private bool IsFiltered => !string.IsNullOrWhiteSpace(searchQuery) || showOwnedOnly || !showExcludedGames;
+
+    private string GetSortIcon(string column) => sortColumn == column ? (sortAscending ? "▲" : "▼") : string.Empty;
+
+    private void SortBy(string column)
+    {
+        if (sortColumn == column)
+        {
+            sortAscending = !sortAscending;
+        }
+        else
+        {
+            sortColumn = column;
+            sortAscending = true;
+        }
+    }
+
+    private string GetRowClass(GameDto game)
+    {
+        if (game.IsExcluded)
+            return "excluded-row";
+        if (game.IsOwned)
+            return "owned-row";
+        return string.Empty;
+    }
+}

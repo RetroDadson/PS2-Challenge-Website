@@ -1,0 +1,280 @@
+@page "/user"
+@using Microsoft.AspNetCore.Components.Authorization
+@using PS2Challenge.Api.Api.Models
+@using PS2Challenge.Backend.Data.Repositories
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager Navigation
+@inject UserRepository UserRepository
+@inject IJSRuntime JSRuntime
+
+<PageTitle>User Profile - Dadson's PS2 Challenge</PageTitle>
+
+<div class="user-profile-container">
+    @if (isLoading)
+    {
+        <div class="loading-container">
+            <div class="loading"></div>
+            <p>Loading user profile...</p>
+        </div>
+    }
+    else if (!isAuthenticated)
+    {
+        <div class="auth-message">
+            <h2>Not Logged In</h2>
+            <p>You need to be logged in to view this page.</p>
+            <a href="/api/auth/login" class="btn btn-twitch">
+                <img src="assets/glitch_flat_purple.svg" alt="Twitch" class="twitch-icon" />
+                Login with Twitch
+            </a>
+        </div>
+    }
+    else
+    {
+        <div class="profile-card">
+            <div class="profile-header">
+                <div class="profile-avatar">
+                    @if (!string.IsNullOrEmpty(profileImageUrl))
+                    {
+                        <img src="@profileImageUrl" alt="@username" />
+                    }
+                    else
+                    {
+                        <div class="avatar-placeholder">
+                            <img src="assets/glitch_flat_purple.svg" alt="Twitch" class="twitch-placeholder-icon" />
+                        </div>
+                    }
+                </div>
+                <div class="profile-info">
+                    <h1>@username</h1>
+                    <span class="role-badge @GetRoleClass(role)">
+                        @role
+                    </span>
+                </div>
+            </div>
+
+            <div class="profile-details">
+                <div class="detail-row">
+                    <span class="detail-label">Twitch ID:</span>
+                    <span class="detail-value">@twitchId</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Member Since:</span>
+                    <span class="detail-value">@createdAt.ToString("MMMM dd, yyyy")</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">Last Login:</span>
+                    <span class="detail-value">@lastLoginAt.ToString("MMMM dd, yyyy HH:mm")</span>
+                </div>
+            </div>
+
+            <div class="api-key-section">
+                <h3>API Key</h3>
+                <p class="api-key-description">Use this key to authenticate API requests.</p>
+                <div class="api-key-container">
+                    <div class="api-key-display">
+                        @if (showApiKey)
+                        {
+                            <input type="text" 
+                                   readonly 
+                                   value="@apiKey" 
+                                   class="api-key-input"
+                                   id="apiKeyInput" />
+                        }
+                        else
+                        {
+                            <input type="password" 
+                                   readonly 
+                                   value="@apiKey" 
+                                   class="api-key-input"
+                                   id="apiKeyInput" />
+                        }
+                        <button class="btn-icon" @onclick="ToggleApiKeyVisibility" title="@(showApiKey ? "Hide" : "Show") API Key">
+                            @if (showApiKey)
+                            {
+                                <i class="fas fa-eye-slash"></i>
+                            }
+                            else
+                            {
+                                <i class="fas fa-eye"></i>
+                            }
+                        </button>
+                    </div>
+                    <div class="api-key-actions">
+                        <button class="btn btn-copy" @onclick="CopyApiKey">
+                            @if (copied)
+                            {
+                                <i class="fas fa-check"></i>
+                                <span>Copied!</span>
+                            }
+                            else
+                            {
+                                <i class="fas fa-copy"></i>
+                                <span>Copy</span>
+                            }
+                        </button>
+                        <button class="btn btn-regenerate" @onclick="RegenerateApiKey" disabled="@isRegenerating">
+                            @if (isRegenerating)
+                            {
+                                <i class="fas fa-spinner fa-spin"></i>
+                                <span>Regenerating...</span>
+                            }
+                            else
+                            {
+                                <i class="fas fa-sync-alt"></i>
+                                <span>Regenerate</span>
+                            }
+                        </button>
+                    </div>
+                </div>
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <div class="error-message">@errorMessage</div>
+                }
+            </div>
+
+            <div class="profile-actions">
+                <a href="/" class="btn btn-secondary">Back to Home</a>
+                <a href="/api/auth/logout" class="btn btn-danger">Logout</a>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private string? username;
+    private string? role;
+    private string? profileImageUrl;
+    private string? twitchId;
+    private string? apiKey;
+    private DateTime createdAt;
+    private DateTime lastLoginAt;
+    private bool isAuthenticated;
+    private bool isLoading = true;
+    private bool showApiKey = false;
+    private bool copied = false;
+    private bool isRegenerating = false;
+    private string? errorMessage;
+    private int userId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadUserProfile();
+    }
+
+    private async Task LoadUserProfile()
+    {
+        try
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+
+            if (user.Identity?.IsAuthenticated == true)
+            {
+                isAuthenticated = true;
+                username = user.Identity.Name;
+                role = user.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
+                profileImageUrl = user.FindFirst("ProfileImageUrl")?.Value;
+                twitchId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+
+                if (DateTime.TryParse(user.FindFirst("CreatedAt")?.Value, out var created))
+                    createdAt = created;
+
+                if (DateTime.TryParse(user.FindFirst("LastLoginAt")?.Value, out var lastLogin))
+                    lastLoginAt = lastLogin;
+
+                // Fetch full user data including API key from repository
+                if (!string.IsNullOrEmpty(twitchId))
+                {
+                    var userData = await UserRepository.GetByTwitchIdAsync(twitchId);
+                    if (userData != null)
+                    {
+                        userId = userData.Id;
+                        apiKey = userData.ApiKey;
+                    }
+                }
+            }
+            else
+            {
+                isAuthenticated = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading user profile: {ex.Message}");
+            isAuthenticated = false;
+            errorMessage = "Failed to load user profile";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void ToggleApiKeyVisibility()
+    {
+        showApiKey = !showApiKey;
+    }
+
+    private async Task CopyApiKey()
+    {
+        try
+        {
+            if (!string.IsNullOrEmpty(apiKey))
+            {
+                await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", apiKey);
+                copied = true;
+                errorMessage = null;
+                
+                // Reset copied state after 2 seconds
+                await Task.Delay(2000);
+                copied = false;
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error copying API key: {ex.Message}");
+            errorMessage = "Failed to copy API key to clipboard";
+        }
+    }
+
+    private async Task RegenerateApiKey()
+    {
+        if (!await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure you want to regenerate your API key? This will invalidate the current key."))
+        {
+            return;
+        }
+
+        try
+        {
+            isRegenerating = true;
+            errorMessage = null;
+            StateHasChanged();
+
+            // Use UserRepository to regenerate the API key
+            var newApiKey = await UserRepository.GenerateApiKeyAsync(userId);
+            apiKey = newApiKey;
+            showApiKey = true; // Show the new key
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error regenerating API key: {ex.Message}");
+            errorMessage = "Failed to regenerate API key";
+        }
+        finally
+        {
+            isRegenerating = false;
+            StateHasChanged();
+        }
+    }
+
+    private string GetRoleClass(string? role)
+    {
+        return role?.ToLower() switch
+        {
+            "admin" => "role-admin",
+            "moderator" => "role-moderator",
+            _ => "role-user"
+        };
+    }
+}

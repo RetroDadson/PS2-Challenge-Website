@@ -1,0 +1,23 @@
+@inherits LayoutComponentBase
+
+<div class="page">
+    <NavMenu />
+
+    <main>
+        <div class="top-row">
+            @* LoginDisplay moved to NavMenu *@
+        </div>
+
+        <article class="content">
+            @Body
+        </article>
+    </main>
+
+    <Footer />
+</div>
+
+<div id="blazor-error-ui">
+    An unhandled error has occurred.
+    <a href="" class="reload">Reload</a>
+    <a class="dismiss">🗙</a>
+</div>

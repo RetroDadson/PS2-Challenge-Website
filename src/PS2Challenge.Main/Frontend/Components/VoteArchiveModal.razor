@@ -1,0 +1,189 @@
+@using PS2Challenge.Backend.Services
+@using PS2Challenge.Backend.Models
+@using PS2Challenge.Backend.Data
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.Extensions.DependencyInjection
+@inject VoteService VoteService
+@inject IServiceScopeFactory ScopeFactory
+
+@if (IsVisible)
+{
+    <div class="modal-overlay" @onclick="HandleOverlayClick">
+        <div class="modal-content" @onclick:stopPropagation="true">
+            <div class="modal-header">
+                <h3>Archive Current Votes to History</h3>
+                <button class="modal-close" @onclick="Close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p style="color:var(--text-secondary);margin-bottom:1rem;">
+                    This will move all current votes to the vote history with the next available round number.
+                    The current votes will be cleared after archiving.
+                </p>
+                
+                @if (hasTies)
+                {
+                    <div style="background:var(--background-secondary);padding:1rem;border-radius:4px;margin-bottom:1rem;">
+                        <p style="color:var(--accent-gold);margin-bottom:0.5rem;font-weight:600;">?? Tied Votes Detected</p>
+                        <p style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:1rem;">
+                            Multiple games have the same vote count. You can manually specify positions (1st, 2nd, 3rd) or leave them as ties.
+                        </p>
+                        
+                        @foreach (var vote in sortedCurrentVotes)
+                        {
+                            <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem;">
+                                <span style="flex:1;color:var(--text-primary);">@vote.GameTitle</span>
+                                <span style="width:80px;color:var(--text-secondary);">@vote.VoteCount votes</span>
+                                <select @bind="vote.ManualPosition" class="search-input" style="width:120px;padding:0.25rem;">
+                                    <option value="">Auto/Tied</option>
+                                    <option value="1">1st Place</option>
+                                    <option value="2">2nd Place</option>
+                                    <option value="3">3rd Place</option>
+                                </select>
+                            </div>
+                        }
+                    </div>
+                }
+                
+                <div class="form-field">
+                    <label>Notes (optional)</label>
+                    <textarea @bind="internalNotes" 
+                              class="search-input" 
+                              rows="3" 
+                              placeholder="Add any notes about this voting round..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" @onclick="Close" disabled="@isProcessing">Cancel</button>
+                <button class="cta-button" @onclick="Archive" disabled="@isProcessing">
+                    @if (isProcessing)
+                    {
+                        <span>Archiving...</span>
+                    }
+                    else
+                    {
+                        <span>Archive</span>
+                    }
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsVisible { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback OnArchived { get; set; }
+    [Parameter] public List<CurrentVoteDto>? CurrentVotes { get; set; }
+
+    private string internalNotes = string.Empty;
+    private bool isProcessing = false;
+    private bool hasTies = false;
+    private List<CurrentVoteWithPosition> sortedCurrentVotes = new();
+
+    private class CurrentVoteWithPosition
+    {
+        public string GameTitle { get; set; } = string.Empty;
+        public int VoteCount { get; set; }
+        public int GameId { get; set; }
+        public string ManualPosition { get; set; } = string.Empty;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (IsVisible)
+        {
+            internalNotes = string.Empty;
+            await CheckForTies();
+        }
+    }
+
+    private async Task CheckForTies()
+    {
+        hasTies = false;
+        sortedCurrentVotes = new List<CurrentVoteWithPosition>();
+        
+        if (CurrentVotes == null || !CurrentVotes.Any())
+            return;
+
+        var sorted = CurrentVotes.OrderByDescending(v => v.VoteCount).ToList();
+        
+        // Check if there are any tied vote counts
+        var voteCounts = sorted.Select(v => v.VoteCount).ToList();
+        hasTies = voteCounts.Count != voteCounts.Distinct().Count();
+        
+        if (hasTies)
+        {
+            // Get game IDs from the database
+            using var scope = ScopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
+            
+            var titles = sorted.Select(v => v.GameTitle).ToList();
+            var games = await db.Games
+                .AsNoTracking()
+                .Where(g => titles.Contains(g.Title))
+                .ToListAsync();
+            
+            var titleToId = games.ToDictionary(g => g.Title, g => g.Id, StringComparer.OrdinalIgnoreCase);
+            
+            sortedCurrentVotes = sorted.Select(v => new CurrentVoteWithPosition
+            {
+                GameTitle = v.GameTitle,
+                VoteCount = v.VoteCount,
+                GameId = titleToId.TryGetValue(v.GameTitle, out var id) ? id : 0,
+                ManualPosition = string.Empty
+            }).ToList();
+        }
+    }
+
+    private async Task Close()
+    {
+        if (!isProcessing)
+        {
+            await OnClose.InvokeAsync();
+        }
+    }
+
+    private async Task HandleOverlayClick()
+    {
+        await Close();
+    }
+
+    private async Task Archive()
+    {
+        if (isProcessing) return;
+
+        isProcessing = true;
+        try
+        {
+            var notes = string.IsNullOrWhiteSpace(internalNotes) ? null : internalNotes.Trim();
+            
+            // Build manual positions dictionary if specified
+            Dictionary<int, int>? manualPositions = null;
+            if (hasTies && sortedCurrentVotes.Any(v => !string.IsNullOrEmpty(v.ManualPosition)))
+            {
+                manualPositions = new Dictionary<int, int>();
+                foreach (var vote in sortedCurrentVotes)
+                {
+                    if (!string.IsNullOrEmpty(vote.ManualPosition) && int.TryParse(vote.ManualPosition, out var pos))
+                    {
+                        manualPositions[vote.GameId] = pos;
+                    }
+                }
+            }
+            
+            var (roundNumber, archivedCount) = await VoteService.ArchiveCurrentVotesAsync(notes, manualPositions);
+            Console.WriteLine($"Successfully archived {archivedCount} votes to round {roundNumber}");
+            
+            await OnArchived.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error archiving votes: {ex.Message}");
+            // You might want to show an error message to the user here
+        }
+        finally
+        {
+            isProcessing = false;
+        }
+    }
+}

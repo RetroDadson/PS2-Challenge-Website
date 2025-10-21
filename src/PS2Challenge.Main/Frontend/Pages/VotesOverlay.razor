@@ -1,0 +1,126 @@
+@page "/votes-overlay"
+@layout EmptyLayout
+@using System.Text.Json
+@using PS2Challenge.Backend.Models
+@using Microsoft.EntityFrameworkCore
+@using PS2Challenge.Backend.Data
+@using Microsoft.AspNetCore.SignalR.Client
+@inject IServiceScopeFactory ScopeFactory
+@inject NavigationManager NavigationManager
+@implements IAsyncDisposable
+
+<div class="overlay-container">
+    @if (isLoading)
+    {
+        <div class="loading">Loading...</div>
+    }
+    else if (currentVotes == null || !currentVotes.Any())
+    {
+        <div class="no-votes">No current votes</div>
+    }
+    else
+    {
+        @foreach (var vote in currentVotes.OrderBy(v => v.GameNumber))
+        {
+            <div class="game-box">
+                <div class="game-title">@vote.GameTitle</div>
+                <div class="game-number">Game @vote.GameNumber: @vote.VoteCount</div>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private List<CurrentVoteDto> currentVotes = new();
+    private bool isLoading = true;
+    private HubConnection? hubConnection;
+    private string? lastDataHash;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadCurrentVotes();
+
+        // Set up SignalR connection
+        hubConnection = new HubConnectionBuilder()
+            .WithUrl(NavigationManager.ToAbsoluteUri("/votesHub"))
+            .WithAutomaticReconnect()
+            .Build();
+
+        // Subscribe to VotesUpdated event
+        hubConnection.On("VotesUpdated", async () =>
+        {
+            await LoadCurrentVotes();
+            await InvokeAsync(StateHasChanged);
+        });
+
+        try
+        {
+            await hubConnection.StartAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error connecting to SignalR hub: {ex.Message}");
+        }
+    }
+
+    private async Task LoadCurrentVotes()
+    {
+        try
+        {
+            isLoading = true;
+            using var scope = ScopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
+
+            var current = await db.CurrentVotes.AsNoTracking().ToListAsync();
+            if (!current.Any())
+            {
+                currentVotes = new List<CurrentVoteDto>();
+                lastDataHash = string.Empty;
+                return;
+            }
+
+            var gameIds = current.Select(c => c.GameId).Distinct().ToList();
+            var games = await db.Games.AsNoTracking().Where(g => gameIds.Contains(g.Id)).ToListAsync();
+            var idToTitle = games.ToDictionary(g => g.Id, g => g.Title);
+
+            var newVotes = current
+                .Select(c => new CurrentVoteDto
+                {
+                    GameTitle = idToTitle.TryGetValue(c.GameId, out var t) ? t : string.Empty,
+                    VoteCount = c.VoteCount,
+                    GameNumber = c.GameNumber
+                })
+                .OrderBy(x => x.GameNumber)
+                .ThenByDescending(x => x.VoteCount)
+                .ThenBy(x => x.GameTitle)
+                .ToList();
+
+            // Create a hash to detect changes
+            var newHash = string.Join("|", newVotes.Select(v => $"{v.GameNumber}:{v.GameTitle}:{v.VoteCount}"));
+
+            // Only update if data has changed
+            if (newHash != lastDataHash)
+            {
+                currentVotes = newVotes;
+                lastDataHash = newHash;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading current votes: {ex.Message}");
+            currentVotes = new List<CurrentVoteDto>();
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (hubConnection is not null)
+        {
+            await hubConnection.DisposeAsync();
+        }
+    }
+}

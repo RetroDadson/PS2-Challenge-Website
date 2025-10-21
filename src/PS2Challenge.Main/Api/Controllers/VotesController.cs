@@ -1,0 +1,479 @@
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
+using Microsoft.EntityFrameworkCore;
+using PS2Challenge.Api.Api.Models;
+using PS2Challenge.Backend.Data;
+using PS2Challenge.Backend.Models;
+using PS2Challenge.Backend.Services;
+using PS2Challenge.Main.Api.Hubs;
+
+namespace PS2Challenge.Api.Api.Controllers;
+
+/// <summary>
+/// Manages voting history and current vote tracking for the PS2 Challenge
+/// </summary>
+[ApiController]
+[Route("api/[controller]")]
+public class VotesController : ControllerBase
+{
+    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly IHubContext<VotesHub> _hubContext;
+    private readonly VoteService _voteService;
+
+    public VotesController(IServiceScopeFactory scopeFactory, IHubContext<VotesHub> hubContext, VoteService voteService)
+    {
+        _scopeFactory = scopeFactory;
+        _hubContext = hubContext;
+        _voteService = voteService;
+    }
+
+    /// <summary>
+    /// Get complete voting history for all rounds
+    /// </summary>
+    /// <returns>List of all historical vote rounds with game titles, counts, and positions</returns>
+    /// <response code="200">Returns the voting history</response>
+    /// <response code="500">Internal server error</response>
+    [HttpGet("history")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> GetHistory()
+    {
+        try
+        {
+            var result = await _voteService.GetVoteHistoryAsync();
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { message = $"Error retrieving vote history: {ex.Message}" });
+        }
+    }
+
+    /// <summary>
+    /// Upload historical voting data for multiple rounds (Admin only)
+    /// </summary>
+    /// <param name="rounds">List of vote rounds with game titles and vote counts</param>
+    /// <returns>Count of inserted and updated vote records</returns>
+    /// <response code="200">Vote history uploaded successfully</response>
+    /// <response code="400">Invalid data - validation errors in request</response>
+    /// <response code="401">Unauthorized - authentication required</response>
+    /// <response code="403">Forbidden - admin access required</response>
+    /// <response code="500">Internal server error</response>
+    /// <remarks>
+    /// Each round must contain exactly 3 votes with distinct game titles.
+    /// Vote counts must be non-negative, and positions (if provided) must be 1, 2, or 3.
+    /// Existing vote records will be updated, new records will be inserted.
+    /// 
+    /// Sample request:
+    /// 
+    ///     POST /api/votes/upload
+    ///     [
+    ///         {
+    ///             "voteRound": 1,
+    ///             "notes": "First voting round",
+    ///             "votes": [
+    ///                 { "gameTitle": "Final Fantasy X", "count": 150, "position": 1 },
+    ///                 { "gameTitle": "Kingdom Hearts", "count": 120, "position": 2 },
+    ///                 { "gameTitle": "Gran Turismo 3", "count": 90, "position": 3 }
+    ///             ]
+    ///         }
+    ///     ]
+    /// </remarks>
+    [HttpPost("upload")]
+    [Authorize(Policy = "AdminCookieOrApiKey")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> UploadHistory([FromBody] List<UploadRoundDto>? rounds)
+    {
+        if (rounds == null || !rounds.Any())
+            return BadRequest(new { message = "No rounds provided" });
+
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
+
+        // collect all titles (normalize)
+        var titles = rounds
+            .SelectMany(r => r.Votes.Select(v => v.GameTitle?.Trim() ?? string.Empty))
+            .Where(t => !string.IsNullOrEmpty(t))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (!titles.Any())
+            return BadRequest(new { message = "No game titles provided" });
+
+        // case-insensitive lookup: translate titles to lower then compare using column ToLower()
+        var titlesLower = titles.Select(t => t.ToLowerInvariant()).ToList();
+
+        var games = await db.Games
+            .AsNoTracking()
+            .Where(g => titlesLower.Contains(g.Title.ToLower()))
+            .ToListAsync();
+
+        // map title(lower) -> id
+        var titleToId = games
+            .ToDictionary(g => g.Title.ToLowerInvariant(), g => g.Id);
+
+        // determine missing titles
+        var missing = titlesLower.Where(t => !titleToId.ContainsKey(t)).ToList();
+        if (missing.Any())
+        {
+            return BadRequest(new { message = "Some game titles were not found", missing });
+        }
+
+        var roundsNumbers = rounds.Select(r => r.VoteRound).Distinct().ToList();
+        var allGameIds = rounds.SelectMany(r => r.Votes.Select(v => titleToId[v.GameTitle!.Trim().ToLowerInvariant()])).Distinct().ToList();
+
+        // Load existing history rows for these rounds and games
+        var existing = await db.VoteHistory
+            .Where(vh => roundsNumbers.Contains(vh.VoteRound) && allGameIds.Contains(vh.GameId))
+            .ToListAsync();
+
+        var toInsert = new List<VoteHistory>();
+        var updatedCount = 0;
+        var insertedCount = 0;
+
+        foreach (var round in rounds)
+        {
+            // validate exactly 3 votes and distinct titles within the round
+            if (round.Votes == null || round.Votes.Count != 3)
+                return BadRequest(new { message = $"Round {round.VoteRound} must contain exactly 3 vote entries" });
+
+            var titlesInRound = round.Votes.Select(v => (v.GameTitle ?? string.Empty).Trim()).ToList();
+            if (titlesInRound.Count != titlesInRound.Distinct(StringComparer.OrdinalIgnoreCase).Count())
+                return BadRequest(new { message = $"Round {round.VoteRound} contains duplicate game titles" });
+
+            foreach (var v in round.Votes)
+            {
+                if (string.IsNullOrWhiteSpace(v.GameTitle))
+                    return BadRequest(new { message = $"Empty game title in round {round.VoteRound}" });
+
+                if (v.Count < 0)
+                    return BadRequest(new { message = $"Invalid vote count in round {round.VoteRound} for '{v.GameTitle}'" });
+
+                // Validate position if provided
+                if (v.Position.HasValue && (v.Position < 1 || v.Position > 3))
+                    return BadRequest(new { message = $"Invalid position {v.Position} in round {round.VoteRound} for '{v.GameTitle}'. Position must be 1, 2, or 3." });
+
+                var titleKey = v.GameTitle.Trim().ToLowerInvariant();
+                var gameId = titleToId[titleKey];
+
+                var existingRow = existing.FirstOrDefault(e => e.VoteRound == round.VoteRound && e.GameId == gameId);
+                if (existingRow != null)
+                {
+                    // overwrite existing (including notes and position)
+                    existingRow.VoteCount = v.Count;
+                    existingRow.Position = v.Position;
+                    existingRow.Notes = round.Notes?.Trim();
+                    updatedCount++;
+                }
+                else
+                {
+                    toInsert.Add(new VoteHistory
+                    {
+                        GameId = gameId,
+                        VoteRound = round.VoteRound,
+                        VoteCount = v.Count,
+                        Position = v.Position,
+                        Notes = round.Notes?.Trim()
+                    });
+                    insertedCount++;
+                }
+            }
+        }
+
+        if (toInsert.Any())
+        {
+            await db.VoteHistory.AddRangeAsync(toInsert);
+        }
+
+        // Save changes (updates tracked existing rows + inserted ones)
+        await db.SaveChangesAsync();
+
+        return Ok(new { inserted = insertedCount, updated = updatedCount });
+    }
+
+    /// <summary>
+    /// Get the current active votes
+    /// </summary>
+    /// <returns>List of games currently being voted on with their vote counts and positions</returns>
+    /// <response code="200">Returns the current votes</response>
+    /// <response code="500">Internal server error</response>
+    [HttpGet("current")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> GetCurrentVotes()
+    {
+        try
+        {
+            var result = await _voteService.GetCurrentVotesAsync();
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { message = $"Error retrieving current votes: {ex.Message}" });
+        }
+    }
+
+    /// <summary>
+    /// Set or update the current active votes (Admin only)
+    /// </summary>
+    /// <param name="votes">List of current votes with game titles and vote counts</param>
+    /// <returns>Count of inserted and updated vote records</returns>
+    /// <response code="200">Current votes updated successfully</response>
+    /// <response code="400">Invalid data - validation errors in request</response>
+    /// <response code="401">Unauthorized - authentication required</response>
+    /// <response code="403">Forbidden - admin access required</response>
+    /// <response code="500">Internal server error</response>
+    /// <remarks>
+    /// Updates existing vote entries or creates new ones. Triggers real-time update to connected clients via SignalR.
+    /// Vote counts must be non-negative.
+    /// 
+    /// Sample request:
+    /// 
+    ///     POST /api/votes/current
+    ///     [
+    ///         { "gameTitle": "Final Fantasy X", "voteCount": 150, "gameNumber": 1 },
+    ///         { "gameTitle": "Kingdom Hearts", "voteCount": 120, "gameNumber": 2 },
+    ///         { "gameTitle": "Gran Turismo 3", "voteCount": 90, "gameNumber": 3 }
+    ///     ]
+    /// </remarks>
+    [Authorize(Policy = "AdminCookieOrApiKey")]
+    [HttpPost("current")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> SetCurrentVotes([FromBody] List<CurrentVoteDto>? votes)
+    {
+        if (votes == null || !votes.Any())
+            return BadRequest(new { message = "No votes provided" });
+
+        try
+        {
+            var (inserted, updated) = await _voteService.SetCurrentVotesAsync(votes);
+
+            // Notify SignalR clients that votes were updated
+            await _hubContext.Clients.All.SendAsync("VotesUpdated");
+
+            return Ok(new { inserted, updated });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { message = $"Error setting current votes: {ex.Message}" });
+        }
+    }
+
+    /// <summary>
+    /// Remove a game from current votes by title (Admin only)
+    /// </summary>
+    /// <param name="gameTitle">The title of the game to remove from current votes</param>
+    /// <returns>Confirmation message</returns>
+    /// <response code="200">Current vote removed successfully</response>
+    /// <response code="400">Invalid request data</response>
+    /// <response code="401">Unauthorized - authentication required</response>
+    /// <response code="403">Forbidden - admin access required</response>
+    /// <response code="404">Game not found in current votes</response>
+    /// <response code="500">Internal server error</response>
+    [Authorize(Policy = "AdminCookieOrApiKey")]
+    [HttpDelete("current/{gameTitle}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> RemoveCurrentVote(string gameTitle)
+    {
+        try
+        {
+            var removed = await _voteService.RemoveCurrentVoteAsync(gameTitle);
+
+            if (!removed)
+            {
+                return NotFound(new { message = $"No current vote found for '{gameTitle}'" });
+            }
+
+            // Notify SignalR clients that votes were updated
+            await _hubContext.Clients.All.SendAsync("VotesUpdated");
+
+            return Ok(new { message = $"Current vote for '{gameTitle}' removed successfully" });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { message = $"Error removing vote: {ex.Message}" });
+        }
+    }
+
+    /// <summary>
+    /// Archive current votes to voting history (Admin only)
+    /// </summary>
+    /// <param name="request">Optional notes about the voting round being archived</param>
+    /// <returns>Round number and count of archived votes</returns>
+    /// <response code="200">Current votes archived successfully</response>
+    /// <response code="400">No current votes to archive or invalid request</response>
+    /// <response code="401">Unauthorized - authentication required</response>
+    /// <response code="403">Forbidden - admin access required</response>
+    /// <response code="500">Internal server error</response>
+    /// <remarks>
+    /// Moves all current votes to the voting history as a new round and clears the current votes.
+    /// The round number is automatically incremented from the last historical round.
+    /// Triggers real-time update to connected clients via SignalR.
+    /// </remarks>
+    [Authorize(Policy = "AdminCookieOrApiKey")]
+    [HttpPost("archive")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> ArchiveCurrentVotes([FromBody] ArchiveVotesRequest? request)
+    {
+        try
+        {
+            var (roundNumber, archivedCount) = await _voteService.ArchiveCurrentVotesAsync(request?.Notes);
+
+            // Notify SignalR clients that votes were updated
+            await _hubContext.Clients.All.SendAsync("VotesUpdated");
+
+            return Ok(new
+            {
+                message = "Current votes archived successfully",
+                round = roundNumber,
+                archivedCount
+            });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { message = $"Error archiving votes: {ex.Message}" });
+        }
+    }
+
+    /// <summary>
+    /// Update vote count for a game by game number position (Admin only)
+    /// </summary>
+    /// <param name="request">Game number (1-3) and new vote count</param>
+    /// <returns>Confirmation with updated game information</returns>
+    /// <response code="200">Vote count updated successfully</response>
+    /// <response code="400">Invalid game number (must be 1-3) or negative vote count</response>
+    /// <response code="401">Unauthorized - authentication required</response>
+    /// <response code="403">Forbidden - admin access required</response>
+    /// <response code="404">No current vote found for the specified game number</response>
+    /// <response code="500">Internal server error</response>
+    /// <remarks>
+    /// Updates the vote count for the game in position 1, 2, or 3 of the current votes.
+    /// Triggers real-time update to connected clients via SignalR.
+    /// </remarks>
+    [Authorize(Policy = "AdminCookieOrApiKey")]
+    [HttpPut("current/by-game-number")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> UpdateVoteCountByGameNumber([FromBody] UpdateVoteByGameNumberRequest request)
+    {
+        if (request == null)
+        {
+            return BadRequest(new { message = "Request data is required" });
+        }
+
+        // Validate game number (1-3)
+        if (request.GameNumber < 1 || request.GameNumber > 3)
+        {
+            return BadRequest(new { message = "Game number must be between 1 and 3" });
+        }
+
+        // Validate vote count (non-negative)
+        if (request.VoteCount < 0)
+        {
+            return BadRequest(new { message = "Vote count cannot be negative" });
+        }
+
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
+
+        try
+        {
+            // Find the current vote with the specified game number
+            var currentVote = await db.CurrentVotes
+                .FirstOrDefaultAsync(cv => cv.GameNumber == request.GameNumber);
+
+            if (currentVote == null)
+            {
+                return NotFound(new
+                {
+                    message = $"No current vote found for game number {request.GameNumber}"
+                });
+            }
+
+            // Get game title for response
+            var game = await db.Games
+                .AsNoTracking()
+                .FirstOrDefaultAsync(g => g.Id == currentVote.GameId);
+
+            var gameTitle = game?.Title ?? "Unknown";
+
+            // Update the vote count
+            currentVote.VoteCount = request.VoteCount;
+            await db.SaveChangesAsync();
+
+            // Notify SignalR clients that votes were updated
+            await _hubContext.Clients.All.SendAsync("VotesUpdated");
+
+            return Ok(new
+            {
+                message = $"Vote count updated successfully for game number {request.GameNumber}",
+                gameNumber = currentVote.GameNumber,
+                gameTitle = gameTitle,
+                gameId = currentVote.GameId,
+                voteCount = currentVote.VoteCount
+            });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { message = $"Error updating vote count: {ex.Message}" });
+        }
+    }
+}
+
+/// <summary>
+/// Request model for updating vote count by game number
+/// </summary>
+public class UpdateVoteByGameNumberRequest
+{
+    /// <summary>
+    /// Game position number (1, 2, or 3)
+    /// </summary>
+    public int GameNumber { get; set; }
+
+    /// <summary>
+    /// New vote count (must be non-negative)
+    /// </summary>
+    public int VoteCount { get; set; }
+}

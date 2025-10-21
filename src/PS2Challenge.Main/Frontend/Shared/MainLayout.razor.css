@@ -1,0 +1,52 @@
+.page {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    margin: 0;
+    padding: 0;
+    position: relative;
+    width: 100%;
+    overflow-x: hidden;
+}
+
+main {
+    flex: 1;
+    margin: 0;
+    padding: 0;
+    position: relative;
+    z-index: 1;
+    width: 100%;
+}
+
+.content {
+    width: 100%;
+    margin: 0;
+    padding: 0;
+}
+
+.top-row {
+    display: none; /* Hide since LoginDisplay is in NavMenu */
+}
+
+/* Remove the px-4 padding from content in MainLayout */
+.content.px-4 {
+    padding: 0;
+}
+
+@media (max-width: 899px) {
+    main {
+        padding-top: 0;
+    }
+    
+    .content {
+        padding: 0;
+        position: relative;
+        z-index: 1;
+    }
+}
+
+@media (max-width: 768px) {
+    .content {
+        padding: 0;
+    }
+}
