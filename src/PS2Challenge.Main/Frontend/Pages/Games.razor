@@ -70,8 +70,8 @@
                         <th @onclick="() => SortBy(nameof(GameDto.Title))">Title @GetSortIcon(nameof(GameDto.Title))</th>
                         <th @onclick="() => SortBy(nameof(GameDto.Developer))">Developer @GetSortIcon(nameof(GameDto.Developer))</th>
                         <th @onclick="() => SortBy(nameof(GameDto.Publisher))">Publisher @GetSortIcon(nameof(GameDto.Publisher))</th>
-                        <th>Release Date</th>
-                        <th>Region</th>
+                        <th @onclick="() => SortBy(nameof(GameDto.FirstReleased))">Release Date @GetSortIcon(nameof(GameDto.FirstReleased))</th>
+                        <th @onclick="() => SortBy(nameof(GameDto.RegionFirstReleasedIn))">Region First Released In @GetSortIcon(nameof(GameDto.RegionFirstReleasedIn))</th>
                         <th @onclick='() => SortBy("IsExcluded")'>Excluded @GetSortIcon("IsExcluded")</th>
                         <th @onclick='() => SortBy("IsOwned")'>Owned @GetSortIcon("IsOwned")</th>
                         <th @onclick='() => SortBy("CompletionStatus")'>Status @GetSortIcon("CompletionStatus")</th>
@@ -423,6 +423,8 @@
             {
                 nameof(GameDto.Developer) => sortAscending ? filtered.OrderBy(g => g.Developer) : filtered.OrderByDescending(g => g.Developer),
                 nameof(GameDto.Publisher) => sortAscending ? filtered.OrderBy(g => g.Publisher) : filtered.OrderByDescending(g => g.Publisher),
+                nameof(GameDto.FirstReleased) => sortAscending ? filtered.OrderBy(g => g.FirstReleased ?? DateOnly.MinValue) : filtered.OrderByDescending(g => g.FirstReleased ?? DateOnly.MinValue),
+                nameof(GameDto.RegionFirstReleasedIn) => sortAscending ? filtered.OrderBy(g => g.RegionFirstReleasedIn) : filtered.OrderByDescending(g => g.RegionFirstReleasedIn),
                 "IsExcluded" => sortAscending ? filtered.OrderBy(g => g.IsExcluded) : filtered.OrderByDescending(g => g.IsExcluded),
                 "IsOwned" => sortAscending ? filtered.OrderBy(g => g.IsOwned) : filtered.OrderByDescending(g => g.IsOwned),
                 "CompletionStatus" => sortAscending 
