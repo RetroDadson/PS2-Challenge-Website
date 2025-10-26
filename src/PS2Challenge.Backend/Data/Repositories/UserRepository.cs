@@ -39,7 +39,23 @@ public class UserRepository
         using var scope = _scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
 
-        dbContext.Users.Update(user);
+        // Load the existing user from the current DbContext to avoid attaching entities
+        var existing = await dbContext.Users.FirstOrDefaultAsync(u => u.Id == user.Id);
+        if (existing == null)
+        {
+            throw new InvalidOperationException($"User with ID {user.Id} not found");
+        }
+
+        // Update scalar properties only. Avoid replacing navigation properties directly to prevent
+        // EF from attempting to track entities from a different context.
+        existing.TwitchId = user.TwitchId;
+        existing.TwitchUsername = user.TwitchUsername;
+        existing.ProfileImageUrl = user.ProfileImageUrl;
+        existing.RoleId = user.RoleId;
+        existing.CreatedAt = user.CreatedAt;
+        existing.LastLoginAt = user.LastLoginAt;
+        existing.ApiKey = user.ApiKey;
+
         await dbContext.SaveChangesAsync();
     }
 
