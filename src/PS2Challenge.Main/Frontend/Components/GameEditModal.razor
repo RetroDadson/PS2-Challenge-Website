@@ -77,7 +77,7 @@
                         <label>Type Owned</label>
                         @if (ownershipTypes.Any())
                         {
-                            <select @bind="internalTypeOwned" class="search-input">
+                            <select @bind="internalTypeOwned" class="search-input" disabled="@(!internalOwnPhysicalCopy)">
                                 <option value="">-- Select Type --</option>
                                 @foreach (var type in ownershipTypes)
                                 {
@@ -87,7 +87,8 @@
                         }
                         else
                         {
-                            <input type="text" @bind="internalTypeOwned" class="search-input" placeholder="Loading types..." disabled />
+                            <!-- Allow free text editing while types are loading or when none are defined. Disabled until Own Physical Copy is checked. -->
+                            <input type="text" @bind="internalTypeOwned" class="search-input" placeholder="Loading types..." disabled="@(!internalOwnPhysicalCopy)" />
                         }
                     </div>
 
@@ -164,7 +165,9 @@
     {
         try
         {
-            ownershipTypes = await HttpClient.GetFromJsonAsync<List<OwnershipType>>("/api/admin/games/ownership-types") ?? new();
+            // Use the GameService (server-side) instead of HttpClient to match the UI design
+            var types = await GameService.GetAllOwnershipTypesAsync();
+            ownershipTypes = types?.ToList() ?? new();
         }
         catch (Exception ex)
         {
@@ -175,6 +178,12 @@
 
     protected override async Task OnParametersSetAsync()
     {
+        // Ensure ownership types are available when modal opens
+        if (IsVisible && !ownershipTypes.Any())
+        {
+            await LoadOwnershipTypes();
+        }
+
         if (IsVisible && Game != null)
         {
             internalTitle = Game.Title;
