@@ -3,8 +3,11 @@
 @using PS2Challenge.Backend.Data
 @using Microsoft.EntityFrameworkCore
 @using Microsoft.Extensions.DependencyInjection
+@using Microsoft.AspNetCore.SignalR
+@using PS2Challenge.Main.Api.Hubs
 @inject VoteService VoteService
 @inject IServiceScopeFactory ScopeFactory
+@inject IHubContext<VotesHub> HubContext
 
 @if (IsVisible)
 {
@@ -173,6 +176,9 @@
             
             var (roundNumber, archivedCount) = await VoteService.ArchiveCurrentVotesAsync(notes, manualPositions);
             Console.WriteLine($"Successfully archived {archivedCount} votes to round {roundNumber}");
+            
+            // Notify SignalR clients that votes were updated
+            await HubContext.Clients.All.SendAsync("VotesUpdated");
             
             await OnArchived.InvokeAsync();
         }
