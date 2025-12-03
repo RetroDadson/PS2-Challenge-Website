@@ -1,0 +1,133 @@
+@page "/progress-overlay"
+@layout EmptyLayout
+@using PS2Challenge.Backend.Models
+@using Microsoft.EntityFrameworkCore
+@using PS2Challenge.Backend.Data
+@using Microsoft.AspNetCore.SignalR.Client
+@inject IServiceScopeFactory ScopeFactory
+@inject NavigationManager NavigationManager
+@implements IAsyncDisposable
+
+@*
+    Progress Overlay - Stream/OBS Overlay Component
+    
+    Displays the current challenge progress showing:
+    - Number of games completed
+    - Total games in challenge
+    - Completion percentage
+    
+    Designed to be displayed as a browser source in OBS/streaming software.
+    Uses SignalR to auto-update when game progress changes.
+    Access via: /progress-overlay
+*@
+
+<div class="overlay-container">
+    @if (isLoading)
+    {
+        <div class="loading">Loading...</div>
+    }
+    else
+    {
+        <div class="progress-box">
+            <div class="progress-label">Games Completed</div>
+            <div class="progress-count">@gamesCompletedCount / @gamesInChallengeCount</div>
+            <div class="progress-percentage">@percentageComplete.ToString("F1")%</div>
+        </div>
+    }
+</div>
+
+@code {
+    private int gamesCompletedCount = 0;
+    private int gamesInChallengeCount = 0;
+    private double percentageComplete = 0;
+    private bool isLoading = true;
+    private HubConnection? hubConnection;
+    private string? lastDataHash;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadProgressData();
+
+        // Set up SignalR connection to listen for game updates
+        hubConnection = new HubConnectionBuilder()
+            .WithUrl(NavigationManager.ToAbsoluteUri("/votesHub"))
+            .WithAutomaticReconnect()
+            .Build();
+
+        // Subscribe to game/progress updates
+        hubConnection.On("VotesUpdated", async () =>
+        {
+            await LoadProgressData();
+            await InvokeAsync(StateHasChanged);
+        });
+
+        try
+        {
+            await hubConnection.StartAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error connecting to SignalR hub: {ex.Message}");
+        }
+    }
+
+    private async Task LoadProgressData()
+    {
+        try
+        {
+            isLoading = true;
+            using var scope = ScopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
+
+            // Get total games in challenge (not excluded)
+            gamesInChallengeCount = await db.Games
+                .AsNoTracking()
+                .Where(g => !g.IsExcluded)
+                .CountAsync();
+
+            // Get completed games count (progress with DateFinished)
+            gamesCompletedCount = await db.GameProgress
+                .AsNoTracking()
+                .Where(p => p.DateFinished.HasValue)
+                .CountAsync();
+
+            // Calculate percentage
+            if (gamesInChallengeCount > 0)
+            {
+                percentageComplete = ((double)gamesCompletedCount / gamesInChallengeCount) * 100;
+            }
+            else
+            {
+                percentageComplete = 0;
+            }
+
+            // Create a hash to detect changes
+            var newHash = $"{gamesCompletedCount}:{gamesInChallengeCount}";
+
+            // Only trigger state update if data has changed
+            if (newHash != lastDataHash)
+            {
+                lastDataHash = newHash;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading progress data: {ex.Message}");
+            gamesCompletedCount = 0;
+            gamesInChallengeCount = 0;
+            percentageComplete = 0;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (hubConnection is not null)
+        {
+            await hubConnection.DisposeAsync();
+        }
+    }
+}
