@@ -31,7 +31,7 @@
         <div class="progress-box">
             <div class="progress-label">Games Completed</div>
             <div class="progress-count">@gamesCompletedCount / @gamesInChallengeCount</div>
-            <div class="progress-percentage">@percentageComplete.ToString("F1")%</div>
+            <div class="progress-percentage">@percentageComplete.ToString("F2")%</div>
         </div>
     }
 </div>
@@ -50,12 +50,12 @@
 
         // Set up SignalR connection to listen for game updates
         hubConnection = new HubConnectionBuilder()
-            .WithUrl(NavigationManager.ToAbsoluteUri("/votesHub"))
+            .WithUrl(NavigationManager.ToAbsoluteUri("/gamesHub"))
             .WithAutomaticReconnect()
             .Build();
 
         // Subscribe to game/progress updates
-        hubConnection.On("VotesUpdated", async () =>
+        hubConnection.On("GamesUpdated", async () =>
         {
             await LoadProgressData();
             await InvokeAsync(StateHasChanged);
@@ -79,10 +79,16 @@
             using var scope = ScopeFactory.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
 
-            // Get total games in challenge (not excluded)
+            // Get game IDs that are excluded
+            var excludedGameIds = await db.ExcludedGames
+                .AsNoTracking()
+                .Select(eg => eg.GameId)
+                .ToListAsync();
+
+            // Get total games in challenge (not in excluded list)
             gamesInChallengeCount = await db.Games
                 .AsNoTracking()
-                .Where(g => !g.IsExcluded)
+                .Where(g => !excludedGameIds.Contains(g.Id))
                 .CountAsync();
 
             // Get completed games count (progress with DateFinished)

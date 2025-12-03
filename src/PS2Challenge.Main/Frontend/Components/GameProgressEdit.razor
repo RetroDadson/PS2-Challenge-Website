@@ -1,7 +1,10 @@
 @using Microsoft.EntityFrameworkCore
 @using PS2Challenge.Backend.Data
 @using PS2Challenge.Backend.Models
+@using Microsoft.AspNetCore.SignalR
+@using PS2Challenge.Main.Api.Hubs
 @inject IServiceScopeFactory ScopeFactory
+@inject IHubContext<GamesHub> HubContext
 
 @if (IsVisible)
 {
@@ -231,6 +234,9 @@
 
                     await db.SaveChangesAsync();
                     Console.WriteLine($"Updated game progress for '{internalGameTitle}'");
+                    
+                    // Notify SignalR clients that game progress was updated
+                    await HubContext.Clients.All.SendAsync("GamesUpdated");
                 }
             }
             else
@@ -259,6 +265,9 @@
                 db.GameProgress.Add(newProgress);
                 await db.SaveChangesAsync();
                 Console.WriteLine($"Added new game progress for '{internalGameTitle}'");
+                
+                // Notify SignalR clients that game progress was updated
+                await HubContext.Clients.All.SendAsync("GamesUpdated");
             }
 
             await OnSave.InvokeAsync();

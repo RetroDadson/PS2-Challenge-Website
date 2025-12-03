@@ -4,10 +4,13 @@
 @using Microsoft.EntityFrameworkCore
 @using PS2Challenge.Backend.Data
 @using System.Net.Http.Json
+@using Microsoft.AspNetCore.SignalR
+@using PS2Challenge.Main.Api.Hubs
 @inject IJSRuntime JSRuntime
 @inject IServiceScopeFactory ScopeFactory
 @inject GameService GameService
 @inject HttpClient HttpClient
+@inject IHubContext<GamesHub> HubContext
 
 @if (IsVisible)
 {
@@ -351,8 +354,11 @@
                 // Update ownership (service will determine if owned based on physical copy or type)
                 await GameService.UpdateOwnershipAsync(Game.Id, internalOwnPhysicalCopy, internalTypeOwned ?? string.Empty);
 
-                // Update exclusion
+                // Update exclusion - this might affect the total game count
                 await GameService.UpdateExclusionAsync(Game.Id, internalIsExcluded, internalExclusionReason);
+                
+                // Notify SignalR clients that game data was updated
+                await HubContext.Clients.All.SendAsync("GamesUpdated");
             }
             else
             {
@@ -377,6 +383,9 @@
                 {
                     await GameService.UpdateExclusionAsync(createdGame.Id, true, internalExclusionReason ?? "No reason provided");
                 }
+                
+                // Notify SignalR clients that a game was added
+                await HubContext.Clients.All.SendAsync("GamesUpdated");
             }
 
             await OnSave.InvokeAsync();
@@ -405,6 +414,10 @@
             try
             {
                 await GameService.DeleteGameAsync(Game.Id);
+                
+                // Notify SignalR clients that a game was deleted
+                await HubContext.Clients.All.SendAsync("GamesUpdated");
+                
                 await OnDelete.InvokeAsync(Game.Id);
             }
             catch (Exception ex)
