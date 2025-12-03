@@ -389,6 +389,7 @@ app.UseAuthorization();
 app.MapControllers();
 app.MapBlazorHub();
 app.MapHub<VotesHub>("/votesHub");
+app.MapHub<GamesHub>("/gamesHub");
 app.MapFallbackToPage("/_Host");
 
 app.Run();
