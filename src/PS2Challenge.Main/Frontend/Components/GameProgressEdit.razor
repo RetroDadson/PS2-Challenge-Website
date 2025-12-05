@@ -23,10 +23,9 @@
                             <input placeholder="Game title"
                                    value="@internalGameTitle"
                                    @oninput="OnGameTitleInput"
-                                   class="search-input"
-                                   disabled="@IsEditMode" />
+                                   class="search-input" />
 
-                            @if (showTitleSuggestions && !IsEditMode)
+                            @if (showTitleSuggestions)
                             {
                                 <ul class="suggestions">
                                     @foreach (var s in titleSuggestions)
@@ -145,10 +144,7 @@
     private void OnGameTitleInput(ChangeEventArgs e)
     {
         internalGameTitle = e?.Value?.ToString() ?? string.Empty;
-        if (!IsEditMode)
-        {
-            UpdateSuggestions(internalGameTitle);
-        }
+        UpdateSuggestions(internalGameTitle);
     }
 
     private void UpdateSuggestions(string input)
@@ -225,6 +221,18 @@
                 
                 if (existingProgress != null)
                 {
+                    // Find the game by title in case it was changed
+                    var game = await db.Games
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(g => g.Title.ToLower() == internalGameTitle.Trim().ToLower());
+
+                    if (game == null)
+                    {
+                        Console.WriteLine($"Game '{internalGameTitle}' not found");
+                        return;
+                    }
+
+                    existingProgress.GameId = game.Id;
                     existingProgress.DateStarted = startedDateOnly;
                     existingProgress.DateFinished = finishedDateOnly;
                     existingProgress.Platform = string.IsNullOrWhiteSpace(internalPlatform) ? "Physical" : internalPlatform;
