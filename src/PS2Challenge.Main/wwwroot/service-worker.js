@@ -6,6 +6,7 @@ const GAMES_DATA_CACHE = 'ps2-games-data-v1';
 const ASSETS_TO_CACHE = [
     '/',
     '/games',
+    '/offline-games.html',
     '/css/app.css',
     '/css/navmenu.css',
     'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css'
@@ -49,6 +50,32 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
     const { request } = event;
     const url = new URL(request.url);
+
+    // Handle SignalR/Blazor connections - redirect to offline page when offline
+    if (url.pathname.includes('/_blazor') || url.pathname.includes('/blazor')) {
+        event.respondWith(
+            fetch(request).catch(() => {
+                // If Blazor connection fails, redirect to offline games page
+                if (request.mode === 'navigate') {
+                    return caches.match('/offline-games.html');
+                }
+                return new Response('', { status: 503 });
+            })
+        );
+        return;
+    }
+
+    // Handle navigation to /games - use offline fallback when needed
+    if (request.mode === 'navigate' && url.pathname === '/games') {
+        event.respondWith(
+            fetch(request)
+                .catch(() => {
+                    console.log('[Service Worker] Serving offline games page');
+                    return caches.match('/offline-games.html');
+                })
+        );
+        return;
+    }
 
     // Handle API calls for games data with network-first strategy
     if (url.pathname.includes('/api/games') && !url.pathname.includes('/api/games/progress')) {
@@ -112,7 +139,12 @@ self.addEventListener('fetch', (event) => {
 
                 return response;
             }).catch(() => {
-                // Offline fallback for navigation requests
+                // Offline fallback for navigation requests to games page
+                if (request.mode === 'navigate' && url.pathname.includes('games')) {
+                    return caches.match('/offline-games.html');
+                }
+                
+                // Generic navigation fallback
                 if (request.mode === 'navigate') {
                     return caches.match('/');
                 }
