@@ -21,6 +21,10 @@ window.pwaHelper = {
                     newWorker.addEventListener('statechange', () => {
                         if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
                             console.log('New service worker available. Reload to update.');
+                            // Optionally show a notification to the user
+                            if (window.confirm('A new version is available. Reload to update?')) {
+                                window.location.reload();
+                            }
                         }
                     });
                 });
@@ -65,6 +69,21 @@ window.pwaHelper = {
             } catch (e) {
                 console.error('Failed to cache games data in localStorage:', e);
             }
+        } else {
+            // Fallback to just localStorage if service worker not available
+            try {
+                const dataToCache = {
+                    games: gamesData,
+                    ownedTypes: ownedTypes,
+                    exclusionReasons: exclusionReasons,
+                    completionStatus: completionStatus,
+                    cachedAt: new Date().toISOString()
+                };
+                localStorage.setItem('gamesDataCache', JSON.stringify(dataToCache));
+                console.log('Games data cached in localStorage (service worker not available)');
+            } catch (e) {
+                console.error('Failed to cache games data in localStorage:', e);
+            }
         }
     },
 
@@ -85,17 +104,34 @@ window.pwaHelper = {
     setupOnlineOfflineListeners: function(dotNetHelper) {
         window.addEventListener('online', () => {
             console.log('App is now online');
-            if (dotNetHelper) {
-                dotNetHelper.invokeMethodAsync('OnNetworkStatusChanged', true);
+            // Reload to reconnect to Blazor Server
+            if (window.location.pathname.includes('offline-games')) {
+                window.location.href = '/games';
+            } else if (dotNetHelper) {
+                dotNetHelper.invokeMethodAsync('OnNetworkStatusChanged', true).catch(() => {
+                    // If we can't invoke the method, we're still disconnected
+                    console.log('Blazor still disconnected, reloading...');
+                    window.location.reload();
+                });
             }
         });
 
         window.addEventListener('offline', () => {
             console.log('App is now offline');
             if (dotNetHelper) {
-                dotNetHelper.invokeMethodAsync('OnNetworkStatusChanged', false);
+                dotNetHelper.invokeMethodAsync('OnNetworkStatusChanged', false).catch(() => {
+                    // Method invocation failed, likely already disconnected
+                    console.log('Blazor disconnected');
+                });
             }
         });
+    },
+
+    // Redirect to offline page if needed
+    redirectToOfflineIfNeeded: function() {
+        if (!navigator.onLine && window.location.pathname === '/games') {
+            window.location.href = '/offline-games.html';
+        }
     }
 };
 
@@ -103,7 +139,17 @@ window.pwaHelper = {
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
         window.pwaHelper.registerServiceWorker();
+        
+        // Check if we should redirect to offline page
+        setTimeout(() => {
+            window.pwaHelper.redirectToOfflineIfNeeded();
+        }, 1000);
     });
 } else {
     window.pwaHelper.registerServiceWorker();
+    
+    // Check if we should redirect to offline page
+    setTimeout(() => {
+        window.pwaHelper.redirectToOfflineIfNeeded();
+    }, 1000);
 }

@@ -192,11 +192,26 @@
         await SetupOfflineListener();
     }
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Cache data after first render to ensure it's available offline
+            await CacheGamesData();
+        }
+    }
+
     private async Task CheckOnlineStatus()
     {
         try
         {
             isOffline = await JSRuntime.InvokeAsync<bool>("pwaHelper.isOffline");
+            
+            // If offline, try to redirect to static offline page
+            if (isOffline)
+            {
+                await JSRuntime.InvokeVoidAsync("pwaHelper.redirectToOfflineIfNeeded");
+            }
         }
         catch
         {

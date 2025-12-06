@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Games - Offline Mode</title>
+    <link rel="stylesheet" href="/css/navmenu.css" />
+    <link rel="stylesheet" href="/css/app.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" crossorigin="anonymous" />
+    <style>
+        body {
+            padding: 1rem;
+        }
+        .offline-games-container {
+            max-width: 100%;
+            margin: 0 auto;
+        }
+        .games-table-container {
+            overflow-x: auto;
+        }
+        .games-table {
+            width: 100%;
+            font-size: 0.9rem;
+        }
+        .games-table th,
+        .games-table td {
+            padding: 0.5rem;
+            white-space: nowrap;
+        }
+        .search-box {
+            position: relative;
+            margin-bottom: 1rem;
+        }
+        .search-input {
+            width: 100%;
+            padding: 0.75rem 2.5rem 0.75rem 1rem;
+        }
+        .search-icon {
+            position: absolute;
+            right: 1rem;
+            top: 50%;
+            transform: translateY(-50%);
+        }
+        .filter-controls {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+        }
+        .filter-controls label {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            cursor: pointer;
+        }
+        .results-count {
+            margin-bottom: 1rem;
+            color: var(--text-secondary);
+        }
+        .badge {
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+        .owned-badge {
+            background: rgba(76, 175, 80, 0.2);
+            color: #4caf50;
+        }
+        .not-owned-badge {
+            background: rgba(158, 158, 158, 0.2);
+            color: #9e9e9e;
+        }
+        .excluded-badge {
+            background: rgba(244, 67, 54, 0.2);
+            color: #f44336;
+        }
+        .included-badge {
+            background: rgba(33, 150, 243, 0.2);
+            color: #2196f3;
+        }
+        .status-completed {
+            background: rgba(76, 175, 80, 0.2);
+            color: #4caf50;
+        }
+        .status-inprogress {
+            background: rgba(255, 152, 0, 0.2);
+            color: #ff9800;
+        }
+        .status-notstarted {
+            background: rgba(158, 158, 158, 0.2);
+            color: #9e9e9e;
+        }
+        .owned-row {
+            background: rgba(76, 175, 80, 0.05);
+        }
+        .excluded-row {
+            background: rgba(244, 67, 54, 0.05);
+        }
+        tr.hidden {
+            display: none;
+        }
+        .sortable {
+            cursor: pointer;
+            user-select: none;
+        }
+        .sortable:hover {
+            background: rgba(233, 30, 99, 0.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="offline-games-container">
+        <h1>PS2 Games Library</h1>
+        
+        <div class="offline-banner">
+            <span>?? Offline Mode - Limited functionality</span>
+        </div>
+
+        <div class="search-section">
+            <div class="search-box">
+                <input type="text" 
+                       id="searchInput"
+                       placeholder="Search games by title, developer, or publisher..." 
+                       class="search-input" />
+                <span class="search-icon">??</span>
+            </div>
+
+            <div class="filter-controls">
+                <label>
+                    <input type="checkbox" id="showOwnedOnly" />
+                    Show Owned Only
+                </label>
+                <label>
+                    <input type="checkbox" id="showExcluded" />
+                    Show Excluded Games
+                </label>
+            </div>
+
+            <div class="results-count">
+                <p id="statsDisplay">Loading...</p>
+            </div>
+        </div>
+
+        <div class="games-table-container">
+            <table class="games-table" id="gamesTable">
+                <thead>
+                    <tr>
+                        <th class="sortable" data-column="title">Title <span class="sort-icon"></span></th>
+                        <th class="sortable" data-column="developer">Developer <span class="sort-icon"></span></th>
+                        <th class="sortable" data-column="publisher">Publisher <span class="sort-icon"></span></th>
+                        <th class="sortable" data-column="releaseDate">Release Date <span class="sort-icon"></span></th>
+                        <th class="sortable" data-column="region">Region <span class="sort-icon"></span></th>
+                        <th class="sortable" data-column="excluded">Excluded <span class="sort-icon"></span></th>
+                        <th class="sortable" data-column="owned">Owned <span class="sort-icon"></span></th>
+                        <th class="sortable" data-column="status">Status <span class="sort-icon"></span></th>
+                    </tr>
+                </thead>
+                <tbody id="gamesTableBody">
+                    <tr>
+                        <td colspan="8" style="text-align: center; padding: 2rem;">Loading cached games...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        let allGames = [];
+        let ownedTypes = {};
+        let exclusionReasons = {};
+        let completionStatus = {};
+        let currentSort = { column: 'title', ascending: true };
+
+        // Load cached data
+        function loadCachedData() {
+            try {
+                const cached = localStorage.getItem('gamesDataCache');
+                if (cached) {
+                    const data = JSON.parse(cached);
+                    allGames = data.games || [];
+                    ownedTypes = data.ownedTypes || {};
+                    exclusionReasons = data.exclusionReasons || {};
+                    completionStatus = data.completionStatus || {};
+                    
+                    renderGames();
+                    updateStats();
+                } else {
+                    document.getElementById('gamesTableBody').innerHTML = 
+                        '<tr><td colspan="8" style="text-align: center; padding: 2rem;">No cached data found. Please visit this page while online first.</td></tr>';
+                }
+            } catch (e) {
+                console.error('Error loading cached data:', e);
+                document.getElementById('gamesTableBody').innerHTML = 
+                    '<tr><td colspan="8" style="text-align: center; padding: 2rem;">Error loading cached data.</td></tr>';
+            }
+        }
+
+        // Render games table
+        function renderGames() {
+            const tbody = document.getElementById('gamesTableBody');
+            const searchQuery = document.getElementById('searchInput').value.toLowerCase();
+            const showOwnedOnly = document.getElementById('showOwnedOnly').checked;
+            const showExcluded = document.getElementById('showExcluded').checked;
+
+            // Filter games
+            let filteredGames = allGames.filter(game => {
+                // Search filter
+                if (searchQuery) {
+                    const matches = (game.title?.toLowerCase().includes(searchQuery)) ||
+                                  (game.developer?.toLowerCase().includes(searchQuery)) ||
+                                  (game.publisher?.toLowerCase().includes(searchQuery));
+                    if (!matches) return false;
+                }
+
+                // Owned filter
+                if (showOwnedOnly && !game.isOwned) return false;
+
+                // Excluded filter
+                if (!showExcluded && game.isExcluded) return false;
+
+                return true;
+            });
+
+            // Sort games
+            filteredGames.sort((a, b) => {
+                let aVal, bVal;
+                
+                switch (currentSort.column) {
+                    case 'title':
+                        aVal = a.title || '';
+                        bVal = b.title || '';
+                        break;
+                    case 'developer':
+                        aVal = a.developer || '';
+                        bVal = b.developer || '';
+                        break;
+                    case 'publisher':
+                        aVal = a.publisher || '';
+                        bVal = b.publisher || '';
+                        break;
+                    case 'releaseDate':
+                        aVal = a.firstReleased || '';
+                        bVal = b.firstReleased || '';
+                        break;
+                    case 'region':
+                        aVal = a.regionFirstReleasedIn || '';
+                        bVal = b.regionFirstReleasedIn || '';
+                        break;
+                    case 'excluded':
+                        aVal = a.isExcluded ? 1 : 0;
+                        bVal = b.isExcluded ? 1 : 0;
+                        break;
+                    case 'owned':
+                        aVal = a.isOwned ? 1 : 0;
+                        bVal = b.isOwned ? 1 : 0;
+                        break;
+                    case 'status':
+                        aVal = getCompletionStatus(a.id);
+                        bVal = getCompletionStatus(b.id);
+                        break;
+                    default:
+                        aVal = '';
+                        bVal = '';
+                }
+
+                if (aVal < bVal) return currentSort.ascending ? -1 : 1;
+                if (aVal > bVal) return currentSort.ascending ? 1 : -1;
+                return 0;
+            });
+
+            // Render table rows
+            if (filteredGames.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" style="text-align: center; padding: 2rem;">No games match your filters.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = filteredGames.map(game => {
+                const rowClass = game.isExcluded ? 'excluded-row' : (game.isOwned ? 'owned-row' : '');
+                const status = getCompletionStatus(game.id);
+                const ownedType = ownedTypes[game.id] || 'Owned';
+                const exclusionReason = exclusionReasons[game.id] || 'No reason provided';
+                
+                return `
+                    <tr class="${rowClass}">
+                        <td>${game.title || ''}</td>
+                        <td>${game.developer || ''}</td>
+                        <td>${game.publisher || ''}</td>
+                        <td>${formatDate(game.firstReleased) || 'Unknown'}</td>
+                        <td>${game.regionFirstReleasedIn || ''}</td>
+                        <td>
+                            ${game.isExcluded 
+                                ? `<span class="badge excluded-badge" title="${exclusionReason}">Excluded</span>`
+                                : '<span class="badge included-badge">Included</span>'}
+                        </td>
+                        <td>
+                            ${game.isOwned 
+                                ? `<span class="badge owned-badge" title="${ownedType}">? Owned</span>`
+                                : '<span class="badge not-owned-badge">To Purchase</span>'}
+                        </td>
+                        <td>
+                            ${getStatusBadge(status)}
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            updateStats(filteredGames.length);
+        }
+
+        function formatDate(dateStr) {
+            if (!dateStr) return null;
+            const date = new Date(dateStr);
+            return date.toLocaleDateString('en-GB');
+        }
+
+        function getCompletionStatus(gameId) {
+            return completionStatus[gameId] || 'Not Started';
+        }
+
+        function getStatusBadge(status) {
+            if (status === 'Completed') {
+                return '<span class="badge status-completed">? Completed</span>';
+            } else if (status === 'In Progress') {
+                return '<span class="badge status-inprogress">? In Progress</span>';
+            } else {
+                return '<span class="badge status-notstarted">Not Started</span>';
+            }
+        }
+
+        function updateStats(filteredCount = null) {
+            const totalGames = allGames.length;
+            const ownedCount = allGames.filter(g => g.isOwned).length;
+            const excludedCount = allGames.filter(g => g.isExcluded).length;
+            const completedCount = allGames.filter(g => !g.isExcluded && completionStatus[g.id] === 'Completed').length;
+            const inProgressCount = allGames.filter(g => !g.isExcluded && completionStatus[g.id] === 'In Progress').length;
+            const notStartedCount = allGames.filter(g => !g.isExcluded && (!completionStatus[g.id] || completionStatus[g.id] === 'Not Started')).length;
+
+            const display = filteredCount !== null 
+                ? `Showing ${filteredCount} of ${totalGames} games | `
+                : `Showing ${totalGames} of ${totalGames} games | `;
+
+            document.getElementById('statsDisplay').textContent = 
+                `${display}Owned: ${ownedCount} | Excluded: ${excludedCount} | Completed: ${completedCount} | In Progress: ${inProgressCount} | Not Started: ${notStartedCount}`;
+        }
+
+        // Event listeners
+        document.getElementById('searchInput').addEventListener('input', renderGames);
+        document.getElementById('showOwnedOnly').addEventListener('change', renderGames);
+        document.getElementById('showExcluded').addEventListener('change', renderGames);
+
+        // Sorting
+        document.querySelectorAll('.sortable').forEach(th => {
+            th.addEventListener('click', () => {
+                const column = th.dataset.column;
+                
+                if (currentSort.column === column) {
+                    currentSort.ascending = !currentSort.ascending;
+                } else {
+                    currentSort.column = column;
+                    currentSort.ascending = true;
+                }
+
+                // Update sort icons
+                document.querySelectorAll('.sort-icon').forEach(icon => icon.textContent = '');
+                th.querySelector('.sort-icon').textContent = currentSort.ascending ? '?' : '?';
+
+                renderGames();
+            });
+        });
+
+        // Load data on page load
+        loadCachedData();
+
+        // Try to reconnect when online
+        window.addEventListener('online', () => {
+            window.location.href = '/games';
+        });
+    </script>
+</body>
+</html>
