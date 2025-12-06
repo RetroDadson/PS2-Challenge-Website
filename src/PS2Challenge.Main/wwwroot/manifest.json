@@ -1,0 +1,19 @@
+{
+  "name": "Dadson's PS2 Challenge",
+  "short_name": "PS2 Challenge",
+  "description": "Track PS2 game collection and progress",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1a1a2e",
+  "theme_color": "#0f3460",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "assets/Discord Icon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "offline_enabled": true
+}

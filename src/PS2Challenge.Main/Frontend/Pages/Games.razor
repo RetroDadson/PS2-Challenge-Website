@@ -7,11 +7,19 @@
 @inject GameService GameService
 @inject IJSRuntime JSRuntime
 @inject AuthenticationStateProvider AuthenticationStateProvider
+@implements IDisposable
 
 <PageTitle>Games - Dadson's PS2 Challenge</PageTitle>
 
 <div class="games-container">
     <h1>PS2 Games Library</h1>
+
+    @if (isOffline)
+    {
+        <div class="offline-banner">
+            <span>📡 Offline Mode - Showing cached data</span>
+        </div>
+    }
 
     @if (isLoading)
     {
@@ -22,7 +30,7 @@
     }
     else if (allGames == null || !allGames.Any())
     {
-        <p>No games found.</p>
+        <p>No games found.@(isOffline ? " Please connect to the internet to load games data." : "")</p>
     }
     else
     {
@@ -163,19 +171,68 @@
     private bool sortAscending = true;
     private bool isLoading = true;
     private bool isAdmin = false;
+    private bool isOffline = false;
 
     private bool showModal = false;
     private bool isEditMode = false;
     private GameDto? selectedGame = null;
 
+    private DotNetObjectReference<Games>? dotNetHelper;
+
     protected override async Task OnInitializedAsync()
     {
         await CheckAdminStatus();
         await LoadPreferences();
+        await CheckOnlineStatus();
         await LoadGames();
         await LoadOwnedTypes();
         await LoadExclusionReasons();
         await LoadCompletionStatus();
+        await CacheGamesData();
+        await SetupOfflineListener();
+    }
+
+    private async Task CheckOnlineStatus()
+    {
+        try
+        {
+            isOffline = await JSRuntime.InvokeAsync<bool>("pwaHelper.isOffline");
+        }
+        catch
+        {
+            isOffline = false;
+        }
+    }
+
+    private async Task SetupOfflineListener()
+    {
+        try
+        {
+            dotNetHelper = DotNetObjectReference.Create(this);
+            await JSRuntime.InvokeVoidAsync("pwaHelper.setupOnlineOfflineListeners", dotNetHelper);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to setup offline listener: {ex.Message}");
+        }
+    }
+
+    [JSInvokable]
+    public async Task OnNetworkStatusChanged(bool isOnline)
+    {
+        isOffline = !isOnline;
+        
+        if (isOnline)
+        {
+            // Reload data when coming back online
+            await LoadGames();
+            await LoadOwnedTypes();
+            await LoadExclusionReasons();
+            await LoadCompletionStatus();
+            await CacheGamesData();
+        }
+        
+        StateHasChanged();
     }
 
     private async Task CheckAdminStatus()
@@ -255,11 +312,57 @@
         catch (Exception ex)
         {
             Console.WriteLine($"Error loading games: {ex.Message}");
-            allGames = new List<GameDto>();
+            
+            // Try to load from cache if online load fails
+            await LoadFromCache();
         }
         finally
         {
             isLoading = false;
+        }
+    }
+
+    private async Task LoadFromCache()
+    {
+        try
+        {
+            var cachedData = await JSRuntime.InvokeAsync<JsonElement?>("pwaHelper.getCachedGamesData");
+            
+            if (cachedData.HasValue && cachedData.Value.ValueKind != JsonValueKind.Null)
+            {
+                var jsonOptions = new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                };
+
+                if (cachedData.Value.TryGetProperty("games", out var gamesElement))
+                {
+                    allGames = JsonSerializer.Deserialize<List<GameDto>>(gamesElement.GetRawText(), jsonOptions) ?? new List<GameDto>();
+                }
+
+                if (cachedData.Value.TryGetProperty("ownedTypes", out var ownedTypesElement))
+                {
+                    ownedTypes = JsonSerializer.Deserialize<Dictionary<int, string>>(ownedTypesElement.GetRawText(), jsonOptions) ?? new();
+                }
+
+                if (cachedData.Value.TryGetProperty("exclusionReasons", out var exclusionReasonsElement))
+                {
+                    exclusionReasons = JsonSerializer.Deserialize<Dictionary<int, string>>(exclusionReasonsElement.GetRawText(), jsonOptions) ?? new();
+                }
+
+                if (cachedData.Value.TryGetProperty("completionStatus", out var completionStatusElement))
+                {
+                    completionStatus = JsonSerializer.Deserialize<Dictionary<int, string>>(completionStatusElement.GetRawText(), jsonOptions) ?? new();
+                }
+
+                isOffline = true;
+                Console.WriteLine("Loaded games from cache");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading from cache: {ex.Message}");
+            allGames = new List<GameDto>();
         }
     }
 
@@ -296,6 +399,22 @@
         catch
         {
             completionStatus = new();
+        }
+    }
+
+    private async Task CacheGamesData()
+    {
+        try
+        {
+            if (allGames.Any())
+            {
+                await JSRuntime.InvokeVoidAsync("pwaHelper.cacheGamesData", 
+                    allGames, ownedTypes, exclusionReasons, completionStatus);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to cache games data: {ex.Message}");
         }
     }
 
@@ -377,6 +496,7 @@
         await LoadOwnedTypes();
         await LoadExclusionReasons();
         await LoadCompletionStatus();
+        await CacheGamesData();
         CloseModal();
     }
 
@@ -387,6 +507,7 @@
         await LoadOwnedTypes();
         await LoadExclusionReasons();
         await LoadCompletionStatus();
+        await CacheGamesData();
         CloseModal();
     }
 
@@ -461,5 +582,10 @@
         if (game.IsOwned)
             return "owned-row";
         return string.Empty;
+    }
+
+    public void Dispose()
+    {
+        dotNetHelper?.Dispose();
     }
 }
