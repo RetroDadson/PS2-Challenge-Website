@@ -892,6 +892,26 @@ h1:has(> [style*="background"]) {
     color: var(--primary-color) !important;
 }
 
+/* Offline Banner */
+.offline-banner {
+    background: linear-gradient(135deg, rgba(255, 152, 0, 0.2) 0%, rgba(255, 87, 34, 0.2) 100%);
+    border: 2px solid var(--accent-orange);
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    color: var(--accent-orange);
+    font-weight: 600;
+    box-shadow: 0 4px 15px rgba(255, 152, 0, 0.3);
+}
+
+.offline-banner span {
+    font-size: 1rem;
+}
+
 /* Responsive Modal Styles */
 @media (max-width: 768px) {
     .modal-content,
