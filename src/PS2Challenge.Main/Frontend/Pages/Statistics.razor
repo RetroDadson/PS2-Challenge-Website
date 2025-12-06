@@ -433,10 +433,10 @@
     {
         try
         {
-            // Get completed games with duration, ordered by completion date
+            // Get completed games with duration, ordered by game ID
             var completedGames = allProgress
                 .Where(p => p.DateFinished.HasValue && p.CompletionTime.HasValue)
-                .OrderBy(p => p.DateFinished)
+                .OrderBy(p => p.ProgressId)
                 .Select((p, index) => new
                 {
                     GameNumber = index + 1,
