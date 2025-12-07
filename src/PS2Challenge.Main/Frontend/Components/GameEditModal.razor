@@ -70,7 +70,13 @@
 
                     <h3>Serial Numbers</h3>
                     <div class="serial-numbers-section">
-                        @if (serialNumbers.Any())
+                        @if (isLoadingData)
+                        {
+                            <div class="loading-container">
+                                <p>Loading serial numbers...</p>
+                            </div>
+                        }
+                        else if (serialNumbers.Any())
                         {
                             <div class="serial-numbers-list">
                                 @foreach (var serial in serialNumbers.Where(s => !s.IsDeleted))
@@ -216,6 +222,7 @@
     private List<OwnershipType> ownershipTypes = new();
     private string? errorMessage;
     private bool isProcessing;
+    private bool isLoadingData;
 
     // Internal class to track serial numbers (both existing and new)
     private class SerialNumberEntry
@@ -257,6 +264,8 @@
 
         if (IsVisible && Game != null)
         {
+            isLoadingData = true;
+            
             internalTitle = Game.Title;
             internalDeveloper = Game.Developer;
             internalPublisher = Game.Publisher;
@@ -265,37 +274,37 @@
             internalReleasedInEuPalOrNa = Game.ReleasedInEuPalOrNa;
             internalIsExcluded = Game.IsExcluded;
             
-            // Load serial numbers if in edit mode
+            // Load all async data before setting up the UI state
             if (IsEditMode)
             {
-                await LoadSerialNumbers();
+                // Load serial numbers, ownership, and exclusion in parallel
+                var tasks = new List<Task>
+                {
+                    LoadSerialNumbers(),
+                    LoadCurrentOwnership()
+                };
+                
+                if (Game.IsExcluded)
+                {
+                    tasks.Add(LoadCurrentExclusion());
+                }
+                else
+                {
+                    internalExclusionReason = string.Empty;
+                }
+
+                await Task.WhenAll(tasks);
             }
             else
             {
                 serialNumbers.Clear();
                 ClearSerialNumberForm();
-            }
-            
-            // Load current ownership details if game is owned and in edit mode
-            if (IsEditMode && Game.IsOwned)
-            {
-                await LoadCurrentOwnership();
-            }
-            else
-            {
                 internalOwnPhysicalCopy = false;
                 internalTypeOwned = string.Empty;
-            }
-            
-            // Load current exclusion details if game is excluded and in edit mode
-            if (IsEditMode && Game.IsExcluded)
-            {
-                await LoadCurrentExclusion();
-            }
-            else
-            {
                 internalExclusionReason = string.Empty;
             }
+            
+            isLoadingData = false;
         }
         else if (IsVisible && !IsEditMode)
         {
@@ -439,6 +448,7 @@
         serialNumbers.Clear();
         ClearSerialNumberForm();
         errorMessage = null;
+        isLoadingData = false;
     }
 
     private async Task Close()

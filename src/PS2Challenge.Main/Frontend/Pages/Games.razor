@@ -182,22 +182,22 @@
     protected override async Task OnInitializedAsync()
     {
         await CheckAdminStatus();
-        await LoadPreferences();
-        await CheckOnlineStatus();
         await LoadGames();
         await LoadOwnedTypes();
         await LoadExclusionReasons();
         await LoadCompletionStatus();
-        await CacheGamesData();
-        await SetupOfflineListener();
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
         {
-            // Cache data after first render to ensure it's available offline
+            // All JavaScript interop calls must be made after first render
+            await LoadPreferences();
+            await CheckOnlineStatus();
+            await SetupOfflineListener();
             await CacheGamesData();
+            StateHasChanged(); // Trigger re-render if offline state changed
         }
     }
 
