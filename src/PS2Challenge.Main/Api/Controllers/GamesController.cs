@@ -470,6 +470,8 @@ public class GamesController : ControllerBase
             validationErrors.Add("Title is required");
         }
 
+        validationErrors.AddRange(ValidateOwnershipRequest(request));
+
         if (validationErrors.Any())
         {
             return BadRequest(new { errors = validationErrors });
@@ -657,6 +659,152 @@ public class GamesController : ControllerBase
     }
 
     // ============================================================================
+    // ADMIN ENDPOINTS - SERIAL NUMBERS
+    // ============================================================================
+
+    /// <summary>
+    /// Add a serial number for a game by title (Admin only)
+    /// </summary>
+    /// <param name="request">Serial number details including game title, serial number, region, and notes</param>
+    /// <returns>Confirmation with serial number details and game information</returns>
+    /// <response code="200">Serial number added successfully</response>
+    /// <response code="400">Invalid request data - title and serial number required</response>
+    /// <response code="401">Unauthorized - authentication required</response>
+    /// <response code="403">Forbidden - admin access required</response>
+    /// <response code="404">Game not found</response>
+    /// <response code="409">Conflict - serial number already exists for another game</response>
+    /// <response code="500">Internal server error</response>
+    /// <remarks>
+    /// Each serial number must be unique across all games in the database.
+    /// If the serial number already exists, the response will include the game ID and title of the existing game.
+    /// 
+    /// Sample request:
+    /// 
+    ///     POST /api/games/serial-numbers
+    ///     {
+    ///         "title": "Final Fantasy X",
+    ///         "serialNumber": "SLUS-20062",
+    ///         "region": "NTSC-U",
+    ///         "notes": "North American release"
+    ///     }
+    /// </remarks>
+    [HttpPost("serial-numbers")]
+    [Authorize(Policy = "AdminCookieOrApiKey")]
+    [ProducesResponseType(typeof(AddSerialNumberResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(SerialNumberConflictResponse), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> AddSerialNumber([FromBody] AddSerialNumberRequest request)
+    {
+        if (request == null)
+        {
+            return BadRequest(new { message = "Request data is required" });
+        }
+
+        var validationErrors = new List<string>();
+
+        if (string.IsNullOrWhiteSpace(request.Title))
+        {
+            validationErrors.Add("Title is required");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.SerialNumber))
+        {
+            validationErrors.Add("Serial number is required");
+        }
+        else if (request.SerialNumber.Length > 50)
+        {
+            validationErrors.Add("Serial number cannot exceed 50 characters");
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Region) && request.Region.Length > 50)
+        {
+            validationErrors.Add("Region cannot exceed 50 characters");
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Notes) && request.Notes.Length > 500)
+        {
+            validationErrors.Add("Notes cannot exceed 500 characters");
+        }
+
+        if (validationErrors.Any())
+        {
+            return BadRequest(new { errors = validationErrors });
+        }
+
+        try
+        {
+            var serialNumber = await _gameService.AddSerialNumberAsync(
+                request.Title,
+                request.SerialNumber,
+                request.Region,
+                request.Notes);
+
+            // Get the game title for the response
+            var game = await _gameService.GetGameByIdAsync(serialNumber.GameId);
+
+            var adminUsername = User.FindFirst(ClaimTypes.Name)?.Value;
+            _logger.LogInformation(
+                "AUDIT: Admin {AdminUser} added serial number '{SerialNumber}' to game ID {GameId}: {GameTitle}",
+                adminUsername, serialNumber.SerialNumber, serialNumber.GameId, game?.Title ?? request.Title);
+
+            var response = new AddSerialNumberResponse
+            {
+                SerialId = serialNumber.SerialId,
+                GameId = serialNumber.GameId,
+                GameTitle = game?.Title ?? request.Title,
+                SerialNumber = serialNumber.SerialNumber,
+                Region = serialNumber.Region,
+                Notes = serialNumber.Notes,
+                Message = $"Serial number '{serialNumber.SerialNumber}' added successfully to '{game?.Title ?? request.Title}'"
+            };
+
+            return Ok(response);
+        }
+        catch (InvalidOperationException ex)
+        {
+            // Check if this is a serial number conflict or game not found
+            if (ex.Message.Contains("already exists for game ID"))
+            {
+                // Extract game ID and title from the exception message
+                // Message format: "Serial number 'XXX' already exists for game ID Y ('Title')"
+                var match = System.Text.RegularExpressions.Regex.Match(
+                    ex.Message,
+                    @"game ID (\d+) \('([^']+)'\)");
+
+                if (match.Success && int.TryParse(match.Groups[1].Value, out var existingGameId))
+                {
+                    var conflictResponse = new SerialNumberConflictResponse
+                    {
+                        Error = $"Serial number '{request.SerialNumber}' already exists",
+                        ExistingGameId = existingGameId,
+                        ExistingGameTitle = match.Groups[2].Value,
+                        SerialNumber = request.SerialNumber
+                    };
+
+                    return Conflict(conflictResponse);
+                }
+
+                // Fallback if regex doesn't match
+                return Conflict(new { error = ex.Message });
+            }
+            else
+            {
+                // Game not found
+                return NotFound(new { error = ex.Message });
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error adding serial number for game '{GameTitle}'", request.Title);
+            return StatusCode(500, new { message = "Internal server error", error = ex.Message });
+        }
+    }
+
+    // ============================================================================
     // HELPER METHODS
     // ============================================================================
 
@@ -703,6 +851,18 @@ public class GamesController : ControllerBase
         return validationErrors;
     }
 
+    private List<string> ValidateOwnershipRequest(AddGameOwnedRequest request)
+    {
+        var validationErrors = new List<string>();
+
+        if (request.OwnPhysicalCopy && string.IsNullOrWhiteSpace(request.TypeOwned))
+        {
+            validationErrors.Add("Type owned is required when marking as owned");
+        }
+
+        return validationErrors;
+    }
+
     // ============================================================================
     // REQUEST MODELS
     // ============================================================================
@@ -737,5 +897,98 @@ public class GamesController : ControllerBase
         /// Type of copy owned (e.g., "Base", "Platinum")
         /// </summary>
         public string? TypeOwned { get; set; }
+    }
+
+    /// <summary>
+    /// Request model for adding a serial number to a game
+    /// </summary>
+    public class AddSerialNumberRequest
+    {
+        /// <summary>
+        /// The title of the game
+        /// </summary>
+        public required string Title { get; set; }
+
+        /// <summary>
+        /// The serial number to add
+        /// </summary>
+        public required string SerialNumber { get; set; }
+
+        /// <summary>
+        /// The region of the serial number (optional)
+        /// </summary>
+        public string? Region { get; set; }
+
+        /// <summary>
+        /// Additional notes or description (optional)
+        /// </summary>
+        public string? Notes { get; set; }
+    }
+
+    /// <summary>
+    /// Response model for successful serial number addition
+    /// </summary>
+    public class AddSerialNumberResponse
+    {
+        /// <summary>
+        /// The ID of the serial number record
+        /// </summary>
+        public int SerialId { get; set; }
+
+        /// <summary>
+        /// The ID of the game the serial number is associated with
+        /// </summary>
+        public int GameId { get; set; }
+
+        /// <summary>
+        /// The title of the game
+        /// </summary>
+        public string GameTitle { get; set; } = null!;
+
+        /// <summary>
+        /// The serial number that was added
+        /// </summary>
+        public string SerialNumber { get; set; } = null!;
+
+        /// <summary>
+        /// The region of the serial number
+        /// </summary>
+        public string? Region { get; set; }
+
+        /// <summary>
+        /// Additional notes or description
+        /// </summary>
+        public string? Notes { get; set; }
+
+        /// <summary>
+        /// Confirmation message
+        /// </summary>
+        public string Message { get; set; } = null!;
+    }
+
+    /// <summary>
+    /// Response model for serial number conflict
+    /// </summary>
+    public class SerialNumberConflictResponse
+    {
+        /// <summary>
+        /// Error message
+        /// </summary>
+        public string Error { get; set; } = null!;
+
+        /// <summary>
+        /// The ID of the existing game with the conflicting serial number
+        /// </summary>
+        public int ExistingGameId { get; set; }
+
+        /// <summary>
+        /// The title of the existing game with the conflicting serial number
+        /// </summary>
+        public string ExistingGameTitle { get; set; } = null!;
+
+        /// <summary>
+        /// The serial number that caused the conflict
+        /// </summary>
+        public string SerialNumber { get; set; } = null!;
     }
 }

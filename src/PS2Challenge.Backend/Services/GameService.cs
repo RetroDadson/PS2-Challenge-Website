@@ -468,4 +468,47 @@ public class GameService
             .ToListAsync();
     }
 
+    /// <summary>
+    /// Adds a serial number for a game by title.
+    /// Throws InvalidOperationException if game not found, or if serial number already exists.
+    /// </summary>
+    public virtual async Task<GameSerialNumber> AddSerialNumberAsync(string title, string serialNumber, string? region, string? notes)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
+
+        // Find the game by title
+        var game = await dbContext.Games
+            .FirstOrDefaultAsync(g => g.Title == title);
+
+        if (game == null)
+        {
+            throw new InvalidOperationException($"No game found with title '{title}'");
+        }
+
+        // Check if serial number already exists
+        var existingSerial = await dbContext.GameSerialNumbers
+            .FirstOrDefaultAsync(gsn => gsn.SerialNumber == serialNumber);
+
+        if (existingSerial != null)
+        {
+            var existingGame = await dbContext.Games.FindAsync(existingSerial.GameId);
+            throw new InvalidOperationException(
+                $"Serial number '{serialNumber}' already exists for game ID {existingSerial.GameId} ('{existingGame?.Title ?? "Unknown"}')");
+        }
+
+        // Create serial number entry
+        var gameSerialNumber = new GameSerialNumber
+        {
+            GameId = game.Id,
+            SerialNumber = serialNumber,
+            Region = region,
+            Notes = notes
+        };
+
+        dbContext.GameSerialNumbers.Add(gameSerialNumber);
+        await dbContext.SaveChangesAsync();
+
+        return gameSerialNumber;
+    }
 }

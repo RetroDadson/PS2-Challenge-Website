@@ -244,3 +244,57 @@ public class ApplicationUserBuilder
         };
     }
 }
+
+/// <summary>
+/// Builder class for creating test GameSerialNumber objects with fluent API
+/// </summary>
+public class GameSerialNumberBuilder
+{
+    private int _serialId = 1;
+    private int _gameId = 1;
+    private string _serialNumber = "SLUS-20062";
+    private string? _region = "NTSC-U";
+    private string? _notes;
+
+    public GameSerialNumberBuilder WithSerialId(int serialId)
+    {
+        _serialId = serialId;
+        return this;
+    }
+
+    public GameSerialNumberBuilder WithGameId(int gameId)
+    {
+        _gameId = gameId;
+        return this;
+    }
+
+    public GameSerialNumberBuilder WithSerialNumber(string serialNumber)
+    {
+        _serialNumber = serialNumber;
+        return this;
+    }
+
+    public GameSerialNumberBuilder WithRegion(string? region)
+    {
+        _region = region;
+        return this;
+    }
+
+    public GameSerialNumberBuilder WithNotes(string? notes)
+    {
+        _notes = notes;
+        return this;
+    }
+
+    public GameSerialNumber Build()
+    {
+        return new GameSerialNumber
+        {
+            SerialId = _serialId,
+            GameId = _gameId,
+            SerialNumber = _serialNumber,
+            Region = _region,
+            Notes = _notes
+        };
+    }
+}

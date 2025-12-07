@@ -282,6 +282,135 @@
     box-shadow: 0 4px 15px rgba(220, 53, 69, 0.4);
 }
 
+/* Serial Numbers Section */
+.serial-numbers-section {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    padding: 1.5rem;
+    background: var(--background-dark, #0a0a0a);
+    border-radius: 8px;
+    border: 1px solid var(--border-color, #2a2a2a);
+}
+
+.serial-numbers-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.serial-number-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.5rem;
+    padding: 1.25rem 1.5rem;
+    background: var(--background-card, #1a1a1a);
+    border: 1px solid var(--border-color, #2a2a2a);
+    border-radius: 8px;
+    transition: all 0.2s ease;
+    min-height: 60px;
+}
+
+.serial-number-item:hover {
+    border-color: var(--primary-color, #e91e63);
+    box-shadow: 0 2px 8px rgba(233, 30, 99, 0.15);
+}
+
+.serial-number-display {
+    display: flex;
+    align-items: center;
+    gap: 1.25rem;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.serial-code {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-size: 1rem;
+    color: var(--text-primary, #ffffff);
+    font-weight: 600;
+    white-space: nowrap;
+    flex-shrink: 0;
+    letter-spacing: 0.05em;
+}
+
+.serial-region {
+    background: rgba(233, 30, 99, 0.2);
+    color: var(--primary-color, #e91e63);
+    padding: 0.4rem 1rem;
+    border-radius: 14px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.serial-notes {
+    font-size: 0.95rem;
+    color: var(--text-secondary, #b0b0b0);
+    font-style: italic;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.btn-icon {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-color, #2a2a2a);
+    border-radius: 6px;
+    font-size: 1.8rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0.4rem 0.6rem;
+    transition: all 0.2s ease;
+    opacity: 0.8;
+    min-width: 42px;
+    min-height: 42px;
+    max-width: 42px;
+    max-height: 42px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary, #b0b0b0);
+    font-weight: 300;
+    flex-shrink: 0;
+    flex-grow: 0;
+}
+
+.btn-icon:hover {
+    transform: scale(1.1);
+    opacity: 1;
+    background: rgba(255, 68, 68, 0.15);
+    border-color: #ff4444;
+    color: #ff4444;
+}
+
+.btn-remove:hover {
+    color: #ff4444;
+}
+
+.add-serial-number-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    padding: 1.5rem;
+    background: rgba(233, 30, 99, 0.05);
+    border-radius: 8px;
+    border: 1px dashed var(--border-color, #2a2a2a);
+    margin-top: 0.5rem;
+}
+
+.no-data-message {
+    text-align: center;
+    color: var(--text-secondary, #b0b0b0);
+    font-style: italic;
+    padding: 2rem;
+    margin: 0.5rem 0;
+}
+
 /* Suggestions dropdown (from Votes.razor pattern) */
 .suggestions {
     position: absolute;
@@ -338,5 +467,11 @@
     .btn-danger {
         width: 100%;
         text-align: center;
+    }
+
+    .serial-number-display {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
     }
 }
