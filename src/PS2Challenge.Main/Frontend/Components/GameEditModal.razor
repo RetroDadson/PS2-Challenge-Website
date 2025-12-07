@@ -68,6 +68,58 @@
 
                     <hr class="section-divider" />
 
+                    <h3>Serial Numbers</h3>
+                    <div class="serial-numbers-section">
+                        @if (serialNumbers.Any())
+                        {
+                            <div class="serial-numbers-list">
+                                @foreach (var serial in serialNumbers.Where(s => !s.IsDeleted))
+                                {
+                                    <div class="serial-number-item">
+                                        <div class="serial-number-display">
+                                            <span class="serial-code"><strong>@serial.SerialNumber</strong></span>
+                                            @if (!string.IsNullOrWhiteSpace(serial.Region))
+                                            {
+                                                <span class="serial-region badge">@serial.Region</span>
+                                            }
+                                            @if (!string.IsNullOrWhiteSpace(serial.Notes))
+                                            {
+                                                <span class="serial-notes">@serial.Notes</span>
+                                            }
+                                        </div>
+                                        <button type="button" class="btn-icon btn-remove" @onclick="() => RemoveSerialNumber(serial)" title="Remove">×</button>
+                                    </div>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <p class="no-data-message">No serial numbers added yet.</p>
+                        }
+
+                        <div class="add-serial-number-form">
+                            <div class="form-row">
+                                <div class="form-field">
+                                    <label>Serial Number</label>
+                                    <input type="text" @bind="newSerialNumber" class="search-input" maxlength="50" placeholder="e.g., SLUS-20062" />
+                                </div>
+                                <div class="form-field">
+                                    <label>Region</label>
+                                    <input type="text" @bind="newSerialRegion" class="search-input" maxlength="50" placeholder="e.g., NTSC-U, PAL" />
+                                </div>
+                            </div>
+                            <div class="form-field">
+                                <label>Notes (Optional)</label>
+                                <input type="text" @bind="newSerialNotes" class="search-input" maxlength="500" placeholder="e.g., North American release" />
+                            </div>
+                            <button type="button" class="btn btn-secondary" @onclick="AddSerialNumber" disabled="@(string.IsNullOrWhiteSpace(newSerialNumber))">
+                                + Add Serial Number
+                            </button>
+                        </div>
+                    </div>
+
+                    <hr class="section-divider" />
+
                     <h3>Ownership Status</h3>
                     <div class="form-field">
                         <label>
@@ -155,9 +207,25 @@
     private bool internalIsExcluded;
     private string? internalExclusionReason;
 
+    // Serial numbers management
+    private List<SerialNumberEntry> serialNumbers = new();
+    private string? newSerialNumber;
+    private string? newSerialRegion;
+    private string? newSerialNotes;
+
     private List<OwnershipType> ownershipTypes = new();
     private string? errorMessage;
     private bool isProcessing;
+
+    // Internal class to track serial numbers (both existing and new)
+    private class SerialNumberEntry
+    {
+        public int? SerialId { get; set; } // Null for new entries
+        public required string SerialNumber { get; set; }
+        public string? Region { get; set; }
+        public string? Notes { get; set; }
+        public bool IsDeleted { get; set; } // Track if existing entry should be deleted
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -197,6 +265,17 @@
             internalReleasedInEuPalOrNa = Game.ReleasedInEuPalOrNa;
             internalIsExcluded = Game.IsExcluded;
             
+            // Load serial numbers if in edit mode
+            if (IsEditMode)
+            {
+                await LoadSerialNumbers();
+            }
+            else
+            {
+                serialNumbers.Clear();
+                ClearSerialNumberForm();
+            }
+            
             // Load current ownership details if game is owned and in edit mode
             if (IsEditMode && Game.IsOwned)
             {
@@ -223,6 +302,81 @@
             ResetForm();
         }
         errorMessage = null;
+    }
+
+    private async Task LoadSerialNumbers()
+    {
+        try
+        {
+            using var scope = ScopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
+            
+            var existingSerials = await db.GameSerialNumbers
+                .AsNoTracking()
+                .Where(gsn => gsn.GameId == Game!.Id)
+                .ToListAsync();
+            
+            serialNumbers = existingSerials.Select(s => new SerialNumberEntry
+            {
+                SerialId = s.SerialId,
+                SerialNumber = s.SerialNumber,
+                Region = s.Region,
+                Notes = s.Notes,
+                IsDeleted = false
+            }).ToList();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading serial numbers: {ex.Message}");
+            serialNumbers.Clear();
+        }
+    }
+
+    private void AddSerialNumber()
+    {
+        if (string.IsNullOrWhiteSpace(newSerialNumber))
+        {
+            return;
+        }
+
+        // Check for duplicates in the current list
+        if (serialNumbers.Any(s => s.SerialNumber.Equals(newSerialNumber.Trim(), StringComparison.OrdinalIgnoreCase) && !s.IsDeleted))
+        {
+            errorMessage = $"Serial number '{newSerialNumber}' is already in the list.";
+            return;
+        }
+
+        serialNumbers.Add(new SerialNumberEntry
+        {
+            SerialId = null, // New entry, no ID yet
+            SerialNumber = newSerialNumber.Trim(),
+            Region = newSerialRegion?.Trim(),
+            Notes = newSerialNotes?.Trim()
+        });
+
+        ClearSerialNumberForm();
+        errorMessage = null;
+    }
+
+    private void RemoveSerialNumber(SerialNumberEntry serial)
+    {
+        if (serial.SerialId.HasValue)
+        {
+            // Existing entry - mark for deletion
+            serial.IsDeleted = true;
+        }
+        else
+        {
+            // New entry - just remove from list
+            serialNumbers.Remove(serial);
+        }
+    }
+
+    private void ClearSerialNumberForm()
+    {
+        newSerialNumber = string.Empty;
+        newSerialRegion = string.Empty;
+        newSerialNotes = string.Empty;
     }
 
     private async Task LoadCurrentOwnership()
@@ -282,6 +436,8 @@
         internalTypeOwned = string.Empty;
         internalIsExcluded = false;
         internalExclusionReason = string.Empty;
+        serialNumbers.Clear();
+        ClearSerialNumberForm();
         errorMessage = null;
     }
 
@@ -335,6 +491,8 @@
             using var scope = ScopeFactory.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
 
+            int gameId;
+
             if (IsEditMode && Game != null && Game.Id > 0)
             {
                 // Update existing game
@@ -350,15 +508,13 @@
                 };
 
                 await GameService.UpdateGameAsync(Game.Id, gameDto);
+                gameId = Game.Id;
 
                 // Update ownership (service will determine if owned based on physical copy or type)
                 await GameService.UpdateOwnershipAsync(Game.Id, internalOwnPhysicalCopy, internalTypeOwned ?? string.Empty);
 
                 // Update exclusion - this might affect the total game count
                 await GameService.UpdateExclusionAsync(Game.Id, internalIsExcluded, internalExclusionReason);
-                
-                // Notify SignalR clients that game data was updated
-                await HubContext.Clients.All.SendAsync("GamesUpdated");
             }
             else
             {
@@ -374,6 +530,7 @@
                 };
 
                 var createdGame = await GameService.AddGameAsync(gameDto);
+                gameId = createdGame.Id;
 
                 // Set ownership (service will determine if owned based on physical copy or type)
                 await GameService.UpdateOwnershipAsync(createdGame.Id, internalOwnPhysicalCopy, internalTypeOwned ?? string.Empty);
@@ -383,10 +540,13 @@
                 {
                     await GameService.UpdateExclusionAsync(createdGame.Id, true, internalExclusionReason ?? "No reason provided");
                 }
-                
-                // Notify SignalR clients that a game was added
-                await HubContext.Clients.All.SendAsync("GamesUpdated");
             }
+
+            // Handle serial numbers
+            await SaveSerialNumbers(gameId);
+
+            // Notify SignalR clients that game data was updated
+            await HubContext.Clients.All.SendAsync("GamesUpdated");
 
             await OnSave.InvokeAsync();
         }
@@ -401,12 +561,55 @@
         }
     }
 
+    private async Task SaveSerialNumbers(int gameId)
+    {
+        using var scope = ScopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
+
+        // Delete marked serial numbers
+        var toDelete = serialNumbers.Where(s => s.SerialId.HasValue && s.IsDeleted).ToList();
+        foreach (var serial in toDelete)
+        {
+            var existing = await db.GameSerialNumbers.FindAsync(serial.SerialId!.Value);
+            if (existing != null)
+            {
+                db.GameSerialNumbers.Remove(existing);
+            }
+        }
+
+        // Add new serial numbers
+        var toAdd = serialNumbers.Where(s => !s.SerialId.HasValue && !s.IsDeleted).ToList();
+        foreach (var serial in toAdd)
+        {
+            // Check if serial number already exists in database
+            var duplicate = await db.GameSerialNumbers
+                .FirstOrDefaultAsync(gsn => gsn.SerialNumber == serial.SerialNumber);
+            
+            if (duplicate != null)
+            {
+                var existingGame = await db.Games.FindAsync(duplicate.GameId);
+                throw new InvalidOperationException(
+                    $"Serial number '{serial.SerialNumber}' already exists for game '{existingGame?.Title ?? "Unknown"}' (ID: {duplicate.GameId})");
+            }
+
+            db.GameSerialNumbers.Add(new GameSerialNumber
+            {
+                GameId = gameId,
+                SerialNumber = serial.SerialNumber,
+                Region = serial.Region,
+                Notes = serial.Notes
+            });
+        }
+
+        await db.SaveChangesAsync();
+    }
+
     private async Task DeleteGame()
     {
         if (Game == null || !IsEditMode) return;
 
         var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", 
-            $"Are you sure you want to delete '{Game.Title}'? This will also remove all related data (ownership, exclusions, progress).");
+            $"Are you sure you want to delete '{Game.Title}'? This will also remove all related data (ownership, exclusions, progress, serial numbers).");
 
         if (confirmed)
         {

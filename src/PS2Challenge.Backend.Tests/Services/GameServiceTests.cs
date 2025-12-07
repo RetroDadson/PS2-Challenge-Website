@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using PS2Challenge.Backend.Data;
 using PS2Challenge.Backend.Models;
 using PS2Challenge.Backend.Services;
@@ -419,5 +420,77 @@ public class GameServiceTests : IDisposable
         Assert.Equal("Completed", result[1]);
         Assert.Equal("In Progress", result[2]);
         Assert.False(result.ContainsKey(3)); // Game 3 has no progress, so it's not in the dictionary
+    }
+
+    [Fact]
+    public async Task AddSerialNumberAsync_AddsSerialNumberSuccessfully()
+    {
+        // Arrange
+        var game = new GameDtoBuilder().WithId(1).WithTitle("Test Game").Build();
+        _context.Games.Add(game);
+        await _context.SaveChangesAsync();
+
+        // Act
+        var result = await _gameService.AddSerialNumberAsync("Test Game", "SLUS-20062", "NTSC-U", "North American release");
+
+        // Assert
+        Assert.Equal(1, result.GameId);
+        Assert.Equal("SLUS-20062", result.SerialNumber);
+        Assert.Equal("NTSC-U", result.Region);
+        Assert.Equal("North American release", result.Notes);
+    }
+
+    [Fact]
+    public async Task AddSerialNumberAsync_ThrowsWhenGameNotFound()
+    {
+        // Act & Assert
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => _gameService.AddSerialNumberAsync("Non Existent Game", "SLUS-20062", "NTSC-U", null));
+    }
+
+    [Fact]
+    public async Task AddSerialNumberAsync_ThrowsWhenSerialNumberAlreadyExists()
+    {
+        // Arrange
+        var game1 = new GameDtoBuilder().WithId(1).WithTitle("Game 1").Build();
+        var game2 = new GameDtoBuilder().WithId(2).WithTitle("Game 2").Build();
+        _context.Games.AddRange(game1, game2);
+        await _context.SaveChangesAsync();
+
+        // Add serial number to game 1
+        await _gameService.AddSerialNumberAsync("Game 1", "SLUS-20062", "NTSC-U", null);
+
+        // Act & Assert - Try to add same serial to game 2
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => _gameService.AddSerialNumberAsync("Game 2", "SLUS-20062", "PAL", null));
+
+        Assert.Contains("SLUS-20062", exception.Message);
+        Assert.Contains("already exists", exception.Message);
+        Assert.Contains("Game 1", exception.Message);
+    }
+
+    [Fact]
+    public async Task AddSerialNumberAsync_AllowsMultipleSerialNumbersForSameGame()
+    {
+        // Arrange
+        var game = new GameDtoBuilder().WithId(1).WithTitle("Test Game").Build();
+        _context.Games.Add(game);
+        await _context.SaveChangesAsync();
+
+        // Act - Add multiple serial numbers for the same game
+        var serial1 = await _gameService.AddSerialNumberAsync("Test Game", "SLUS-20062", "NTSC-U", null);
+        var serial2 = await _gameService.AddSerialNumberAsync("Test Game", "SCES-50326", "PAL", null);
+        var serial3 = await _gameService.AddSerialNumberAsync("Test Game", "SLPS-25006", "NTSC-J", null);
+
+        // Assert
+        Assert.Equal(1, serial1.GameId);
+        Assert.Equal(1, serial2.GameId);
+        Assert.Equal(1, serial3.GameId);
+        Assert.NotEqual(serial1.SerialNumber, serial2.SerialNumber);
+        Assert.NotEqual(serial1.SerialNumber, serial3.SerialNumber);
+        Assert.NotEqual(serial2.SerialNumber, serial3.SerialNumber);
+
+        var allSerials = await _context.GameSerialNumbers.Where(s => s.GameId == 1).ToListAsync();
+        Assert.Equal(3, allSerials.Count);
     }
 }

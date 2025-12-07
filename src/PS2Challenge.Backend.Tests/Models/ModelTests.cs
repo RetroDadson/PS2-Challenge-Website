@@ -359,3 +359,93 @@ public class OwnershipTypeTests
         Assert.Equal(string.Empty, ownershipType.TypeOwned);
     }
 }
+
+public class GameSerialNumberTests
+{
+    [Fact]
+    public void GameSerialNumber_CanBeCreated()
+    {
+        // Act
+        var serialNumber = new GameSerialNumber
+        {
+            SerialId = 1,
+            GameId = 1,
+            SerialNumber = "SLUS-20062",
+            Region = "NTSC-U",
+            Notes = "North American release"
+        };
+
+        // Assert
+        Assert.Equal(1, serialNumber.SerialId);
+        Assert.Equal(1, serialNumber.GameId);
+        Assert.Equal("SLUS-20062", serialNumber.SerialNumber);
+        Assert.Equal("NTSC-U", serialNumber.Region);
+        Assert.Equal("North American release", serialNumber.Notes);
+    }
+
+    [Fact]
+    public void GameSerialNumber_RequiredFieldsOnly()
+    {
+        // Act
+        var serialNumber = new GameSerialNumber
+        {
+            GameId = 1,
+            SerialNumber = "SCES-50326"
+        };
+
+        // Assert
+        Assert.Equal(1, serialNumber.GameId);
+        Assert.Equal("SCES-50326", serialNumber.SerialNumber);
+        Assert.Null(serialNumber.Region);
+        Assert.Null(serialNumber.Notes);
+    }
+
+    [Fact]
+    public void GameSerialNumber_DefaultValues()
+    {
+        // Act
+        var serialNumber = new GameSerialNumber();
+
+        // Assert
+        Assert.Equal(0, serialNumber.GameId);
+        Assert.Equal(string.Empty, serialNumber.SerialNumber);
+        Assert.Null(serialNumber.Region);
+        Assert.Null(serialNumber.Notes);
+    }
+
+    [Fact]
+    public void GameSerialNumber_MultipleSerialNumbersForSameGame()
+    {
+        // Arrange - Simulating a game released in different regions
+        var serialNumbers = new List<GameSerialNumber>
+        {
+            new() { GameId = 1, SerialNumber = "SLUS-20062", Region = "NTSC-U" },
+            new() { GameId = 1, SerialNumber = "SCES-50326", Region = "PAL" },
+            new() { GameId = 1, SerialNumber = "SLPS-25006", Region = "NTSC-J" }
+        };
+
+        // Assert - All serial numbers share the same GameId
+        Assert.All(serialNumbers, sn => Assert.Equal(1, sn.GameId));
+        Assert.Equal(3, serialNumbers.Count);
+        Assert.Equal(3, serialNumbers.Select(sn => sn.SerialNumber).Distinct().Count());
+    }
+
+    [Fact]
+    public void GameSerialNumber_EachSerialNumberMustBeUnique()
+    {
+        // Arrange - Multiple games cannot share the same serial number
+        var serialNumbers = new List<GameSerialNumber>
+        {
+            new() { GameId = 1, SerialNumber = "SLUS-20062", Region = "NTSC-U" },
+            new() { GameId = 2, SerialNumber = "SLUS-20063", Region = "NTSC-U" },
+            new() { GameId = 3, SerialNumber = "SLUS-20064", Region = "NTSC-U" }
+        };
+
+        // Assert - Each serial number must be unique
+        Assert.Equal(3, serialNumbers.Select(sn => sn.SerialNumber).Distinct().Count());
+        
+        // Assert - Different games should have different serial numbers
+        var groupedBySerial = serialNumbers.GroupBy(sn => sn.SerialNumber);
+        Assert.All(groupedBySerial, group => Assert.Single(group));
+    }
+}
