@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Localization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
 using PS2Challenge.Backend;
+using PS2Challenge.Backend.BackgroundServices;
 using PS2Challenge.Backend.Configuration;
 using PS2Challenge.Backend.Data;
 using PS2Challenge.Backend.Data.Repositories;
@@ -131,11 +132,17 @@ builder.Services.AddSingleton<GameService>();
 // Register VoteService from backend
 builder.Services.AddSingleton<VoteService>();
 
+// Register GameCoverService
+builder.Services.AddScoped<GameCoverService>();
+
 // Add UserRepository
 builder.Services.AddScoped<UserRepository>();
 
 // Add GameRepository
 builder.Services.AddScoped<GameRepository>();
+
+// Register background service for updating cover images
+builder.Services.AddHostedService<CoverImageUpdateService>();
 
 // Add FluentMigrator services (skip in testing)
 if (!isTesting)

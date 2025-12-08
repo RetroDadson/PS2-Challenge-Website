@@ -1,0 +1,186 @@
+@page "/vote-covers-overlay"
+@layout EmptyLayout
+@using PS2Challenge.Backend.Models
+@using PS2Challenge.Backend.Services
+@using Microsoft.EntityFrameworkCore
+@using PS2Challenge.Backend.Data
+@using Microsoft.AspNetCore.SignalR.Client
+@inject IServiceScopeFactory ScopeFactory
+@inject GameCoverService CoverService
+@inject NavigationManager NavigationManager
+@implements IAsyncDisposable
+
+@*
+    Vote Covers Overlay - Stream/OBS Overlay Component
+    
+    Displays cover images for current vote games, cycling through them every 2 seconds
+    with smooth 500ms fade transitions.
+    
+    Designed to be displayed as a browser source in OBS/streaming software.
+    Uses SignalR to auto-update when votes change.
+    Access via: /vote-covers-overlay
+*@
+
+<div class="covers-overlay-container">
+    @if (isLoading)
+    {
+        <div class="loading">Loading...</div>
+    }
+    else if (!coverUrls.Any())
+    {
+        <div class="no-covers">No cover images available</div>
+    }
+    else
+    {
+        @foreach (var (url, index) in coverUrls.Select((url, i) => (url, i)))
+        {
+            <img src="@url" 
+                 alt="Game cover @(index + 1)" 
+                 class="cover-image @(index == currentCoverIndex ? "active" : "")"
+                 @key="url" />
+        }
+    }
+</div>
+
+@code {
+    private List<string> coverUrls = new();
+    private int currentCoverIndex = 0;
+    private bool isLoading = true;
+    private HubConnection? hubConnection;
+    private System.Threading.Timer? cycleTimer;
+    private readonly int cycleDurationMs = 2000; // Change cover every 2 seconds
+    private string? lastDataHash;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadCoverImages();
+
+        // Set up SignalR connection to listen for vote updates
+        hubConnection = new HubConnectionBuilder()
+            .WithUrl(NavigationManager.ToAbsoluteUri("/votesHub"))
+            .WithAutomaticReconnect()
+            .Build();
+
+        // Subscribe to votes updates
+        hubConnection.On("VotesUpdated", async () =>
+        {
+            await LoadCoverImages();
+            await InvokeAsync(StateHasChanged);
+        });
+
+        try
+        {
+            await hubConnection.StartAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error connecting to SignalR hub: {ex.Message}");
+        }
+
+        // Start the cycling timer if we have covers
+        if (coverUrls.Any())
+        {
+            StartCycling();
+        }
+    }
+
+    private async Task LoadCoverImages()
+    {
+        try
+        {
+            isLoading = true;
+            using var scope = ScopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
+
+            // Get current votes ordered by game number
+            var currentVotes = await db.CurrentVotes
+                .AsNoTracking()
+                .OrderBy(cv => cv.GameNumber)
+                .ToListAsync();
+
+            if (!currentVotes.Any())
+            {
+                coverUrls = new List<string>();
+                StopCycling();
+                lastDataHash = string.Empty;
+                return;
+            }
+
+            // Get cover URLs for the games
+            var gameIds = currentVotes.Select(cv => cv.GameId).ToList();
+            var covers = await CoverService.GetCoverUrlsAsync(gameIds);
+
+            // Build list of cover URLs in the correct order (by game number)
+            var newCoverUrls = currentVotes
+                .Where(cv => covers.ContainsKey(cv.GameId))
+                .Select(cv => covers[cv.GameId])
+                .ToList();
+
+            // Create a hash to detect changes
+            var newHash = string.Join("|", newCoverUrls);
+
+            // Only update if data has changed
+            if (newHash != lastDataHash)
+            {
+                coverUrls = newCoverUrls;
+                lastDataHash = newHash;
+                currentCoverIndex = 0; // Reset to first cover
+
+                // Restart cycling if we now have covers
+                if (coverUrls.Any())
+                {
+                    StopCycling();
+                    StartCycling();
+                }
+                else
+                {
+                    StopCycling();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading cover images: {ex.Message}");
+            coverUrls = new List<string>();
+            StopCycling();
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void StartCycling()
+    {
+        if (coverUrls.Count <= 1)
+        {
+            // No need to cycle if there's 0 or 1 cover
+            return;
+        }
+
+        cycleTimer = new System.Threading.Timer(async _ =>
+        {
+            await InvokeAsync(() =>
+            {
+                currentCoverIndex = (currentCoverIndex + 1) % coverUrls.Count;
+                StateHasChanged();
+            });
+        }, null, cycleDurationMs, cycleDurationMs);
+    }
+
+    private void StopCycling()
+    {
+        cycleTimer?.Dispose();
+        cycleTimer = null;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        StopCycling();
+        
+        if (hubConnection is not null)
+        {
+            await hubConnection.DisposeAsync();
+        }
+    }
+}

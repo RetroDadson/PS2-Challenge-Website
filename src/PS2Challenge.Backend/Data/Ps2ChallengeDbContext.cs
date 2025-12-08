@@ -36,6 +36,7 @@ public class Ps2ChallengeDbContext : DbContext
             entity.Property(e => e.FirstReleased).HasColumnName("first_released");
             entity.Property(e => e.RegionFirstReleasedIn).HasColumnName("region_first_released_in");
             entity.Property(e => e.ReleasedInEuPalOrNa).HasColumnName("released_in_eu_or_na");
+            entity.Property(e => e.ImageUrl).HasColumnName("image_url");
             entity.Ignore(e => e.IsExcluded);
             entity.Ignore(e => e.IsOwned);
         });

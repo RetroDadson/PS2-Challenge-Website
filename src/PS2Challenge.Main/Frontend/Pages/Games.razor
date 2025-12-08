@@ -76,6 +76,7 @@
                         {
                             <th style="width: 80px;">Actions</th>
                         }
+                        <th style="width: 100px;">Cover</th>
                         <th @onclick="() => SortBy(nameof(GameDto.Title))">Title @GetSortIcon(nameof(GameDto.Title))</th>
                         <th @onclick="() => SortBy(nameof(GameDto.Developer))">Developer @GetSortIcon(nameof(GameDto.Developer))</th>
                         <th @onclick="() => SortBy(nameof(GameDto.Publisher))">Publisher @GetSortIcon(nameof(GameDto.Publisher))</th>
@@ -98,6 +99,20 @@
                                     </button>
                                 </td>
                             }
+                            <td class="cover-cell">
+                                @if (!string.IsNullOrEmpty(game.ImageUrl))
+                                {
+                                    <img src="@game.ImageUrl" 
+                                         alt="@game.Title cover" 
+                                         class="game-cover"
+                                         loading="lazy"
+                                         onerror="this.style.display='none'" />
+                                }
+                                else
+                                {
+                                    <div class="no-cover">No Cover</div>
+                                }
+                            </td>
                             <td>
                                 @if (alternateTitles.ContainsKey(game.Id) && alternateTitles[game.Id].Any())
                                 {

@@ -437,6 +437,26 @@ public class GameService
         return await repository.UpdateAsync(existingGame);
     }
 
+    /// <summary>
+    /// Updates only the cover image URL for a game. Used by the background cover update service.
+    /// </summary>
+    /// <param name="gameId">The ID of the game to update</param>
+    /// <param name="imageUrl">The new image URL (or null to clear it)</param>
+    public virtual async Task UpdateGameCoverUrlAsync(int gameId, string? imageUrl)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
+
+        var game = await dbContext.Games.FindAsync(gameId);
+        if (game == null)
+        {
+            throw new InvalidOperationException($"No game found with ID {gameId}");
+        }
+
+        game.ImageUrl = imageUrl;
+        await dbContext.SaveChangesAsync();
+    }
+
     public virtual async Task<bool> DeleteGameAsync(int id)
     {
         using var scope = _scopeFactory.CreateScope();
