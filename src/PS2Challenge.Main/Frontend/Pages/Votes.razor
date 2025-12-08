@@ -14,6 +14,7 @@
 @inject IServiceScopeFactory ScopeFactory
 @inject IHubContext<VotesHub> HubContext
 @inject VoteService VoteService
+@inject GameCoverService CoverService
 @inject NavigationManager NavigationManager
 
 <PageTitle>Vote History - Dadson's PS2 Tracker</PageTitle>
@@ -62,6 +63,7 @@
                             <table class="games-table" style="min-width:400px;">
                                 <thead>
                                     <tr>
+                                        <th style="width:100px">Cover</th>
                                         <th>Game</th>
                                         <th style="width:80px">Game#</th>
                                         <th style="width:120px">Votes</th>
@@ -75,7 +77,22 @@
                                     @foreach (var vote in currentVotes.OrderBy(v => v.GameNumber))
                                     {
                                         var title = vote.GameTitle;
+                                        var coverUrl = currentVoteCoverUrls.TryGetValue(title, out var url) ? url : null;
                                         <tr>
+                                            <td class="cover-cell" data-label="Cover">
+                                                @if (!string.IsNullOrEmpty(coverUrl))
+                                                {
+                                                    <img src="@coverUrl" 
+                                                         alt="@title cover" 
+                                                         class="game-cover"
+                                                         loading="lazy"
+                                                         onerror="this.style.display='none'" />
+                                                }
+                                                else
+                                                {
+                                                    <div class="no-cover">No Cover</div>
+                                                }
+                                            </td>
                                             <td class="game-title" data-label="Game">@title</td>
                                             <td data-label="Game#">@vote.GameNumber</td>
                                             @if (isAdmin)
@@ -251,6 +268,7 @@
     // state
     private List<VoteRoundDto> voteRounds = new();
     private List<CurrentVoteDto> currentVotes = new();
+    private Dictionary<string, string> currentVoteCoverUrls = new();
     private bool isLoading = true;
 
     private string searchQuery = string.Empty;
@@ -373,6 +391,7 @@
             if (!current.Any())
             {
                 currentVotes = new List<CurrentVoteDto>();
+                currentVoteCoverUrls = new Dictionary<string, string>();
                 return;
             }
 
@@ -391,11 +410,20 @@
                 .ThenByDescending(x => x.VoteCount)
                 .ThenBy(x => x.GameTitle)
                 .ToList();
+
+            // Load cover URLs for current vote games
+            var coverUrls = await CoverService.GetCoverUrlsAsync(gameIds);
+            
+            // Map game titles to cover URLs
+            currentVoteCoverUrls = games
+                .Where(g => coverUrls.ContainsKey(g.Id))
+                .ToDictionary(g => g.Title, g => coverUrls[g.Id]);
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Error loading current votes: {ex.Message}");
             currentVotes = new List<CurrentVoteDto>();
+            currentVoteCoverUrls = new Dictionary<string, string>();
         }
     }
 
