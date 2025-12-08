@@ -298,3 +298,49 @@ public class GameSerialNumberBuilder
         };
     }
 }
+
+/// <summary>
+/// Builder class for creating test AlternateTitle objects with fluent API
+/// </summary>
+public class AlternateTitleBuilder
+{
+    private int _alternateTitleId = 1;
+    private int _gameId = 1;
+    private string _title = "Alternate Game Title";
+    private string? _notes;
+
+    public AlternateTitleBuilder WithAlternateTitleId(int alternateTitleId)
+    {
+        _alternateTitleId = alternateTitleId;
+        return this;
+    }
+
+    public AlternateTitleBuilder WithGameId(int gameId)
+    {
+        _gameId = gameId;
+        return this;
+    }
+
+    public AlternateTitleBuilder WithTitle(string title)
+    {
+        _title = title;
+        return this;
+    }
+
+    public AlternateTitleBuilder WithNotes(string? notes)
+    {
+        _notes = notes;
+        return this;
+    }
+
+    public AlternateTitle Build()
+    {
+        return new AlternateTitle
+        {
+            AlternateTitleId = _alternateTitleId,
+            GameId = _gameId,
+            Title = _title,
+            Notes = _notes
+        };
+    }
+}

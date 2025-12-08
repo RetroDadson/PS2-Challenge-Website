@@ -126,6 +126,54 @@
 
                     <hr class="section-divider" />
 
+                    <h3>Alternate Titles</h3>
+                    <div class="alternate-titles-section">
+                        @if (isLoadingData)
+                        {
+                            <div class="loading-container">
+                                <p>Loading alternate titles...</p>
+                            </div>
+                        }
+                        else if (alternateTitles.Any())
+                        {
+                            <div class="alternate-titles-list">
+                                @foreach (var title in alternateTitles.Where(t => !t.IsDeleted))
+                                {
+                                    <div class="alternate-title-item">
+                                        <div class="alternate-title-display">
+                                            <span class="alternate-title-text"><strong>@title.Title</strong></span>
+                                            @if (!string.IsNullOrWhiteSpace(title.Notes))
+                                            {
+                                                <span class="alternate-notes">@title.Notes</span>
+                                            }
+                                        </div>
+                                        <button type="button" class="btn-icon btn-remove" @onclick="() => RemoveAlternateTitle(title)" title="Remove">×</button>
+                                    </div>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <p class="no-data-message">No alternate titles added yet.</p>
+                        }
+
+                        <div class="add-alternate-title-form">
+                            <div class="form-field">
+                                <label>Alternate Title</label>
+                                <input type="text" @bind="newAlternateTitle" class="search-input" maxlength="150" placeholder="e.g., Ratchet & Clank 2" />
+                            </div>
+                            <div class="form-field">
+                                <label>Notes (Optional)</label>
+                                <input type="text" @bind="newAlternateTitleNotes" class="search-input" maxlength="500" placeholder="e.g., European release title" />
+                            </div>
+                            <button type="button" class="btn btn-secondary" @onclick="AddAlternateTitle" disabled="@(string.IsNullOrWhiteSpace(newAlternateTitle))">
+                                + Add Alternate Title
+                            </button>
+                        </div>
+                    </div>
+
+                    <hr class="section-divider" />
+
                     <h3>Ownership Status</h3>
                     <div class="form-field">
                         <label>
@@ -219,10 +267,18 @@
     private string? newSerialRegion;
     private string? newSerialNotes;
 
+    // Alternate titles management
+    private List<AlternateTitleEntry> alternateTitles = new();
+    private string? newAlternateTitle;
+    private string? newAlternateTitleNotes;
+
     private List<OwnershipType> ownershipTypes = new();
     private string? errorMessage;
     private bool isProcessing;
     private bool isLoadingData;
+    
+    // Track the last game ID to detect when we switch between games
+    private int? lastGameId;
 
     // Internal class to track serial numbers (both existing and new)
     private class SerialNumberEntry
@@ -230,6 +286,15 @@
         public int? SerialId { get; set; } // Null for new entries
         public required string SerialNumber { get; set; }
         public string? Region { get; set; }
+        public string? Notes { get; set; }
+        public bool IsDeleted { get; set; } // Track if existing entry should be deleted
+    }
+
+    // Internal class to track alternate titles (both existing and new)
+    private class AlternateTitleEntry
+    {
+        public int? AlternateTitleId { get; set; } // Null for new entries
+        public required string Title { get; set; }
         public string? Notes { get; set; }
         public bool IsDeleted { get; set; } // Track if existing entry should be deleted
     }
@@ -262,54 +327,75 @@
             await LoadOwnershipTypes();
         }
 
+        // When modal becomes visible, always check if we need to reload data
         if (IsVisible && Game != null)
         {
-            isLoadingData = true;
+            // Detect if we're opening a different game or switching modes
+            var currentGameId = Game?.Id;
+            var gameChanged = currentGameId != lastGameId;
             
-            internalTitle = Game.Title;
-            internalDeveloper = Game.Developer;
-            internalPublisher = Game.Publisher;
-            internalFirstReleased = Game.FirstReleased?.ToDateTime(TimeOnly.MinValue);
-            internalRegion = Game.RegionFirstReleasedIn;
-            internalReleasedInEuPalOrNa = Game.ReleasedInEuPalOrNa;
-            internalIsExcluded = Game.IsExcluded;
-            
-            // Load all async data before setting up the UI state
-            if (IsEditMode)
+            // Reset state when switching between games, reopening, or opening for a new game
+            if (gameChanged || currentGameId == 0)
             {
-                // Load serial numbers, ownership, and exclusion in parallel
-                var tasks = new List<Task>
-                {
-                    LoadSerialNumbers(),
-                    LoadCurrentOwnership()
-                };
+                isLoadingData = true;
                 
-                if (Game.IsExcluded)
-                {
-                    tasks.Add(LoadCurrentExclusion());
-                }
-                else
-                {
-                    internalExclusionReason = string.Empty;
-                }
-
-                await Task.WhenAll(tasks);
-            }
-            else
-            {
+                // Always start fresh - reset all fields first
+                internalTitle = Game.Title;
+                internalDeveloper = Game.Developer;
+                internalPublisher = Game.Publisher;
+                internalFirstReleased = Game.FirstReleased?.ToDateTime(TimeOnly.MinValue);
+                internalRegion = Game.RegionFirstReleasedIn;
+                internalReleasedInEuPalOrNa = Game.ReleasedInEuPalOrNa;
+                internalIsExcluded = Game.IsExcluded;
+                
+                // Always clear serial numbers and alternate titles and form for new games or when switching
                 serialNumbers.Clear();
+                alternateTitles.Clear();
                 ClearSerialNumberForm();
+                ClearAlternateTitleForm();
+                
+                // Reset ownership and exclusion to defaults
                 internalOwnPhysicalCopy = false;
                 internalTypeOwned = string.Empty;
                 internalExclusionReason = string.Empty;
+                
+                // Load all async data before setting up the UI state
+                if (IsEditMode && currentGameId > 0)
+                {
+                    // Load serial numbers, alternate titles, ownership, and exclusion in parallel
+                    var tasks = new List<Task>
+                    {
+                        LoadSerialNumbers(),
+                        LoadAlternateTitles(),
+                        LoadCurrentOwnership()
+                    };
+                    
+                    if (Game.IsExcluded)
+                    {
+                        tasks.Add(LoadCurrentExclusion());
+                    }
+
+                    await Task.WhenAll(tasks);
+                }
+                
+                isLoadingData = false;
             }
             
-            isLoadingData = false;
+            // Update lastGameId after processing
+            lastGameId = currentGameId;
         }
-        else if (IsVisible && !IsEditMode)
+        else if (IsVisible && !IsEditMode && Game == null)
         {
+            // Ensure clean state when opening for a new game with null Game object
             ResetForm();
+            lastGameId = null;
         }
+        else if (!IsVisible)
+        {
+            // Reset tracking when modal is closed
+            lastGameId = null;
+        }
+        
         errorMessage = null;
     }
 
@@ -341,6 +427,33 @@
         }
     }
 
+    private async Task LoadAlternateTitles()
+    {
+        try
+        {
+            using var scope = ScopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
+            
+            var existingTitles = await db.AlternateTitles
+                .AsNoTracking()
+                .Where(at => at.GameId == Game!.Id)
+                .ToListAsync();
+            
+            alternateTitles = existingTitles.Select(t => new AlternateTitleEntry
+            {
+                AlternateTitleId = t.AlternateTitleId,
+                Title = t.Title,
+                Notes = t.Notes,
+                IsDeleted = false
+            }).ToList();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading alternate titles: {ex.Message}");
+            alternateTitles.Clear();
+        }
+    }
+
     private void AddSerialNumber()
     {
         if (string.IsNullOrWhiteSpace(newSerialNumber))
@@ -367,6 +480,31 @@
         errorMessage = null;
     }
 
+    private void AddAlternateTitle()
+    {
+        if (string.IsNullOrWhiteSpace(newAlternateTitle))
+        {
+            return;
+        }
+
+        // Check for duplicates in the current list
+        if (alternateTitles.Any(t => t.Title.Equals(newAlternateTitle.Trim(), StringComparison.OrdinalIgnoreCase) && !t.IsDeleted))
+        {
+            errorMessage = $"Alternate title '{newAlternateTitle}' is already in the list.";
+            return;
+        }
+
+        alternateTitles.Add(new AlternateTitleEntry
+        {
+            AlternateTitleId = null, // New entry, no ID yet
+            Title = newAlternateTitle.Trim(),
+            Notes = newAlternateTitleNotes?.Trim()
+        });
+
+        ClearAlternateTitleForm();
+        errorMessage = null;
+    }
+
     private void RemoveSerialNumber(SerialNumberEntry serial)
     {
         if (serial.SerialId.HasValue)
@@ -381,11 +519,31 @@
         }
     }
 
+    private void RemoveAlternateTitle(AlternateTitleEntry title)
+    {
+        if (title.AlternateTitleId.HasValue)
+        {
+            // Existing entry - mark for deletion
+            title.IsDeleted = true;
+        }
+        else
+        {
+            // New entry - just remove from list
+            alternateTitles.Remove(title);
+        }
+    }
+
     private void ClearSerialNumberForm()
     {
         newSerialNumber = string.Empty;
         newSerialRegion = string.Empty;
         newSerialNotes = string.Empty;
+    }
+
+    private void ClearAlternateTitleForm()
+    {
+        newAlternateTitle = string.Empty;
+        newAlternateTitleNotes = string.Empty;
     }
 
     private async Task LoadCurrentOwnership()
@@ -446,15 +604,20 @@
         internalIsExcluded = false;
         internalExclusionReason = string.Empty;
         serialNumbers.Clear();
+        alternateTitles.Clear();
         ClearSerialNumberForm();
+        ClearAlternateTitleForm();
         errorMessage = null;
         isLoadingData = false;
+        isProcessing = false;
     }
 
     private async Task Close()
     {
         if (!isProcessing)
         {
+            // Reset form state when closing to ensure next open is clean
+            ResetForm();
             await OnClose.InvokeAsync();
         }
     }
@@ -555,6 +718,9 @@
             // Handle serial numbers
             await SaveSerialNumbers(gameId);
 
+            // Handle alternate titles
+            await SaveAlternateTitles(gameId);
+
             // Notify SignalR clients that game data was updated
             await HubContext.Clients.All.SendAsync("GamesUpdated");
 
@@ -608,6 +774,37 @@
                 SerialNumber = serial.SerialNumber,
                 Region = serial.Region,
                 Notes = serial.Notes
+            });
+        }
+
+        await db.SaveChangesAsync();
+    }
+
+    private async Task SaveAlternateTitles(int gameId)
+    {
+        using var scope = ScopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
+
+        // Delete marked alternate titles
+        var toDelete = alternateTitles.Where(t => t.AlternateTitleId.HasValue && t.IsDeleted).ToList();
+        foreach (var title in toDelete)
+        {
+            var existing = await db.AlternateTitles.FindAsync(title.AlternateTitleId!.Value);
+            if (existing != null)
+            {
+                db.AlternateTitles.Remove(existing);
+            }
+        }
+
+        // Add new alternate titles
+        var toAdd = alternateTitles.Where(t => !t.AlternateTitleId.HasValue && !t.IsDeleted).ToList();
+        foreach (var title in toAdd)
+        {
+            db.AlternateTitles.Add(new AlternateTitle
+            {
+                GameId = gameId,
+                Title = title.Title,
+                Notes = title.Notes
             });
         }
 

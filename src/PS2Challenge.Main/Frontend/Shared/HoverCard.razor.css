@@ -17,17 +17,17 @@
     transform: translateX(-50%);
     /* Position below the element */
     top: calc(100% + 8px);
-    min-width: 120px;
-    max-width: 250px;
-    padding: 0.75rem 1rem;
+    min-width: 200px;
+    max-width: 400px;
+    padding: 1rem 1.25rem;
     background: #1a1a1a !important;
     color: #ffffff !important;
     border: 2px solid #e91e63 !important;
     border-radius: 8px;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.95), 0 0 20px rgba(233, 30, 99, 0.5) !important;
-    font-size: 0.9rem;
+    font-size: 1rem;
     font-weight: 500;
-    line-height: 1.5;
+    line-height: 1.6;
     white-space: normal;
     pointer-events: none;
     opacity: 1 !important;

@@ -40,6 +40,17 @@ window.pwaHelper = {
         }
     },
 
+    // Unregister all service workers (for debugging)
+    unregisterAllServiceWorkers: async function() {
+        if ('serviceWorker' in navigator) {
+            const registrations = await navigator.serviceWorker.getRegistrations();
+            for (let registration of registrations) {
+                await registration.unregister();
+                console.log('Service Worker unregistered');
+            }
+        }
+    },
+
     // Check if the app is currently offline
     isOffline: function() {
         return !navigator.onLine;
@@ -135,21 +146,47 @@ window.pwaHelper = {
     }
 };
 
-// Auto-register service worker on page load
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
-        window.pwaHelper.registerServiceWorker();
-        
-        // Check if we should redirect to offline page
-        setTimeout(() => {
-            window.pwaHelper.redirectToOfflineIfNeeded();
-        }, 1000);
-    });
-} else {
-    window.pwaHelper.registerServiceWorker();
+// CRITICAL: Wait for Blazor to connect before registering service worker
+// This prevents the service worker from interfering with initial SignalR connection
+(function() {
+    let blazorConnected = false;
+    let retryCount = 0;
+    const maxRetries = 30; // 15 seconds max wait
     
-    // Check if we should redirect to offline page
-    setTimeout(() => {
-        window.pwaHelper.redirectToOfflineIfNeeded();
-    }, 1000);
-}
+    function checkBlazorConnection() {
+        // Check if Blazor is connected by looking for the circuit
+        const blazorScript = document.querySelector('script[src*="blazor.server.js"]');
+        
+        if (window.Blazor && window.Blazor.circuitId) {
+            // Blazor is connected
+            console.log('Blazor connected, now registering service worker...');
+            blazorConnected = true;
+            
+            // Wait an additional 500ms to be safe
+            setTimeout(() => {
+                window.pwaHelper.registerServiceWorker();
+            }, 500);
+            
+            return;
+        }
+        
+        retryCount++;
+        if (retryCount < maxRetries) {
+            // Keep checking every 500ms
+            setTimeout(checkBlazorConnection, 500);
+        } else {
+            // Timeout - register anyway (Blazor might not be needed on this page)
+            console.log('Blazor connection timeout, registering service worker anyway...');
+            window.pwaHelper.registerServiceWorker();
+        }
+    }
+    
+    // Start checking after page load
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => {
+            setTimeout(checkBlazorConnection, 1000); // Wait 1 second before starting checks
+        });
+    } else {
+        setTimeout(checkBlazorConnection, 1000);
+    }
+})();

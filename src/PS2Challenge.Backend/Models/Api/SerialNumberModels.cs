@@ -1,4 +1,4 @@
-namespace PS2Challenge.Api.Api.Models;
+namespace PS2Challenge.Backend.Models.Api;
 
 /// <summary>
 /// Request model for adding a serial number to a game

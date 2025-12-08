@@ -449,3 +449,89 @@ public class GameSerialNumberTests
         Assert.All(groupedBySerial, group => Assert.Single(group));
     }
 }
+
+public class AlternateTitleTests
+{
+    [Fact]
+    public void AlternateTitle_CanBeCreated()
+    {
+        // Act
+        var alternateTitle = new AlternateTitle
+        {
+            AlternateTitleId = 1,
+            GameId = 1,
+            Title = "Ratchet & Clank 2",
+            Notes = "European release title"
+        };
+
+        // Assert
+        Assert.Equal(1, alternateTitle.AlternateTitleId);
+        Assert.Equal(1, alternateTitle.GameId);
+        Assert.Equal("Ratchet & Clank 2", alternateTitle.Title);
+        Assert.Equal("European release title", alternateTitle.Notes);
+    }
+
+    [Fact]
+    public void AlternateTitle_RequiredFieldsOnly()
+    {
+        // Act
+        var alternateTitle = new AlternateTitle
+        {
+            GameId = 1,
+            Title = "Different Title"
+        };
+
+        // Assert
+        Assert.Equal(1, alternateTitle.GameId);
+        Assert.Equal("Different Title", alternateTitle.Title);
+        Assert.Null(alternateTitle.Notes);
+    }
+
+    [Fact]
+    public void AlternateTitle_DefaultValues()
+    {
+        // Act
+        var alternateTitle = new AlternateTitle();
+
+        // Assert
+        Assert.Equal(0, alternateTitle.GameId);
+        Assert.Equal(string.Empty, alternateTitle.Title);
+        Assert.Null(alternateTitle.Notes);
+    }
+
+    [Fact]
+    public void AlternateTitle_MultipleAlternateTitlesForSameGame()
+    {
+        // Arrange - Simulating a game with multiple alternate titles
+        var alternateTitles = new List<AlternateTitle>
+        {
+            new() { GameId = 1, Title = "Ratchet & Clank 2" },
+            new() { GameId = 1, Title = "Ratchet & Clank 2: Going Commando" },
+            new() { GameId = 1, Title = "Ratchet & Clank 2: Gagaga! Ginga no Commando" }
+        };
+
+        // Assert - All alternate titles share the same GameId
+        Assert.All(alternateTitles, at => Assert.Equal(1, at.GameId));
+        Assert.Equal(3, alternateTitles.Count);
+        Assert.Equal(3, alternateTitles.Select(at => at.Title).Distinct().Count());
+    }
+
+    [Fact]
+    public void AlternateTitle_CanHaveNotesWithoutRegion()
+    {
+        // Arrange - A game may have different titles with notes
+        var alternateTitles = new List<AlternateTitle>
+        {
+            new() { GameId = 1, Title = "Gran Turismo 4" },
+            new() { GameId = 1, Title = "????????4", Notes = "Japanese title" },
+            new() { GameId = 1, Title = "Gran Turismo 4: Prologue", Notes = "Early release version" }
+        };
+
+        // Assert
+        Assert.Equal(3, alternateTitles.Count);
+        Assert.All(alternateTitles, at => Assert.Equal(1, at.GameId));
+        Assert.Contains(alternateTitles, at => at.Notes == null);
+        Assert.Contains(alternateTitles, at => at.Notes == "Japanese title");
+        Assert.Contains(alternateTitles, at => at.Notes == "Early release version");
+    }
+}

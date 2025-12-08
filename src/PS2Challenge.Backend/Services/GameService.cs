@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using PS2Challenge.Backend.Data;
 using PS2Challenge.Backend.Data.Repositories;
 using PS2Challenge.Backend.Models;
+using PS2Challenge.Backend.Helpers;
 
 namespace PS2Challenge.Backend.Services;
 
@@ -41,14 +42,66 @@ public class GameService
         .ThenBy(g => g.Title);
     }
 
+    /// <summary>
+    /// Finds a game by title using fuzzy matching (case-insensitive + special character normalization).
+    /// Also checks alternate titles if no match is found.
+    /// </summary>
+    /// <param name="dbContext">The database context</param>
+    /// <param name="title">The title to search for</param>
+    /// <returns>The matching game, or null if not found</returns>
+    private async Task<GameDto?> FindGameByTitleAsync(Ps2ChallengeDbContext dbContext, string title)
+    {
+        if (string.IsNullOrWhiteSpace(title))
+            return null;
+
+        var trimmedTitle = title.Trim();
+
+        // Step 1: Try exact match (case-insensitive)
+        var exactMatch = await dbContext.Games
+            .FirstOrDefaultAsync(g => EF.Functions.Like(g.Title.ToLower(), trimmedTitle.ToLower()));
+
+        if (exactMatch != null)
+            return exactMatch;
+
+        // Step 2: Try normalized fuzzy match
+        var normalizedSearch = TitleMatchingHelper.NormalizeTitle(trimmedTitle);
+        var allGames = await dbContext.Games.ToListAsync();
+        
+        var fuzzyMatch = allGames
+            .FirstOrDefault(g => TitleMatchingHelper.NormalizeTitle(g.Title) == normalizedSearch);
+
+        if (fuzzyMatch != null)
+            return fuzzyMatch;
+
+        // Step 3: Check alternate titles (case-insensitive)
+        var alternateTitle = await dbContext.AlternateTitles
+            .FirstOrDefaultAsync(at => EF.Functions.Like(at.Title.ToLower(), trimmedTitle.ToLower()));
+
+        if (alternateTitle != null)
+        {
+            return await dbContext.Games.FirstOrDefaultAsync(g => g.Id == alternateTitle.GameId);
+        }
+
+        // Step 4: Check alternate titles with fuzzy matching
+        var allAlternateTitles = await dbContext.AlternateTitles.ToListAsync();
+        var fuzzyAlternateMatch = allAlternateTitles
+            .FirstOrDefault(at => TitleMatchingHelper.NormalizeTitle(at.Title) == normalizedSearch);
+
+        if (fuzzyAlternateMatch != null)
+        {
+            return await dbContext.Games.FirstOrDefaultAsync(g => g.Id == fuzzyAlternateMatch.GameId);
+        }
+
+        return null;
+    }
+
     public virtual async Task<GameDto> AddGameAsync(GameDto gameDto)
     {
         using var scope = _scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
 
-        // Check if game already exists by title
-        var existingGame = await dbContext.Games
-            .FirstOrDefaultAsync(g => g.Title == gameDto.Title);
+        // Check if game already exists by title (using fuzzy matching)
+        var existingGame = await FindGameByTitleAsync(dbContext, gameDto.Title);
 
         if (existingGame != null)
         {
@@ -67,9 +120,8 @@ public class GameService
         using var scope = _scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
 
-        // Find the game by title
-        var game = await dbContext.Games
-            .FirstOrDefaultAsync(g => g.Title == title);
+        // Find the game by title (using fuzzy matching)
+        var game = await FindGameByTitleAsync(dbContext, title);
 
         if (game == null)
         {
@@ -139,9 +191,8 @@ public class GameService
         using var scope = _scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
 
-        // Find the game by title
-        var game = await dbContext.Games
-            .FirstOrDefaultAsync(g => g.Title == title);
+        // Find the game by title (using fuzzy matching)
+        var game = await FindGameByTitleAsync(dbContext, title);
 
         if (game == null)
         {
@@ -177,9 +228,8 @@ public class GameService
         using var scope = _scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
 
-        // Find the game by title
-        var game = await dbContext.Games
-            .FirstOrDefaultAsync(g => g.Title == title);
+        // Find the game by title (using fuzzy matching)
+        var game = await FindGameByTitleAsync(dbContext, title);
 
         if (game == null)
         {
@@ -477,9 +527,8 @@ public class GameService
         using var scope = _scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
 
-        // Find the game by title
-        var game = await dbContext.Games
-            .FirstOrDefaultAsync(g => g.Title == title);
+        // Find the game by title (using fuzzy matching)
+        var game = await FindGameByTitleAsync(dbContext, title);
 
         if (game == null)
         {
@@ -510,5 +559,99 @@ public class GameService
         await dbContext.SaveChangesAsync();
 
         return gameSerialNumber;
+    }
+
+    /// <summary>
+    /// Gets a dictionary mapping GameId to a list of alternate titles
+    /// </summary>
+    public virtual async Task<Dictionary<int, List<AlternateTitle>>> GetAlternateTitlesAsync()
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
+
+        var alternateTitles = await dbContext.AlternateTitles
+            .AsNoTracking()
+            .ToListAsync();
+
+        // Group by GameId
+        return alternateTitles
+            .GroupBy(at => at.GameId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+    }
+
+    /// <summary>
+    /// Gets all alternate titles for a specific game
+    /// </summary>
+    public virtual async Task<List<AlternateTitle>> GetAlternateTitlesForGameAsync(int gameId)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
+
+        return await dbContext.AlternateTitles
+            .AsNoTracking()
+            .Where(at => at.GameId == gameId)
+            .OrderBy(at => at.Title)
+            .ToListAsync();
+    }
+
+    /// <summary>
+    /// Adds an alternate title for a game
+    /// </summary>
+    public virtual async Task<AlternateTitle> AddAlternateTitleAsync(int gameId, string title, string? notes)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
+
+        // Verify game exists
+        var game = await dbContext.Games.FindAsync(gameId);
+        if (game == null)
+        {
+            throw new InvalidOperationException($"Game with ID {gameId} not found");
+        }
+
+        // Check if alternate title already exists for this game (case-insensitive)
+        var existingAlternateTitle = await dbContext.AlternateTitles
+            .FirstOrDefaultAsync(at => at.GameId == gameId && at.Title.ToLower() == title.ToLower());
+
+        if (existingAlternateTitle != null)
+        {
+            throw new InvalidOperationException(
+                $"Alternate title '{title}' already exists for game '{game.Title}' (ID: {gameId})");
+        }
+
+        // Create alternate title entry
+        var alternateTitle = new AlternateTitle
+        {
+            GameId = gameId,
+            Title = title,
+            Notes = notes
+        };
+
+        dbContext.AlternateTitles.Add(alternateTitle);
+        await dbContext.SaveChangesAsync();
+
+        return alternateTitle;
+    }
+
+    /// <summary>
+    /// Deletes an alternate title
+    /// </summary>
+    public virtual async Task<bool> DeleteAlternateTitleAsync(int gameId, int alternateTitleId)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
+
+        var alternateTitle = await dbContext.AlternateTitles
+            .FirstOrDefaultAsync(at => at.AlternateTitleId == alternateTitleId && at.GameId == gameId);
+
+        if (alternateTitle == null)
+        {
+            return false;
+        }
+
+        dbContext.AlternateTitles.Remove(alternateTitle);
+        await dbContext.SaveChangesAsync();
+
+        return true;
     }
 }

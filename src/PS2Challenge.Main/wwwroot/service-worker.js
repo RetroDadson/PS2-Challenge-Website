@@ -10,7 +10,7 @@ const ASSETS_TO_CACHE = [
     '/css/app.css',
     '/css/navmenu.css',
     'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css'
-];
+};
 
 // Install event - cache essential assets
 self.addEventListener('install', (event) => {
@@ -51,17 +51,13 @@ self.addEventListener('fetch', (event) => {
     const { request } = event;
     const url = new URL(request.url);
 
-    // Handle SignalR/Blazor connections - redirect to offline page when offline
-    if (url.pathname.includes('/_blazor') || url.pathname.includes('/blazor')) {
-        event.respondWith(
-            fetch(request).catch(() => {
-                // If Blazor connection fails, redirect to offline games page
-                if (request.mode === 'navigate') {
-                    return caches.match('/offline-games.html');
-                }
-                return new Response('', { status: 503 });
-            })
-        );
+    // CRITICAL: Let Blazor SignalR connections pass through without intervention
+    // Don't intercept /_blazor, /blazor, or SignalR hub connections
+    if (url.pathname.includes('/_blazor') || 
+        url.pathname.includes('/blazor') || 
+        url.pathname.includes('Hub') ||
+        url.pathname.includes('negotiate')) {
+        // Let these requests go directly to the network - do NOT cache or intercept
         return;
     }
 
