@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PS2Challenge.Api.Api.Models;
 using PS2Challenge.Backend.Models;
+using PS2Challenge.Backend.Models.Api;
 using PS2Challenge.Backend.Services;
 using System.Security.Claims;
 
@@ -805,6 +806,197 @@ public class GamesController : ControllerBase
     }
 
     // ============================================================================
+    // ADMIN ENDPOINTS - ALTERNATE TITLES
+    // ============================================================================
+
+    /// <summary>
+    /// Get all alternate titles for a specific game by ID
+    /// </summary>
+    /// <param name="id">The ID of the game</param>
+    /// <returns>List of alternate titles for the game</returns>
+    /// <response code="200">Returns the list of alternate titles</response>
+    /// <response code="404">Game not found</response>
+    /// <response code="500">Internal server error</response>
+    [HttpGet("{id}/alternate-titles")]
+    [ProducesResponseType(typeof(IEnumerable<AlternateTitle>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> GetAlternateTitles(int id)
+    {
+        try
+        {
+            var game = await _gameService.GetGameByIdAsync(id);
+            if (game == null)
+            {
+                return NotFound(new { message = $"Game with ID {id} not found" });
+            }
+
+            var alternateTitles = await _gameService.GetAlternateTitlesForGameAsync(id);
+            return Ok(alternateTitles);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting alternate titles for game {GameId}", id);
+            return StatusCode(500, new { message = "Internal server error", error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Add an alternate title for a game by ID (Admin only)
+    /// </summary>
+    /// <param name="id">The ID of the game</param>
+    /// <param name="request">Alternate title details including title and optional notes</param>
+    /// <returns>Confirmation with alternate title details</returns>
+    /// <response code="200">Alternate title added successfully</response>
+    /// <response code="400">Invalid request data - title required</response>
+    /// <response code="401">Unauthorized - authentication required</response>
+    /// <response code="403">Forbidden - admin access required</response>
+    /// <response code="404">Game not found</response>
+    /// <response code="409">Conflict - alternate title already exists for this game</response>
+    /// <response code="500">Internal server error</response>
+    /// <remarks>
+    /// Add an alternate title for a game (e.g., regional release names).
+    /// 
+    /// Sample request:
+    /// 
+    ///     POST /api/games/1/alternate-titles
+    ///     {
+    ///         "title": "Ratchet & Clank 2: Going Commando",
+    ///         "notes": "North American release title"
+    ///     }
+    /// </remarks>
+    [HttpPost("{id}/alternate-titles")]
+    [Authorize(Policy = "AdminCookieOrApiKey")]
+    [ProducesResponseType(typeof(AlternateTitle), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> AddAlternateTitle(int id, [FromBody] AddAlternateTitleRequest request)
+    {
+        if (request == null)
+        {
+            return BadRequest(new { message = "Request data is required" });
+        }
+
+        var validationErrors = new List<string>();
+
+        if (string.IsNullOrWhiteSpace(request.Title))
+        {
+            validationErrors.Add("Title is required");
+        }
+        else if (request.Title.Length > 150)
+        {
+            validationErrors.Add("Title cannot exceed 150 characters");
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Notes) && request.Notes.Length > 500)
+        {
+            validationErrors.Add("Notes cannot exceed 500 characters");
+        }
+
+        if (validationErrors.Any())
+        {
+            return BadRequest(new { errors = validationErrors });
+        }
+
+        try
+        {
+            var game = await _gameService.GetGameByIdAsync(id);
+            if (game == null)
+            {
+                return NotFound(new { message = $"Game with ID {id} not found" });
+            }
+
+            var alternateTitle = await _gameService.AddAlternateTitleAsync(
+                id,
+                request.Title,
+                request.Notes);
+
+            var adminUsername = User.FindFirst(ClaimTypes.Name)?.Value;
+            _logger.LogInformation(
+                "AUDIT: Admin {AdminUser} added alternate title '{AlternateTitle}' to game ID {GameId}: {GameTitle}",
+                adminUsername, alternateTitle.Title, id, game.Title);
+
+            return Ok(new
+            {
+                alternateTitleId = alternateTitle.AlternateTitleId,
+                gameId = alternateTitle.GameId,
+                title = alternateTitle.Title,
+                notes = alternateTitle.Notes,
+                message = $"Alternate title '{alternateTitle.Title}' added successfully to '{game.Title}'"
+            });
+        }
+        catch (InvalidOperationException ex)
+        {
+            // Check if this is a duplicate alternate title error
+            if (ex.Message.Contains("already exists for game"))
+            {
+                return Conflict(new { error = ex.Message });
+            }
+            
+            // Otherwise it's a different error (shouldn't happen as we check game existence above)
+            _logger.LogError(ex, "Error adding alternate title for game {GameId}", id);
+            return StatusCode(500, new { message = "Internal server error", error = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error adding alternate title for game {GameId}", id);
+            return StatusCode(500, new { message = "Internal server error", error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Delete an alternate title by ID (Admin only)
+    /// </summary>
+    /// <param name="id">The ID of the game</param>
+    /// <param name="alternateTitleId">The ID of the alternate title to delete</param>
+    /// <returns>Confirmation message</returns>
+    /// <response code="200">Alternate title deleted successfully</response>
+    /// <response code="401">Unauthorized - authentication required</response>
+    /// <response code="403">Forbidden - admin access required</response>
+    /// <response code="404">Game or alternate title not found</response>
+    /// <response code="500">Internal server error</response>
+    [HttpDelete("{id}/alternate-titles/{alternateTitleId}")]
+    [Authorize(Policy = "AdminCookieOrApiKey")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> DeleteAlternateTitle(int id, int alternateTitleId)
+    {
+        try
+        {
+            var game = await _gameService.GetGameByIdAsync(id);
+            if (game == null)
+            {
+                return NotFound(new { message = $"Game with ID {id} not found" });
+            }
+
+            var deleted = await _gameService.DeleteAlternateTitleAsync(id, alternateTitleId);
+            if (!deleted)
+            {
+                return NotFound(new { message = $"Alternate title with ID {alternateTitleId} not found for game ID {id}" });
+            }
+
+            var adminUsername = User.FindFirst(ClaimTypes.Name)?.Value;
+            _logger.LogInformation(
+                "AUDIT: Admin {AdminUser} deleted alternate title ID {AlternateTitleId} from game ID {GameId}: {GameTitle}",
+                adminUsername, alternateTitleId, id, game.Title);
+
+            return Ok(new { message = $"Alternate title deleted successfully from '{game.Title}'" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting alternate title {AlternateTitleId} for game {GameId}", alternateTitleId, id);
+            return StatusCode(500, new { message = "Internal server error", error = ex.Message });
+        }
+    }
+
+    // ============================================================================
     // HELPER METHODS
     // ============================================================================
 
@@ -897,98 +1089,5 @@ public class GamesController : ControllerBase
         /// Type of copy owned (e.g., "Base", "Platinum")
         /// </summary>
         public string? TypeOwned { get; set; }
-    }
-
-    /// <summary>
-    /// Request model for adding a serial number to a game
-    /// </summary>
-    public class AddSerialNumberRequest
-    {
-        /// <summary>
-        /// The title of the game
-        /// </summary>
-        public required string Title { get; set; }
-
-        /// <summary>
-        /// The serial number to add
-        /// </summary>
-        public required string SerialNumber { get; set; }
-
-        /// <summary>
-        /// The region of the serial number (optional)
-        /// </summary>
-        public string? Region { get; set; }
-
-        /// <summary>
-        /// Additional notes or description (optional)
-        /// </summary>
-        public string? Notes { get; set; }
-    }
-
-    /// <summary>
-    /// Response model for successful serial number addition
-    /// </summary>
-    public class AddSerialNumberResponse
-    {
-        /// <summary>
-        /// The ID of the serial number record
-        /// </summary>
-        public int SerialId { get; set; }
-
-        /// <summary>
-        /// The ID of the game the serial number is associated with
-        /// </summary>
-        public int GameId { get; set; }
-
-        /// <summary>
-        /// The title of the game
-        /// </summary>
-        public string GameTitle { get; set; } = null!;
-
-        /// <summary>
-        /// The serial number that was added
-        /// </summary>
-        public string SerialNumber { get; set; } = null!;
-
-        /// <summary>
-        /// The region of the serial number
-        /// </summary>
-        public string? Region { get; set; }
-
-        /// <summary>
-        /// Additional notes or description
-        /// </summary>
-        public string? Notes { get; set; }
-
-        /// <summary>
-        /// Confirmation message
-        /// </summary>
-        public string Message { get; set; } = null!;
-    }
-
-    /// <summary>
-    /// Response model for serial number conflict
-    /// </summary>
-    public class SerialNumberConflictResponse
-    {
-        /// <summary>
-        /// Error message
-        /// </summary>
-        public string Error { get; set; } = null!;
-
-        /// <summary>
-        /// The ID of the existing game with the conflicting serial number
-        /// </summary>
-        public int ExistingGameId { get; set; }
-
-        /// <summary>
-        /// The title of the existing game with the conflicting serial number
-        /// </summary>
-        public string ExistingGameTitle { get; set; } = null!;
-
-        /// <summary>
-        /// The serial number that caused the conflict
-        /// </summary>
-        public string SerialNumber { get; set; } = null!;
     }
 }

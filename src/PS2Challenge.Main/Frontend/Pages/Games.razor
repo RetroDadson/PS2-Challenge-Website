@@ -4,6 +4,7 @@
 @using Microsoft.AspNetCore.Components.Authorization
 @using PS2Challenge.Main.Frontend.Components
 @using PS2Challenge.Main.Frontend.Shared
+@using PS2Challenge.Backend.Models
 @inject GameService GameService
 @inject IJSRuntime JSRuntime
 @inject AuthenticationStateProvider AuthenticationStateProvider
@@ -97,7 +98,18 @@
                                     </button>
                                 </td>
                             }
-                            <td>@game.Title</td>
+                            <td>
+                                @if (alternateTitles.ContainsKey(game.Id) && alternateTitles[game.Id].Any())
+                                {
+                                    <HoverCard Content="@GetAlternateTitles(game.Id)">
+                                        <span style="border-bottom: 1px dotted var(--primary-color);">@game.Title</span>
+                                    </HoverCard>
+                                }
+                                else
+                                {
+                                    @game.Title
+                                }
+                            </td>
                             <td>@game.Developer</td>
                             <td>@game.Publisher</td>
                             <td>@(game.FirstReleased?.ToString("dd/MM/yyyy") ?? "Unknown")</td>
@@ -164,6 +176,8 @@
     private Dictionary<int, string> ownedTypes = new();
     private Dictionary<int, string> exclusionReasons = new();
     private Dictionary<int, string> completionStatus = new();
+    private Dictionary<int, List<AlternateTitle>> alternateTitles = new();
+
     private string searchQuery = string.Empty;
     private bool showOwnedOnly = false;
     private bool showExcludedGames = false;
@@ -186,6 +200,7 @@
         await LoadOwnedTypes();
         await LoadExclusionReasons();
         await LoadCompletionStatus();
+        await LoadAlternateTitles();
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -417,6 +432,18 @@
         }
     }
 
+    private async Task LoadAlternateTitles()
+    {
+        try
+        {
+            alternateTitles = await GameService.GetAlternateTitlesAsync();
+        }
+        catch
+        {
+            alternateTitles = new();
+        }
+    }
+
     private async Task CacheGamesData()
     {
         try
@@ -458,6 +485,15 @@
             return status;
         }
         return "Not Started";
+    }
+
+    private string GetAlternateTitles(int gameId)
+    {
+        if (alternateTitles.TryGetValue(gameId, out var titles) && titles.Any())
+        {
+            return string.Join("<br />", titles.Select(t => t.Title));
+        }
+        return "No alternate titles";
     }
 
     private int GetCompletedCount()
@@ -511,6 +547,7 @@
         await LoadOwnedTypes();
         await LoadExclusionReasons();
         await LoadCompletionStatus();
+        await LoadAlternateTitles();
         await CacheGamesData();
         CloseModal();
     }
@@ -522,6 +559,7 @@
         await LoadOwnedTypes();
         await LoadExclusionReasons();
         await LoadCompletionStatus();
+        await LoadAlternateTitles();
         await CacheGamesData();
         CloseModal();
     }
@@ -539,7 +577,9 @@
                 filtered = filtered.Where(g =>
                     (g.Title?.ToLowerInvariant().Contains(q) ?? false) ||
                     (g.Developer?.ToLowerInvariant().Contains(q) ?? false) ||
-                    (g.Publisher?.ToLowerInvariant().Contains(q) ?? false));
+                    (g.Publisher?.ToLowerInvariant().Contains(q) ?? false) ||
+                    (alternateTitles.ContainsKey(g.Id) && 
+                     alternateTitles[g.Id].Any(at => at.Title.ToLowerInvariant().Contains(q))));
             }
 
             // owned filter

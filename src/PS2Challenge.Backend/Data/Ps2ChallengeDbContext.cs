@@ -21,6 +21,7 @@ public class Ps2ChallengeDbContext : DbContext
     public DbSet<CurrentVote> CurrentVotes { get; set; }
     public DbSet<OwnershipType> OwnershipTypes { get; set; }
     public DbSet<GameSerialNumber> GameSerialNumbers { get; set; }
+    public DbSet<AlternateTitle> AlternateTitles { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -87,6 +88,21 @@ public class Ps2ChallengeDbContext : DbContext
             entity.Property(e => e.GameId).HasColumnName("game_id");
             entity.Property(e => e.SerialNumber).HasColumnName("serial_number");
             entity.Property(e => e.Region).HasColumnName("region");
+            entity.Property(e => e.Notes).HasColumnName("notes");
+
+            entity.HasOne<GameDto>()
+                .WithMany()
+                .HasForeignKey(e => e.GameId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<AlternateTitle>(entity =>
+        {
+            entity.ToTable("alternate_titles");
+            entity.HasKey(e => e.AlternateTitleId);
+            entity.Property(e => e.AlternateTitleId).HasColumnName("alternate_title_id");
+            entity.Property(e => e.GameId).HasColumnName("game_id");
+            entity.Property(e => e.Title).HasColumnName("title");
             entity.Property(e => e.Notes).HasColumnName("notes");
 
             entity.HasOne<GameDto>()

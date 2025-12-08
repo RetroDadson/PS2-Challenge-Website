@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using PS2Challenge.Backend.Models;
+using PS2Challenge.Backend.Helpers;
 
 namespace PS2Challenge.Backend.Data.Repositories;
 
@@ -139,11 +140,30 @@ public class GameRepository
 
     public async Task<bool> ExistsByTitleAsync(string title, int? excludeId = null)
     {
-        var query = _dbContext.Games.Where(g => g.Title == title);
+        if (string.IsNullOrWhiteSpace(title))
+            return false;
+
+        var trimmedTitle = title.Trim();
+
+        // Step 1: Try exact match (case-insensitive)
+        var query = _dbContext.Games.Where(g => EF.Functions.Like(g.Title.ToLower(), trimmedTitle.ToLower()));
         if (excludeId.HasValue)
         {
             query = query.Where(g => g.Id != excludeId.Value);
         }
-        return await query.AnyAsync();
+
+        if (await query.AnyAsync())
+            return true;
+
+        // Step 2: Try normalized fuzzy match
+        var normalizedSearch = TitleMatchingHelper.NormalizeTitle(trimmedTitle);
+        var games = excludeId.HasValue 
+            ? await _dbContext.Games.Where(g => g.Id != excludeId.Value).ToListAsync()
+            : await _dbContext.Games.ToListAsync();
+        
+        var fuzzyMatch = games
+            .Any(g => TitleMatchingHelper.NormalizeTitle(g.Title) == normalizedSearch);
+
+        return fuzzyMatch;
     }
 }
