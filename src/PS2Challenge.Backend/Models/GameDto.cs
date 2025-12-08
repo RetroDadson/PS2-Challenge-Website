@@ -13,6 +13,12 @@ public class GameDto
     public DateOnly? FirstReleased { get; set; }
     public string? RegionFirstReleasedIn { get; set; }
     public bool ReleasedInEuPalOrNa { get; set; }
+    
+    /// <summary>
+    /// Cached cover image URL from the ps2-covers repository.
+    /// Updated periodically by background service.
+    /// </summary>
+    public string? ImageUrl { get; set; }
 
     [NotMapped]
     public bool IsExcluded { get; set; }

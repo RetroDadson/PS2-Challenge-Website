@@ -40,13 +40,17 @@ public class GamesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<IEnumerable<GameDto>>> GetGames([FromQuery] string? title = null)
     {
+        IEnumerable<GameDto> games;
+        
         if (!string.IsNullOrWhiteSpace(title))
         {
-            var searchResults = await _gameService.SearchGamesByTitleAsync(title);
-            return Ok(searchResults);
+            games = await _gameService.SearchGamesByTitleAsync(title);
+        }
+        else
+        {
+            games = await _gameService.GetAllGamesAsync();
         }
 
-        var games = await _gameService.GetAllGamesAsync();
         return Ok(games);
     }
 
