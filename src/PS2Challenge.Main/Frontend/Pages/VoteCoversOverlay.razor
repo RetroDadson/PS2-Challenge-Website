@@ -26,6 +26,10 @@
     {
         <div class="loading">Loading...</div>
     }
+    else if (hasError)
+    {
+        <div class="no-covers">Error loading covers</div>
+    }
     else if (!coverUrls.Any())
     {
         <div class="no-covers">No cover images available</div>
@@ -46,41 +50,68 @@
     private List<string> coverUrls = new();
     private int currentCoverIndex = 0;
     private bool isLoading = true;
+    private bool hasError = false;
+    private bool isDisposed = false;
     private HubConnection? hubConnection;
     private System.Threading.Timer? cycleTimer;
     private readonly int cycleDurationMs = 2000; // Change cover every 2 seconds
     private string? lastDataHash;
+    private readonly object _stateLock = new object();
 
     protected override async Task OnInitializedAsync()
     {
-        await LoadCoverImages();
-
-        // Set up SignalR connection to listen for vote updates
-        hubConnection = new HubConnectionBuilder()
-            .WithUrl(NavigationManager.ToAbsoluteUri("/votesHub"))
-            .WithAutomaticReconnect()
-            .Build();
-
-        // Subscribe to votes updates
-        hubConnection.On("VotesUpdated", async () =>
-        {
-            await LoadCoverImages();
-            await InvokeAsync(StateHasChanged);
-        });
-
         try
         {
-            await hubConnection.StartAsync();
+            await LoadCoverImages();
+
+            // Set up SignalR connection to listen for vote updates
+            hubConnection = new HubConnectionBuilder()
+                .WithUrl(NavigationManager.ToAbsoluteUri("/votesHub"))
+                .WithAutomaticReconnect()
+                .Build();
+
+            // Subscribe to votes updates
+            hubConnection.On("VotesUpdated", async () =>
+            {
+                try
+                {
+                    if (isDisposed) return;
+                    
+                    await LoadCoverImages();
+                    
+                    if (!isDisposed)
+                    {
+                        await InvokeAsync(StateHasChanged);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error in VotesUpdated handler: {ex.Message}");
+                }
+            });
+
+            try
+            {
+                await hubConnection.StartAsync();
+                Console.WriteLine("VoteCoversOverlay: Connected to SignalR hub");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error connecting to SignalR hub: {ex.Message}");
+                // Don't set hasError - the overlay can still function with initial data
+            }
+
+            // Start the cycling timer if we have covers
+            if (coverUrls.Any())
+            {
+                StartCycling();
+            }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error connecting to SignalR hub: {ex.Message}");
-        }
-
-        // Start the cycling timer if we have covers
-        if (coverUrls.Any())
-        {
-            StartCycling();
+            Console.WriteLine($"Error in OnInitializedAsync: {ex.Message}");
+            hasError = true;
+            isLoading = false;
         }
     }
 
@@ -88,7 +119,11 @@
     {
         try
         {
+            if (isDisposed) return;
+            
             isLoading = true;
+            hasError = false;
+            
             using var scope = ScopeFactory.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
 
@@ -100,9 +135,12 @@
 
             if (!currentVotes.Any())
             {
-                coverUrls = new List<string>();
+                lock (_stateLock)
+                {
+                    coverUrls = new List<string>();
+                    lastDataHash = string.Empty;
+                }
                 StopCycling();
-                lastDataHash = string.Empty;
                 return;
             }
 
@@ -122,9 +160,12 @@
             // Only update if data has changed
             if (newHash != lastDataHash)
             {
-                coverUrls = newCoverUrls;
-                lastDataHash = newHash;
-                currentCoverIndex = 0; // Reset to first cover
+                lock (_stateLock)
+                {
+                    coverUrls = newCoverUrls;
+                    lastDataHash = newHash;
+                    currentCoverIndex = 0; // Reset to first cover
+                }
 
                 // Restart cycling if we now have covers
                 if (coverUrls.Any())
@@ -138,11 +179,19 @@
                 }
             }
         }
+        catch (ObjectDisposedException)
+        {
+            // Component is being disposed, ignore
+        }
         catch (Exception ex)
         {
             Console.WriteLine($"Error loading cover images: {ex.Message}");
-            coverUrls = new List<string>();
+            lock (_stateLock)
+            {
+                coverUrls = new List<string>();
+            }
             StopCycling();
+            hasError = true;
         }
         finally
         {
@@ -152,35 +201,80 @@
 
     private void StartCycling()
     {
-        if (coverUrls.Count <= 1)
+        if (isDisposed) return;
+        
+        lock (_stateLock)
         {
-            // No need to cycle if there's 0 or 1 cover
-            return;
-        }
-
-        cycleTimer = new System.Threading.Timer(async _ =>
-        {
-            await InvokeAsync(() =>
+            if (coverUrls.Count <= 1)
             {
-                currentCoverIndex = (currentCoverIndex + 1) % coverUrls.Count;
-                StateHasChanged();
-            });
-        }, null, cycleDurationMs, cycleDurationMs);
+                // No need to cycle if there's 0 or 1 cover
+                return;
+            }
+
+            cycleTimer = new System.Threading.Timer(async _ =>
+            {
+                try
+                {
+                    if (isDisposed) return;
+                    
+                    await InvokeAsync(() =>
+                    {
+                        if (isDisposed) return;
+                        
+                        lock (_stateLock)
+                        {
+                            if (coverUrls.Any())
+                            {
+                                currentCoverIndex = (currentCoverIndex + 1) % coverUrls.Count;
+                            }
+                        }
+                        StateHasChanged();
+                    });
+                }
+                catch (ObjectDisposedException)
+                {
+                    // Component disposed during timer callback, ignore
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error in cycle timer: {ex.Message}");
+                }
+            }, null, cycleDurationMs, cycleDurationMs);
+        }
     }
 
     private void StopCycling()
     {
-        cycleTimer?.Dispose();
-        cycleTimer = null;
+        try
+        {
+            cycleTimer?.Dispose();
+            cycleTimer = null;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error stopping cycle timer: {ex.Message}");
+        }
     }
 
     public async ValueTask DisposeAsync()
     {
+        if (isDisposed) return;
+        
+        isDisposed = true;
+        
         StopCycling();
         
         if (hubConnection is not null)
         {
-            await hubConnection.DisposeAsync();
+            try
+            {
+                await hubConnection.DisposeAsync();
+                Console.WriteLine("VoteCoversOverlay: Disconnected from SignalR hub");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error disposing SignalR connection: {ex.Message}");
+            }
         }
     }
 }

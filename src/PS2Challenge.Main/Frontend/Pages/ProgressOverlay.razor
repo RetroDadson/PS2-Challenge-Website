@@ -26,6 +26,10 @@
     {
         <div class="loading">Loading...</div>
     }
+    else if (hasError)
+    {
+        <div class="loading">Error loading progress</div>
+    }
     else
     {
         <div class="progress-box">
@@ -41,33 +45,60 @@
     private int gamesInChallengeCount = 0;
     private double percentageComplete = 0;
     private bool isLoading = true;
+    private bool hasError = false;
+    private bool isDisposed = false;
     private HubConnection? hubConnection;
     private string? lastDataHash;
+    private readonly object _stateLock = new object();
 
     protected override async Task OnInitializedAsync()
     {
-        await LoadProgressData();
-
-        // Set up SignalR connection to listen for game updates
-        hubConnection = new HubConnectionBuilder()
-            .WithUrl(NavigationManager.ToAbsoluteUri("/gamesHub"))
-            .WithAutomaticReconnect()
-            .Build();
-
-        // Subscribe to game/progress updates
-        hubConnection.On("GamesUpdated", async () =>
-        {
-            await LoadProgressData();
-            await InvokeAsync(StateHasChanged);
-        });
-
         try
         {
-            await hubConnection.StartAsync();
+            await LoadProgressData();
+
+            // Set up SignalR connection to listen for game updates
+            hubConnection = new HubConnectionBuilder()
+                .WithUrl(NavigationManager.ToAbsoluteUri("/gamesHub"))
+                .WithAutomaticReconnect()
+                .Build();
+
+            // Subscribe to game/progress updates
+            hubConnection.On("GamesUpdated", async () =>
+            {
+                try
+                {
+                    if (isDisposed) return;
+                    
+                    await LoadProgressData();
+                    
+                    if (!isDisposed)
+                    {
+                        await InvokeAsync(StateHasChanged);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error in GamesUpdated handler: {ex.Message}");
+                }
+            });
+
+            try
+            {
+                await hubConnection.StartAsync();
+                Console.WriteLine("ProgressOverlay: Connected to SignalR hub");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error connecting to SignalR hub: {ex.Message}");
+                // Don't set hasError - the overlay can still function with initial data
+            }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error connecting to SignalR hub: {ex.Message}");
+            Console.WriteLine($"Error in OnInitializedAsync: {ex.Message}");
+            hasError = true;
+            isLoading = false;
         }
     }
 
@@ -75,7 +106,11 @@
     {
         try
         {
+            if (isDisposed) return;
+            
             isLoading = true;
+            hasError = false;
+            
             using var scope = ScopeFactory.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
 
@@ -86,42 +121,53 @@
                 .ToListAsync();
 
             // Get total games in challenge (not in excluded list)
-            gamesInChallengeCount = await db.Games
+            var totalGames = await db.Games
                 .AsNoTracking()
                 .Where(g => !excludedGameIds.Contains(g.Id))
                 .CountAsync();
 
             // Get completed games count (progress with DateFinished)
-            gamesCompletedCount = await db.GameProgress
+            var completedGames = await db.GameProgress
                 .AsNoTracking()
                 .Where(p => p.DateFinished.HasValue)
                 .CountAsync();
 
             // Calculate percentage
-            if (gamesInChallengeCount > 0)
+            double percentage = 0;
+            if (totalGames > 0)
             {
-                percentageComplete = ((double)gamesCompletedCount / gamesInChallengeCount) * 100;
-            }
-            else
-            {
-                percentageComplete = 0;
+                percentage = ((double)completedGames / totalGames) * 100;
             }
 
             // Create a hash to detect changes
-            var newHash = $"{gamesCompletedCount}:{gamesInChallengeCount}";
+            var newHash = $"{completedGames}:{totalGames}";
 
-            // Only trigger state update if data has changed
+            // Only update if data has changed
             if (newHash != lastDataHash)
             {
-                lastDataHash = newHash;
+                lock (_stateLock)
+                {
+                    gamesCompletedCount = completedGames;
+                    gamesInChallengeCount = totalGames;
+                    percentageComplete = percentage;
+                    lastDataHash = newHash;
+                }
             }
+        }
+        catch (ObjectDisposedException)
+        {
+            // Component is being disposed, ignore
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Error loading progress data: {ex.Message}");
-            gamesCompletedCount = 0;
-            gamesInChallengeCount = 0;
-            percentageComplete = 0;
+            lock (_stateLock)
+            {
+                gamesCompletedCount = 0;
+                gamesInChallengeCount = 0;
+                percentageComplete = 0;
+            }
+            hasError = true;
         }
         finally
         {
@@ -131,9 +177,21 @@
 
     public async ValueTask DisposeAsync()
     {
+        if (isDisposed) return;
+        
+        isDisposed = true;
+        
         if (hubConnection is not null)
         {
-            await hubConnection.DisposeAsync();
+            try
+            {
+                await hubConnection.DisposeAsync();
+                Console.WriteLine("ProgressOverlay: Disconnected from SignalR hub");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error disposing SignalR connection: {ex.Message}");
+            }
         }
     }
 }

@@ -14,6 +14,10 @@
     {
         <div class="loading">Loading...</div>
     }
+    else if (hasError)
+    {
+        <div class="no-votes">Error loading votes</div>
+    }
     else if (currentVotes == null || !currentVotes.Any())
     {
         <div class="no-votes">No current votes</div>
@@ -33,33 +37,60 @@
 @code {
     private List<CurrentVoteDto> currentVotes = new();
     private bool isLoading = true;
+    private bool hasError = false;
+    private bool isDisposed = false;
     private HubConnection? hubConnection;
     private string? lastDataHash;
+    private readonly object _stateLock = new object();
 
     protected override async Task OnInitializedAsync()
     {
-        await LoadCurrentVotes();
-
-        // Set up SignalR connection
-        hubConnection = new HubConnectionBuilder()
-            .WithUrl(NavigationManager.ToAbsoluteUri("/votesHub"))
-            .WithAutomaticReconnect()
-            .Build();
-
-        // Subscribe to VotesUpdated event
-        hubConnection.On("VotesUpdated", async () =>
-        {
-            await LoadCurrentVotes();
-            await InvokeAsync(StateHasChanged);
-        });
-
         try
         {
-            await hubConnection.StartAsync();
+            await LoadCurrentVotes();
+
+            // Set up SignalR connection
+            hubConnection = new HubConnectionBuilder()
+                .WithUrl(NavigationManager.ToAbsoluteUri("/votesHub"))
+                .WithAutomaticReconnect()
+                .Build();
+
+            // Subscribe to VotesUpdated event
+            hubConnection.On("VotesUpdated", async () =>
+            {
+                try
+                {
+                    if (isDisposed) return;
+                    
+                    await LoadCurrentVotes();
+                    
+                    if (!isDisposed)
+                    {
+                        await InvokeAsync(StateHasChanged);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error in VotesUpdated handler: {ex.Message}");
+                }
+            });
+
+            try
+            {
+                await hubConnection.StartAsync();
+                Console.WriteLine("VotesOverlay: Connected to SignalR hub");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error connecting to SignalR hub: {ex.Message}");
+                // Don't set hasError - the overlay can still function with initial data
+            }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error connecting to SignalR hub: {ex.Message}");
+            Console.WriteLine($"Error in OnInitializedAsync: {ex.Message}");
+            hasError = true;
+            isLoading = false;
         }
     }
 
@@ -67,15 +98,22 @@
     {
         try
         {
+            if (isDisposed) return;
+            
             isLoading = true;
+            hasError = false;
+            
             using var scope = ScopeFactory.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
 
             var current = await db.CurrentVotes.AsNoTracking().ToListAsync();
             if (!current.Any())
             {
-                currentVotes = new List<CurrentVoteDto>();
-                lastDataHash = string.Empty;
+                lock (_stateLock)
+                {
+                    currentVotes = new List<CurrentVoteDto>();
+                    lastDataHash = string.Empty;
+                }
                 return;
             }
 
@@ -101,14 +139,25 @@
             // Only update if data has changed
             if (newHash != lastDataHash)
             {
-                currentVotes = newVotes;
-                lastDataHash = newHash;
+                lock (_stateLock)
+                {
+                    currentVotes = newVotes;
+                    lastDataHash = newHash;
+                }
             }
+        }
+        catch (ObjectDisposedException)
+        {
+            // Component is being disposed, ignore
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Error loading current votes: {ex.Message}");
-            currentVotes = new List<CurrentVoteDto>();
+            lock (_stateLock)
+            {
+                currentVotes = new List<CurrentVoteDto>();
+            }
+            hasError = true;
         }
         finally
         {
@@ -118,9 +167,21 @@
 
     public async ValueTask DisposeAsync()
     {
+        if (isDisposed) return;
+        
+        isDisposed = true;
+        
         if (hubConnection is not null)
         {
-            await hubConnection.DisposeAsync();
+            try
+            {
+                await hubConnection.DisposeAsync();
+                Console.WriteLine("VotesOverlay: Disconnected from SignalR hub");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error disposing SignalR connection: {ex.Message}");
+            }
         }
     }
 }
