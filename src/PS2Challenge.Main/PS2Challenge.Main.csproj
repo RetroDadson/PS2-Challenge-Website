@@ -21,4 +21,8 @@
     <ProjectReference Include="..\PS2Challenge.Backend\PS2Challenge.Backend.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="wwwroot\Pages\" />
+  </ItemGroup>
+
 </Project>
