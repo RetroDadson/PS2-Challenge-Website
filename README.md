@@ -1,5 +1,5 @@
 # PS2 Challenge Website
-![CI/CD](https://github.com/RobinDadswell/ps2-challenge-website/actions/workflows/ci-cd.yml/badge.svg)
+[![Build and deploy ASP.Net Core app to Azure Web App - retrodadsonchallenge](https://github.com/RobinDadswell/PS2-Challenge-Website/actions/workflows/main_retrodadsonchallenge.yml/badge.svg)](https://github.com/RobinDadswell/PS2-Challenge-Website/actions/workflows/main_retrodadsonchallenge.yml)
 ## Architecture
 
 - **Blazor Server**: Interactive UI with SignalR for real-time updates
