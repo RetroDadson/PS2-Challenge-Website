@@ -460,6 +460,176 @@ public class VotesController : ControllerBase
             return StatusCode(500, new { message = $"Error updating vote count: {ex.Message}" });
         }
     }
+
+    /// <summary>
+    /// Fill current votes with random owned games that have not been started (Admin only)
+    /// </summary>
+    /// <param name="request">Number of games to add (will fill up to 3 total games)</param>
+    /// <returns>List of added games with their game numbers</returns>
+    /// <response code="200">Current votes filled successfully with random games</response>
+    /// <response code="400">Invalid request data or no eligible games available</response>
+    /// <response code="401">Unauthorized - authentication required</response>
+    /// <response code="403">Forbidden - admin access required</response>
+    /// <response code="500">Internal server error</response>
+    /// <remarks>
+    /// Fills the current votes table with random games that are:
+    /// - Owned (marked in game_owned table)
+    /// - Not excluded (not in excluded_games table)
+    /// - Not started (no entry in progress table or entry without date_started)
+    /// 
+    /// The number of games added is calculated as: min(count, 3 - current_votes_count)
+    /// This ensures you never have more than 3 games in the current votes table.
+    /// 
+    /// Each game is assigned a game number (1-3) based on available slots.
+    /// All added games start with 0 votes.
+    /// 
+    /// Sample request:
+    /// 
+    ///     POST /api/votes/current/fill-random
+    ///     {
+    ///         "count": 3
+    ///     }
+    /// </remarks>
+    [Authorize(Policy = "AdminCookieOrApiKey")]
+    [HttpPost("current/fill-random")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> FillCurrentVotesWithRandom([FromBody] FillRandomVotesRequest? request)
+    {
+        if (request == null)
+        {
+            return BadRequest(new { message = "Request data is required" });
+        }
+
+        if (request.Count <= 0)
+        {
+            return BadRequest(new { message = "Count must be greater than 0" });
+        }
+
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
+
+        try
+        {
+            // Get current vote count
+            var currentVotesCount = await db.CurrentVotes.CountAsync();
+
+            // Calculate how many games we can add (max 3 total)
+            var slotsAvailable = 3 - currentVotesCount;
+            if (slotsAvailable <= 0)
+            {
+                return BadRequest(new { message = "Current votes already has 3 games. Archive or remove existing votes first." });
+            }
+
+            var gamesToAdd = Math.Min(request.Count, slotsAvailable);
+
+            // Get owned game IDs
+            var ownedGameIds = await db.GamesOwned
+                .Select(go => go.GameId)
+                .ToListAsync();
+
+            // Get excluded game IDs
+            var excludedGameIds = await db.ExcludedGames
+                .Select(eg => eg.GameId)
+                .ToListAsync();
+
+            // Get games that have been started (have progress with date started)
+            var startedGameIds = await db.GameProgress
+                .Where(gp => gp.DateStarted != null)
+                .Select(gp => gp.GameId)
+                .ToListAsync();
+
+            // Get game IDs already in current votes
+            var currentVoteGameIds = await db.CurrentVotes
+                .Select(cv => cv.GameId)
+                .ToListAsync();
+
+            // Get eligible game IDs: owned, not excluded, not started, not in current votes
+            var eligibleGameIds = ownedGameIds
+                .Where(id => !excludedGameIds.Contains(id))
+                .Where(id => !startedGameIds.Contains(id))
+                .Where(id => !currentVoteGameIds.Contains(id))
+                .ToList();
+
+            if (!eligibleGameIds.Any())
+            {
+                return BadRequest(new { message = "No eligible games found. Games must be owned, not excluded, and not started." });
+            }
+
+            if (eligibleGameIds.Count < gamesToAdd)
+            {
+                return BadRequest(new 
+                { 
+                    message = $"Only {eligibleGameIds.Count} eligible game(s) available, but {gamesToAdd} requested.",
+                    availableGames = eligibleGameIds.Count,
+                    requestedGames = gamesToAdd
+                });
+            }
+
+            // Randomly select games
+            var random = new Random();
+            var selectedGameIds = eligibleGameIds
+                .OrderBy(x => random.Next())
+                .Take(gamesToAdd)
+                .ToList();
+
+            // Get used game numbers
+            var usedGameNumbers = await db.CurrentVotes
+                .Select(cv => cv.GameNumber)
+                .ToListAsync();
+
+            // Find available game numbers (1-3)
+            var availableGameNumbers = Enumerable.Range(1, 3)
+                .Where(n => !usedGameNumbers.Contains(n))
+                .ToList();
+
+            // Create new current vote entries
+            var newVotes = new List<CurrentVote>();
+            for (int i = 0; i < selectedGameIds.Count; i++)
+            {
+                newVotes.Add(new CurrentVote
+                {
+                    GameId = selectedGameIds[i],
+                    VoteCount = 0,
+                    GameNumber = availableGameNumbers[i]
+                });
+            }
+
+            await db.CurrentVotes.AddRangeAsync(newVotes);
+            await db.SaveChangesAsync();
+
+            // Get game titles for response
+            var addedGames = await db.Games
+                .AsNoTracking()
+                .Where(g => selectedGameIds.Contains(g.Id))
+                .Select(g => new { g.Id, g.Title })
+                .ToListAsync();
+
+            var response = newVotes.Select(cv => new
+            {
+                gameId = cv.GameId,
+                gameTitle = addedGames.FirstOrDefault(g => g.Id == cv.GameId)?.Title ?? "Unknown",
+                gameNumber = cv.GameNumber,
+                voteCount = cv.VoteCount
+            }).ToList();
+
+            // Notify SignalR clients that votes were updated
+            await _hubContext.Clients.All.SendAsync("VotesUpdated");
+
+            return Ok(new
+            {
+                message = $"Successfully added {newVotes.Count} random game(s) to current votes",
+                addedGames = response
+            });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { message = $"Error filling current votes: {ex.Message}" });
+        }
+    }
 }
 
 /// <summary>
@@ -476,4 +646,15 @@ public class UpdateVoteByGameNumberRequest
     /// New vote count (must be non-negative)
     /// </summary>
     public int VoteCount { get; set; }
+}
+
+/// <summary>
+/// Request model for filling current votes with random games
+/// </summary>
+public class FillRandomVotesRequest
+{
+    /// <summary>
+    /// Number of random games to add (will be limited by available slots and eligible games)
+    /// </summary>
+    public int Count { get; set; }
 }

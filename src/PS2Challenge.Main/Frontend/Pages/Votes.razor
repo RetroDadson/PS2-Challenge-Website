@@ -184,6 +184,13 @@
                             Archive to History
                         </button>
                     }
+                    
+                    @if (currentVotes == null || currentVotes.Count < 3)
+                    {
+                        <button class="cta-button" @onclick="FillRandomGames" style="margin-left:1rem;background:linear-gradient(135deg,#9c27b0 0%,#7b1fa2 100%);">
+                            Fill with Random Games
+                        </button>
+                    }
                 </div>
             }
         </div>
@@ -583,6 +590,7 @@
         finally
         {
             await LoadCurrentVotes();
+            StateHasChanged();
         }
     }
 
@@ -675,6 +683,108 @@
         catch (Exception ex)
         {
             Console.WriteLine($"Error auto-saving current votes: {ex.Message}");
+        }
+    }
+
+    private async Task FillRandomGames()
+    {
+        if (!isAdmin) return;
+
+        try
+        {
+            using var scope = ScopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
+
+            // Calculate how many games we need to add
+            var currentCount = currentVotes?.Count ?? 0;
+            var countToAdd = 3 - currentCount;
+
+            if (countToAdd <= 0)
+            {
+                Console.WriteLine("Current votes already has 3 games");
+                return;
+            }
+
+            // Get owned game IDs
+            var ownedGameIds = await db.GamesOwned
+                .Select(go => go.GameId)
+                .ToListAsync();
+
+            // Get excluded game IDs
+            var excludedGameIds = await db.ExcludedGames
+                .Select(eg => eg.GameId)
+                .ToListAsync();
+
+            // Get games that have been started (have progress with date started)
+            var startedGameIds = await db.GameProgress
+                .Where(gp => gp.DateStarted != null)
+                .Select(gp => gp.GameId)
+                .ToListAsync();
+
+            // Get game IDs already in current votes
+            var currentVoteGameIds = await db.CurrentVotes
+                .Select(cv => cv.GameId)
+                .ToListAsync();
+
+            // Get eligible game IDs: owned, not excluded, not started, not in current votes
+            var eligibleGameIds = ownedGameIds
+                .Where(id => !excludedGameIds.Contains(id))
+                .Where(id => !startedGameIds.Contains(id))
+                .Where(id => !currentVoteGameIds.Contains(id))
+                .ToList();
+
+            if (!eligibleGameIds.Any())
+            {
+                Console.WriteLine("No eligible games found. Games must be owned, not excluded, and not started.");
+                return;
+            }
+
+            var gamesToAdd = Math.Min(countToAdd, eligibleGameIds.Count);
+
+            // Randomly select games
+            var random = new Random();
+            var selectedGameIds = eligibleGameIds
+                .OrderBy(x => random.Next())
+                .Take(gamesToAdd)
+                .ToList();
+
+            // Get used game numbers
+            var usedGameNumbers = await db.CurrentVotes
+                .Select(cv => cv.GameNumber)
+                .ToListAsync();
+
+            // Find available game numbers (1-3)
+            var availableGameNumbers = Enumerable.Range(1, 3)
+                .Where(n => !usedGameNumbers.Contains(n))
+                .ToList();
+
+            // Create new current vote entries
+            var newVotes = new List<CurrentVote>();
+            for (int i = 0; i < selectedGameIds.Count; i++)
+            {
+                newVotes.Add(new CurrentVote
+                {
+                    GameId = selectedGameIds[i],
+                    VoteCount = 0,
+                    GameNumber = availableGameNumbers[i]
+                });
+            }
+
+            await db.CurrentVotes.AddRangeAsync(newVotes);
+            await db.SaveChangesAsync();
+
+            // Notify SignalR clients that votes were updated
+            await HubContext.Clients.All.SendAsync("VotesUpdated");
+
+            Console.WriteLine($"Successfully added {newVotes.Count} random game(s) to current votes");
+
+            // Reload current votes and force UI update
+            await LoadCurrentVotes();
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error filling current votes with random games: {ex.Message}");
         }
     }
 
