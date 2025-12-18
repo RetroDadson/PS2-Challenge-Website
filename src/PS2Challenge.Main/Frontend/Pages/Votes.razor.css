@@ -308,78 +308,14 @@
     }
     
     /* Cover image adjustments for tablet */
-    .game-cover {
-        max-width: 60px;
-        max-height: 84px;
-    }
-    
-    .no-cover {
+    .cover-wrapper {
         width: 60px;
         height: 84px;
-        font-size: 0.7rem;
-    }
-}
-
-/* Cover image cell styling */
-.cover-cell {
-    text-align: center;
-    padding: 0.5rem !important;
-    vertical-align: middle;
-}
-
-.game-cover {
-    max-width: 50px;
-    width: 50px;
-    height: auto;
-    max-height: 70px;
-    border-radius: 4px;
-    border: 2px solid var(--border-color);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-    transition: all 0.3s ease;
-    display: block;
-    margin: 0 auto;
-    object-fit: cover;
-}
-
-.game-cover:hover {
-    transform: scale(2.5);
-    z-index: 100;
-    border-color: var(--primary-color);
-    box-shadow: 0 4px 20px rgba(233, 30, 99, 0.5);
-}
-
-.no-cover {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 50px;
-    height: 70px;
-    background: var(--background-dark);
-    border: 2px dashed var(--border-color);
-    border-radius: 4px;
-    color: var(--text-secondary);
-    font-size: 0.65rem;
-    text-align: center;
-    margin: 0 auto;
-    opacity: 0.5;
-}
-
-/* Responsive adjustments */
-@media (max-width: 1024px) {
-    .completed-games-container {
-        padding: 1.5rem;
-    }
-    .games-table {
-        font-size: 0.95rem;
-    }
-    .games-table thead th,
-    .games-table tbody td {
-        padding: 0.75rem;
     }
     
-    /* Cover image adjustments for tablet */
     .game-cover {
         max-width: 60px;
+        width: 60px;
         max-height: 84px;
     }
     
@@ -418,13 +354,21 @@
     }
     
     /* Cover image adjustments for mobile */
+    .cover-wrapper {
+        width: 50px;
+        height: 70px;
+    }
+    
     .game-cover {
         max-width: 50px;
+        width: 50px;
         max-height: 70px;
     }
     
-    .game-cover:hover {
-        transform: scale(2);
+    .cover-wrapper:hover .game-cover {
+        width: 100px;
+        max-width: 100px;
+        max-height: 140px;
     }
     
     .no-cover {
@@ -542,4 +486,66 @@
     .current-votes-right, .current-votes-left {
         min-width: 100%;
     }
+}
+
+/* Cover image cell styling */
+.cover-cell {
+    text-align: center;
+    padding: 0.5rem !important;
+    vertical-align: middle;
+}
+
+.cover-wrapper {
+    position: relative;
+    display: inline-block;
+    width: 50px;
+    height: 70px;
+    overflow: visible;
+}
+
+.game-cover {
+    width: 50px;
+    height: auto;
+    max-height: 70px;
+    border-radius: 4px;
+    border: 2px solid var(--border-color);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    display: block;
+    object-fit: cover;
+}
+
+/* On hover, show enlarged version at mouse position */
+.cover-wrapper:hover .game-cover {
+    position: fixed;
+    width: 125px;
+    max-width: 125px;
+    height: auto;
+    max-height: 175px;
+    z-index: 10000;
+    border-color: var(--primary-color);
+    box-shadow: 0 4px 20px rgba(233, 30, 99, 0.5);
+    /* Position at mouse cursor using custom properties set by JavaScript */
+    /* Add small offset to the right and down so cursor doesn't cover the image */
+    left: var(--mouse-x, 50%);
+    top: var(--mouse-y, 50%);
+    transform: translate(10px, 10px);
+    pointer-events: none;
+    transition: none;
+}
+
+.no-cover {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 50px;
+    height: 70px;
+    background: var(--background-dark);
+    border: 2px dashed var(--border-color);
+    border-radius: 4px;
+    color: var(--text-secondary);
+    font-size: 0.65rem;
+    text-align: center;
+    margin: 0 auto;
+    opacity: 0.5;
 }

@@ -82,11 +82,13 @@
                                             <td class="cover-cell" data-label="Cover">
                                                 @if (!string.IsNullOrEmpty(coverUrl))
                                                 {
-                                                    <img src="@coverUrl" 
-                                                         alt="@title cover" 
-                                                         class="game-cover"
-                                                         loading="lazy"
-                                                         onerror="this.style.display='none'" />
+                                                    <div class="cover-wrapper">
+                                                        <img src="@coverUrl" 
+                                                             alt="@title cover" 
+                                                             class="game-cover"
+                                                             loading="lazy"
+                                                             onerror="this.style.display='none'" />
+                                                    </div>
                                                 }
                                                 else
                                                 {
@@ -726,7 +728,7 @@
                 .Select(cv => cv.GameId)
                 .ToListAsync();
 
-            // Get eligible game IDs: owned, not excluded, not started, not in current votes
+            // Get eligible game IDs: owned, not excluded, and not started
             var eligibleGameIds = ownedGameIds
                 .Where(id => !excludedGameIds.Contains(id))
                 .Where(id => !startedGameIds.Contains(id))
