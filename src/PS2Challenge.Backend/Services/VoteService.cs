@@ -382,9 +382,8 @@ public class VoteService
             .Select(eg => eg.GameId)
             .ToListAsync();
 
-        // Get games that have been started (have progress with date started)
+        // Get games that have been started (have progress records)
         var startedGameIds = await db.GameProgress
-            .Where(gp => gp.DateStarted != null)
             .Select(gp => gp.GameId)
             .ToListAsync();
 

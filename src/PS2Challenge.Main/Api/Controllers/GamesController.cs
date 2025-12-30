@@ -865,7 +865,7 @@ public class GamesController : ControllerBase
     /// 
     ///     POST /api/games/1/alternate-titles
     ///     {
-    ///         "title": "Ratchet & Clank 2: Going Commando",
+    ///         "title": "Ratchet &amp; Clank 2: Going Commando",
     ///         "notes": "North American release title"
     ///     }
     /// </remarks>
