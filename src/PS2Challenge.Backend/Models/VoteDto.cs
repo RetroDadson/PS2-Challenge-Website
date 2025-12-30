@@ -17,6 +17,7 @@ public class VoteRoundDto
 
 public class CurrentVoteDto
 {
+    public int GameId { get; set; }
     public string GameTitle { get; set; } = string.Empty;
     public int VoteCount { get; set; }
     public int GameNumber { get; set; }
