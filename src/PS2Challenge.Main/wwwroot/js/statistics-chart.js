@@ -1,3 +1,13 @@
+// Register Chart.js plugins
+if (typeof Chart !== 'undefined') {
+    if (typeof zoomPlugin !== 'undefined') {
+        Chart.register(zoomPlugin);
+    }
+    console.log('? Chart.js loaded and zoom plugin registered');
+} else {
+    console.error('? Chart.js failed to load');
+}
+
 // Chart instance reference
 let durationChart = null;
 
@@ -170,11 +180,16 @@ window.renderDurationChart = function(chartData) {
             }
         }
     });
+    
+    console.log('? Duration chart rendered successfully');
 };
 
 window.resetChartZoom = function() {
     if (durationChart) {
         durationChart.resetZoom();
+        console.log('? Chart zoom reset');
+    } else {
+        console.warn('?? No chart instance found to reset');
     }
 };
 
@@ -257,4 +272,6 @@ window.renderOwnershipChart = function(chartData) {
             }
         }
     });
+    
+    console.log('? Ownership chart rendered successfully');
 };

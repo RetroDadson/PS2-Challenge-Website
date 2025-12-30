@@ -120,6 +120,7 @@ public class VoteService
         return current
             .Select(c => new CurrentVoteDto
             {
+                GameId = c.GameId,
                 GameTitle = idToTitle.TryGetValue(c.GameId, out var t) ? t : string.Empty,
                 VoteCount = c.VoteCount,
                 GameNumber = c.GameNumber

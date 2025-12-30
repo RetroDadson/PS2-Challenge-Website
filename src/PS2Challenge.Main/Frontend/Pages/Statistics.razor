@@ -1,4 +1,5 @@
 @page "/statistics"
+@rendermode InteractiveServer
 @using PS2Challenge.Main.Frontend.Models
 @using GameProgressDto = PS2Challenge.Backend.Models.GameProgressDto
 @inject GameService GameService
@@ -231,6 +232,7 @@
     private double collectionPercentageTotal = 0;
     
     private bool isLoading = true;
+    private bool hasRenderedChart = false;
 
     protected override async Task OnInitializedAsync()
     {
@@ -239,8 +241,11 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender && !isLoading && allProgress.Any())
+        // Only attempt to render if we haven't rendered yet and there's data to show
+        if (!hasRenderedChart && !isLoading && allProgress.Any(p => p.DateFinished.HasValue && p.CompletionTime.HasValue))
         {
+            hasRenderedChart = true;
+            await Task.Delay(150);
             await RenderChart();
         }
     }
@@ -250,7 +255,6 @@
         try
         {
             isLoading = true;
-            StateHasChanged();
 
             // Load all games
             var gamesResult = await GameService.GetAllGamesAsync();
@@ -276,11 +280,6 @@
         finally
         {
             isLoading = false;
-            StateHasChanged();
-            
-            // Render charts after data is loaded and UI is updated
-            await Task.Delay(100); // Small delay to ensure DOM is ready
-            await RenderChart();
         }
     }
 
@@ -485,7 +484,14 @@
 
     private async Task ResetZoom()
     {
-        await JSRuntime.InvokeVoidAsync("resetChartZoom");
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("resetChartZoom");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error resetting chart zoom: {ex.Message}");
+        }
     }
 
     // Pie chart helper classes and methods

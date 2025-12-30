@@ -399,10 +399,14 @@
                 return;
             }
 
-            // Extract game IDs from titles (we need to get them from the service)
-            // For now, we'll just clear the cover URLs - we need a way to get game IDs from titles
-            // Or we can enhance GetCurrentVotesAsync to return game IDs as well
-            currentVoteCoverUrls = new Dictionary<string, string>();
+            // Get cover URLs for all current vote games
+            var gameIds = currentVotes.Select(cv => cv.GameId).ToList();
+            var coverUrls = await CoverService.GetCoverUrlsAsync(gameIds);
+
+            // Map covers by game title for easy lookup in the UI
+            currentVoteCoverUrls = currentVotes
+                .Where(cv => coverUrls.ContainsKey(cv.GameId))
+                .ToDictionary(cv => cv.GameTitle, cv => coverUrls[cv.GameId], StringComparer.OrdinalIgnoreCase);
         }
         catch (Exception ex)
         {
