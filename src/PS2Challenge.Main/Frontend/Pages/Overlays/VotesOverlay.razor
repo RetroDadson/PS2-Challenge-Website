@@ -1,6 +1,8 @@
-@page "/progress-overlay"
+@page "/votes-overlay"
 @rendermode InteractiveServer
 @layout EmptyLayout
+@namespace PS2Challenge.Main.Frontend.Pages.Overlays
+@using System.Text.Json
 @using PS2Challenge.Backend.Models
 @using Microsoft.EntityFrameworkCore
 @using PS2Challenge.Backend.Data
@@ -9,19 +11,6 @@
 @inject NavigationManager NavigationManager
 @implements IAsyncDisposable
 
-@*
-    Progress Overlay - Stream/OBS Overlay Component
-    
-    Displays the current challenge progress showing:
-    - Number of games completed
-    - Total games in challenge
-    - Completion percentage
-    
-    Designed to be displayed as a browser source in OBS/streaming software.
-    Uses SignalR to auto-update when game progress changes.
-    Access via: /progress-overlay
-*@
-
 <div class="overlay-container">
     @if (isLoading)
     {
@@ -29,22 +18,26 @@
     }
     else if (hasError)
     {
-        <div class="loading">Error loading progress</div>
+        <div class="no-votes">Error loading votes</div>
+    }
+    else if (currentVotes == null || !currentVotes.Any())
+    {
+        <div class="no-votes">No current votes</div>
     }
     else
     {
-        <div class="progress-box">
-            <div class="progress-label">Games Completed</div>
-            <div class="progress-count">@gamesCompletedCount / @gamesInChallengeCount</div>
-            <div class="progress-percentage">@percentageComplete.ToString("F2")%</div>
-        </div>
+        @foreach (var vote in currentVotes.OrderBy(v => v.GameNumber))
+        {
+            <div class="game-box">
+                <div class="game-title">@vote.GameTitle</div>
+                <div class="game-number">Game @vote.GameNumber: @vote.VoteCount</div>
+            </div>
+        }
     }
 </div>
 
 @code {
-    private int gamesCompletedCount = 0;
-    private int gamesInChallengeCount = 0;
-    private double percentageComplete = 0;
+    private List<CurrentVoteDto> currentVotes = new();
     private bool isLoading = true;
     private bool hasError = false;
     private bool isDisposed = false;
@@ -56,20 +49,20 @@
     {
         try
         {
-            await LoadProgressData();
+            await LoadCurrentVotes();
 
             hubConnection = new HubConnectionBuilder()
-                .WithUrl(NavigationManager.ToAbsoluteUri("/gamesHub"))
+                .WithUrl(NavigationManager.ToAbsoluteUri("/votesHub"))
                 .WithAutomaticReconnect()
                 .Build();
 
-            hubConnection.On("GamesUpdated", async () =>
+            hubConnection.On("VotesUpdated", async () =>
             {
                 try
                 {
                     if (isDisposed) return;
                     
-                    await LoadProgressData();
+                    await LoadCurrentVotes();
                     
                     if (!isDisposed)
                     {
@@ -78,7 +71,7 @@
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"Error in GamesUpdated handler: {ex.Message}");
+                    Console.WriteLine($"Error in VotesUpdated handler: {ex.Message}");
                 }
             });
 
@@ -99,7 +92,7 @@
         }
     }
 
-    private async Task LoadProgressData()
+    private async Task LoadCurrentVotes()
     {
         try
         {
@@ -111,36 +104,40 @@
             using var scope = ScopeFactory.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
 
-            var excludedGameIds = await db.ExcludedGames
-                .AsNoTracking()
-                .Select(eg => eg.GameId)
-                .ToListAsync();
-
-            var totalGames = await db.Games
-                .AsNoTracking()
-                .Where(g => !excludedGameIds.Contains(g.Id))
-                .CountAsync();
-
-            var completedGames = await db.GameProgress
-                .AsNoTracking()
-                .Where(p => p.DateFinished.HasValue)
-                .CountAsync();
-
-            double percentage = 0;
-            if (totalGames > 0)
+            var current = await db.CurrentVotes.AsNoTracking().ToListAsync();
+            if (!current.Any())
             {
-                percentage = ((double)completedGames / totalGames) * 100;
+                lock (_stateLock)
+                {
+                    currentVotes = new List<CurrentVoteDto>();
+                    lastDataHash = string.Empty;
+                }
+                return;
             }
 
-            var newHash = $"{completedGames}:{totalGames}";
+            var gameIds = current.Select(c => c.GameId).Distinct().ToList();
+            var games = await db.Games.AsNoTracking().Where(g => gameIds.Contains(g.Id)).ToListAsync();
+            var idToTitle = games.ToDictionary(g => g.Id, g => g.Title);
+
+            var newVotes = current
+                .Select(c => new CurrentVoteDto
+                {
+                    GameTitle = idToTitle.TryGetValue(c.GameId, out var t) ? t : string.Empty,
+                    VoteCount = c.VoteCount,
+                    GameNumber = c.GameNumber
+                })
+                .OrderBy(x => x.GameNumber)
+                .ThenByDescending(x => x.VoteCount)
+                .ThenBy(x => x.GameTitle)
+                .ToList();
+
+            var newHash = string.Join("|", newVotes.Select(v => $"{v.GameNumber}:{v.GameTitle}:{v.VoteCount}"));
 
             if (newHash != lastDataHash)
             {
                 lock (_stateLock)
                 {
-                    gamesCompletedCount = completedGames;
-                    gamesInChallengeCount = totalGames;
-                    percentageComplete = percentage;
+                    currentVotes = newVotes;
                     lastDataHash = newHash;
                 }
             }
@@ -151,12 +148,10 @@
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error loading progress data: {ex.Message}");
+            Console.WriteLine($"Error loading current votes: {ex.Message}");
             lock (_stateLock)
             {
-                gamesCompletedCount = 0;
-                gamesInChallengeCount = 0;
-                percentageComplete = 0;
+                currentVotes = new List<CurrentVoteDto>();
             }
             hasError = true;
         }
