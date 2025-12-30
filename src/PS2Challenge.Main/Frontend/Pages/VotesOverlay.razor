@@ -1,4 +1,5 @@
 @page "/votes-overlay"
+@rendermode InteractiveServer
 @layout EmptyLayout
 @using System.Text.Json
 @using PS2Challenge.Backend.Models
@@ -49,13 +50,11 @@
         {
             await LoadCurrentVotes();
 
-            // Set up SignalR connection
             hubConnection = new HubConnectionBuilder()
                 .WithUrl(NavigationManager.ToAbsoluteUri("/votesHub"))
                 .WithAutomaticReconnect()
                 .Build();
 
-            // Subscribe to VotesUpdated event
             hubConnection.On("VotesUpdated", async () =>
             {
                 try
@@ -78,12 +77,10 @@
             try
             {
                 await hubConnection.StartAsync();
-                Console.WriteLine("VotesOverlay: Connected to SignalR hub");
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"Error connecting to SignalR hub: {ex.Message}");
-                // Don't set hasError - the overlay can still function with initial data
             }
         }
         catch (Exception ex)
@@ -133,10 +130,8 @@
                 .ThenBy(x => x.GameTitle)
                 .ToList();
 
-            // Create a hash to detect changes
             var newHash = string.Join("|", newVotes.Select(v => $"{v.GameNumber}:{v.GameTitle}:{v.VoteCount}"));
 
-            // Only update if data has changed
             if (newHash != lastDataHash)
             {
                 lock (_stateLock)
@@ -176,7 +171,6 @@
             try
             {
                 await hubConnection.DisposeAsync();
-                Console.WriteLine("VotesOverlay: Disconnected from SignalR hub");
             }
             catch (Exception ex)
             {
