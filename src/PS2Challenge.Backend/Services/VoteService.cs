@@ -20,7 +20,7 @@ public class VoteService
     /// <param name="notes">Optional notes about the voting round</param>
     /// <param name="manualPositions">Optional manual position assignments (GameId -> Position)</param>
     /// <returns>Tuple containing the round number and count of archived votes</returns>
-    public async Task<(int roundNumber, int archivedCount)> ArchiveCurrentVotesAsync(string? notes = null, Dictionary<int, int>? manualPositions = null)
+    public virtual async Task<(int roundNumber, int archivedCount)> ArchiveCurrentVotesAsync(string? notes = null, Dictionary<int, int>? manualPositions = null)
     {
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
@@ -102,7 +102,7 @@ public class VoteService
     /// <summary>
     /// Gets all current votes with game titles
     /// </summary>
-    public async Task<List<CurrentVoteDto>> GetCurrentVotesAsync()
+    public virtual async Task<List<CurrentVoteDto>> GetCurrentVotesAsync()
     {
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
@@ -133,7 +133,7 @@ public class VoteService
     /// <summary>
     /// Sets current votes (upsert operation)
     /// </summary>
-    public async Task<(int inserted, int updated)> SetCurrentVotesAsync(List<CurrentVoteDto> votes)
+    public virtual async Task<(int inserted, int updated)> SetCurrentVotesAsync(List<CurrentVoteDto> votes)
     {
         if (votes == null || !votes.Any())
         {
@@ -226,7 +226,7 @@ public class VoteService
     /// <summary>
     /// Removes a current vote by game title
     /// </summary>
-    public async Task<bool> RemoveCurrentVoteAsync(string gameTitle)
+    public virtual async Task<bool> RemoveCurrentVoteAsync(string gameTitle)
     {
         if (string.IsNullOrWhiteSpace(gameTitle))
         {
@@ -264,7 +264,7 @@ public class VoteService
     /// <summary>
     /// Gets vote history grouped by round
     /// </summary>
-    public async Task<List<VoteRoundDto>> GetVoteHistoryAsync()
+    public virtual async Task<List<VoteRoundDto>> GetVoteHistoryAsync()
     {
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
@@ -326,5 +326,121 @@ public class VoteService
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Gets all game titles for autocomplete/suggestions
+    /// </summary>
+    public virtual async Task<List<string>> GetAllGameTitlesAsync()
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
+
+        return await db.Games
+            .AsNoTracking()
+            .Select(g => g.Title)
+            .Where(t => !string.IsNullOrWhiteSpace(t))
+            .Distinct()
+            .ToListAsync();
+    }
+
+    /// <summary>
+    /// Fills current votes with random eligible games
+    /// </summary>
+    /// <param name="count">Number of games to add (will be limited by available slots)</param>
+    /// <returns>Number of games added</returns>
+    public virtual async Task<int> FillCurrentVotesWithRandomGamesAsync(int count)
+    {
+        if (count <= 0)
+        {
+            throw new ArgumentException("Count must be greater than 0", nameof(count));
+        }
+
+        using var scope = _scopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
+
+        // Get current vote count
+        var currentVotesCount = await db.CurrentVotes.CountAsync();
+
+        // Calculate how many games we can add (max 3 total)
+        var slotsAvailable = 3 - currentVotesCount;
+        if (slotsAvailable <= 0)
+        {
+            throw new InvalidOperationException("Current votes already has 3 games. Archive or remove existing votes first.");
+        }
+
+        var gamesToAdd = Math.Min(count, slotsAvailable);
+
+        // Get owned game IDs
+        var ownedGameIds = await db.GamesOwned
+            .Select(go => go.GameId)
+            .ToListAsync();
+
+        // Get excluded game IDs
+        var excludedGameIds = await db.ExcludedGames
+            .Select(eg => eg.GameId)
+            .ToListAsync();
+
+        // Get games that have been started (have progress with date started)
+        var startedGameIds = await db.GameProgress
+            .Where(gp => gp.DateStarted != null)
+            .Select(gp => gp.GameId)
+            .ToListAsync();
+
+        // Get game IDs already in current votes
+        var currentVoteGameIds = await db.CurrentVotes
+            .Select(cv => cv.GameId)
+            .ToListAsync();
+
+        // Get eligible game IDs: owned, not excluded, not started, not in current votes
+        var eligibleGameIds = ownedGameIds
+            .Where(id => !excludedGameIds.Contains(id))
+            .Where(id => !startedGameIds.Contains(id))
+            .Where(id => !currentVoteGameIds.Contains(id))
+            .ToList();
+
+        if (!eligibleGameIds.Any())
+        {
+            throw new InvalidOperationException("No eligible games found. Games must be owned, not excluded, and not started.");
+        }
+
+        if (eligibleGameIds.Count < gamesToAdd)
+        {
+            throw new InvalidOperationException($"Only {eligibleGameIds.Count} eligible game(s) available, but {gamesToAdd} requested.");
+        }
+
+        // Randomly select games
+        var random = new Random();
+        var selectedGameIds = eligibleGameIds
+            .OrderBy(x => random.Next())
+            .Take(gamesToAdd)
+            .ToList();
+
+        // Get used game numbers
+        var usedGameNumbers = await db.CurrentVotes
+            .Select(cv => cv.GameNumber)
+            .ToListAsync();
+
+        // Find available game numbers (1-3)
+        var availableGameNumbers = Enumerable.Range(1, 3)
+            .Where(n => !usedGameNumbers.Contains(n))
+            .ToList();
+
+        // Create new current vote entries
+        var newVotes = new List<CurrentVote>();
+        for (int i = 0; i < selectedGameIds.Count; i++)
+        {
+            newVotes.Add(new CurrentVote
+            {
+                GameId = selectedGameIds[i],
+                VoteCount = 0,
+                GameNumber = availableGameNumbers[i]
+            });
+        }
+
+        await db.CurrentVotes.AddRangeAsync(newVotes);
+        await db.SaveChangesAsync();
+
+        return newVotes.Count;
     }
 }

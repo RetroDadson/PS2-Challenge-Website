@@ -1,4 +1,5 @@
 @page "/games"
+@rendermode InteractiveServer
 @using System.Text.Json
 @using System.Text.Json.Serialization
 @using Microsoft.AspNetCore.Components.Authorization
@@ -47,11 +48,11 @@
 
             <div class="filter-controls">
                 <label>
-                    <input type="checkbox" checked="@showOwnedOnly" @onchange="ToggleShowOwnedOnly" />
+                    <input type="checkbox" id="showOwnedOnly" checked="@showOwnedOnly" @onchange="ToggleShowOwnedOnly" />
                     Show Owned Only
                 </label>
                 <label>
-                    <input type="checkbox" checked="@showExcludedGames" @onchange="ToggleShowExcluded" />
+                    <input type="checkbox" id="showExcludedGames" checked="@showExcludedGames" @onchange="ToggleShowExcluded" />
                     Show Excluded Games
                 </label>
             </div>
@@ -340,12 +341,14 @@
     {
         showOwnedOnly = e.Value is bool b && b;
         await SavePreferences();
+        StateHasChanged(); // Trigger re-render
     }
 
     private async Task ToggleShowExcluded(ChangeEventArgs e)
     {
         showExcludedGames = e.Value is bool b && b;
         await SavePreferences();
+        StateHasChanged(); // Trigger re-render
     }
 
     private async Task LoadGames()

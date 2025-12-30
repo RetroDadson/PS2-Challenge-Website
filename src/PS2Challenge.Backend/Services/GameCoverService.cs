@@ -21,7 +21,7 @@ public class GameCoverService
     /// </summary>
     /// <param name="gameId">The game ID</param>
     /// <returns>The full URL to the cover image, or null if no serial number is available</returns>
-    public async Task<string?> GetCoverUrlAsync(int gameId)
+    public virtual async Task<string?> GetCoverUrlAsync(int gameId)
     {
         // Get the first serial number for this game (prefer NTSC-U*, then PAL*, then NTSC-J*)
         var serialNumber = await _context.GameSerialNumbers
@@ -51,7 +51,7 @@ public class GameCoverService
     /// </summary>
     /// <param name="gameIds">Collection of game IDs</param>
     /// <returns>Dictionary mapping game IDs to their cover URLs</returns>
-    public async Task<Dictionary<int, string>> GetCoverUrlsAsync(IEnumerable<int> gameIds)
+    public virtual async Task<Dictionary<int, string>> GetCoverUrlsAsync(IEnumerable<int> gameIds)
     {
         var gameIdsList = gameIds.ToList();
         

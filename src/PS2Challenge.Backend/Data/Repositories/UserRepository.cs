@@ -13,7 +13,7 @@ public class UserRepository
         _scopeFactory = scopeFactory;
     }
 
-    public async Task<ApplicationUser?> GetByTwitchIdAsync(string twitchId)
+    public virtual async Task<ApplicationUser?> GetByTwitchIdAsync(string twitchId)
     {
         using var scope = _scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
@@ -23,7 +23,7 @@ public class UserRepository
             .FirstOrDefaultAsync(u => u.TwitchId == twitchId);
     }
 
-    public async Task<ApplicationUser> CreateAsync(ApplicationUser user)
+    public virtual async Task<ApplicationUser> CreateAsync(ApplicationUser user)
     {
         using var scope = _scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
@@ -34,7 +34,7 @@ public class UserRepository
         return user;
     }
 
-    public async Task UpdateAsync(ApplicationUser user)
+    public virtual async Task UpdateAsync(ApplicationUser user)
     {
         using var scope = _scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
@@ -59,7 +59,7 @@ public class UserRepository
         await dbContext.SaveChangesAsync();
     }
 
-    public async Task<ApplicationUser?> GetByIdAsync(int id)
+    public virtual async Task<ApplicationUser?> GetByIdAsync(int id)
     {
         using var scope = _scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
@@ -69,7 +69,7 @@ public class UserRepository
             .FirstOrDefaultAsync(u => u.Id == id);
     }
 
-    public async Task<Role?> GetRoleByNameAsync(string roleName)
+    public virtual async Task<Role?> GetRoleByNameAsync(string roleName)
     {
         using var scope = _scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
@@ -78,7 +78,7 @@ public class UserRepository
             .FirstOrDefaultAsync(r => r.Name == roleName);
     }
 
-    public async Task<Role?> GetRoleByIdAsync(int roleId)
+    public virtual async Task<Role?> GetRoleByIdAsync(int roleId)
     {
         using var scope = _scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
@@ -87,7 +87,7 @@ public class UserRepository
             .FirstOrDefaultAsync(r => r.Id == roleId);
     }
 
-    public async Task<List<ApplicationUser>> GetAllUsersAsync()
+    public virtual async Task<List<ApplicationUser>> GetAllUsersAsync()
     {
         using var scope = _scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
@@ -98,7 +98,7 @@ public class UserRepository
             .ToListAsync();
     }
 
-    public async Task<List<Role>> GetAllRolesAsync()
+    public virtual async Task<List<Role>> GetAllRolesAsync()
     {
         using var scope = _scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
@@ -108,7 +108,7 @@ public class UserRepository
             .ToListAsync();
     }
 
-    public async Task<ApplicationUser?> GetUserByTwitchIdAsync(string twitchId)
+    public virtual async Task<ApplicationUser?> GetUserByTwitchIdAsync(string twitchId)
     {
         using var scope = _scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
@@ -118,7 +118,7 @@ public class UserRepository
             .FirstOrDefaultAsync(u => u.TwitchId == twitchId);
     }
 
-    public async Task<ApplicationUser> CreateUserAsync(string twitchId, string username)
+    public virtual async Task<ApplicationUser> CreateUserAsync(string twitchId, string username)
     {
         using var scope = _scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
@@ -149,7 +149,7 @@ public class UserRepository
             .FirstAsync(u => u.Id == user.Id);
     }
 
-    public async Task UpdateLastLoginAsync(int userId)
+    public virtual async Task UpdateLastLoginAsync(int userId)
     {
         using var scope = _scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
@@ -165,7 +165,7 @@ public class UserRepository
     /// <summary>
     /// Generates a new API key for the specified user
     /// </summary>
-    public async Task<string> GenerateApiKeyAsync(int userId)
+    public virtual async Task<string> GenerateApiKeyAsync(int userId)
     {
         using var scope = _scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
@@ -185,7 +185,7 @@ public class UserRepository
     /// <summary>
     /// Gets a user by their API key
     /// </summary>
-    public async Task<ApplicationUser?> GetByApiKeyAsync(string apiKey)
+    public virtual async Task<ApplicationUser?> GetByApiKeyAsync(string apiKey)
     {
         using var scope = _scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
