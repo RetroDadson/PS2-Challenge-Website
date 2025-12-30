@@ -11,13 +11,6 @@
     <link href="PS2Challenge.Main.styles.css" rel="stylesheet" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
     
-    <!-- PWA Manifest -->
-    <link rel="manifest" href="manifest.json" />
-    <meta name="theme-color" content="#0f3460" />
-    <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="PS2 Challenge" />
-    
     <HeadOutlet />
 </head>
 <body>
@@ -43,7 +36,6 @@
     </div>
 
     <script src="_framework/blazor.web.js"></script>
-    <script src="js/pwa-helper.js"></script>
     <script src="js/cover-hover.js"></script>
     <script src="js/games-filter.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
@@ -64,7 +56,7 @@
                 if (reconnecting) return;
                 reconnecting = true;
                 
-                console.log('? Blazor connection lost, showing reconnection modal');
+                console.log('?? Blazor connection lost, showing reconnection modal');
                 reconnectModal.style.display = 'flex';
                 
                 // FORCE activate JavaScript filters after a short delay
@@ -93,22 +85,17 @@
                             return;
                         }
                     } catch (e) {
-                        console.log(`?? Reconnection attempt ${attempts} failed:`, e);
+                        console.log(`? Reconnection attempt ${attempts} failed:`, e);
                     }
                 }
                 
                 console.log('? Max reconnection attempts reached');
                 
-                // After max attempts, handle based on current page
-                if (window.location.pathname === '/games') {
-                    console.log('?? Redirecting to offline games page');
-                    window.location.href = '/offline-games.html';
-                } else {
-                    reconnectModal.querySelector('h3').textContent = '? Unable to Reconnect';
-                    reconnectModal.querySelector('p').textContent = 'Please check your internet connection and refresh the page.';
-                    const loadingSpinner = reconnectModal.querySelector('.loading');
-                    if (loadingSpinner) loadingSpinner.style.display = 'none';
-                }
+                // Show failure message
+                reconnectModal.querySelector('h3').textContent = '? Unable to Reconnect';
+                reconnectModal.querySelector('p').textContent = 'Please check your internet connection and refresh the page.';
+                const loadingSpinner = reconnectModal.querySelector('.loading');
+                if (loadingSpinner) loadingSpinner.style.display = 'none';
             };
         }).catch(error => {
             console.error('? Blazor failed to start:', error);
@@ -132,9 +119,6 @@
                 }
             }, 2000);
         });
-        
-        // Test button (remove in production)
-        console.log('?? Tip: In DevTools console, run window.gamesFilter.init() to manually activate filters');
     </script>
 </body>
 </html>
