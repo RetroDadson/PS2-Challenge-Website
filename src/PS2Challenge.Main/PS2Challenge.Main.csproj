@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
@@ -9,13 +9,13 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="AspNet.Security.OAuth.Twitch" Version="9.4.1" />
-    <PackageReference Include="FluentMigrator.Runner" Version="7.1.0" />
-    <PackageReference Include="FluentMigrator.Runner.Postgres" Version="7.1.0" />
-    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="9.0.0" />
-    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="9.0.10" />
-    <PackageReference Include="Npgsql" Version="9.0.4" />
-    <PackageReference Include="Swashbuckle.AspNetCore" Version="9.0.6" />
+    <PackageReference Include="AspNet.Security.OAuth.Twitch" Version="10.0.0" />
+    <PackageReference Include="FluentMigrator.Runner" Version="7.2.0" />
+    <PackageReference Include="FluentMigrator.Runner.Postgres" Version="7.2.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="10.0.1" />
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.1" />
+    <PackageReference Include="Npgsql" Version="10.0.1" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="7.3.0" />
   </ItemGroup>
 
   <ItemGroup>
@@ -24,6 +24,13 @@
 
   <ItemGroup>
     <Folder Include="wwwroot\Pages\" />
+  </ItemGroup>
+
+  <!-- Exclude IBM.Data.Db2 transitive dependency since we only use PostgreSQL -->
+  <ItemGroup>
+    <PackageReference Include="Net.IBM.Data.Db2" Version="9.0.0.300">
+      <ExcludeAssets>all</ExcludeAssets>
+    </PackageReference>
   </ItemGroup>
 
 </Project>
