@@ -28,8 +28,6 @@ html, body {
 
 .cover-image {
     position: absolute;
-    top: 0;
-    left: 0;
     max-width: 90%;
     max-height: 90%;
     width: auto;

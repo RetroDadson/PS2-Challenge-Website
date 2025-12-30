@@ -1,4 +1,5 @@
 @page "/vote-covers-overlay"
+@rendermode InteractiveServer
 @layout EmptyLayout
 @using PS2Challenge.Backend.Models
 @using PS2Challenge.Backend.Services
@@ -54,7 +55,7 @@
     private bool isDisposed = false;
     private HubConnection? hubConnection;
     private System.Threading.Timer? cycleTimer;
-    private readonly int cycleDurationMs = 2000; // Change cover every 2 seconds
+    private readonly int cycleDurationMs = 2000;
     private string? lastDataHash;
     private readonly object _stateLock = new object();
 
@@ -64,13 +65,11 @@
         {
             await LoadCoverImages();
 
-            // Set up SignalR connection to listen for vote updates
             hubConnection = new HubConnectionBuilder()
                 .WithUrl(NavigationManager.ToAbsoluteUri("/votesHub"))
                 .WithAutomaticReconnect()
                 .Build();
 
-            // Subscribe to votes updates
             hubConnection.On("VotesUpdated", async () =>
             {
                 try
@@ -93,18 +92,10 @@
             try
             {
                 await hubConnection.StartAsync();
-                Console.WriteLine("VoteCoversOverlay: Connected to SignalR hub");
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"Error connecting to SignalR hub: {ex.Message}");
-                // Don't set hasError - the overlay can still function with initial data
-            }
-
-            // Start the cycling timer if we have covers
-            if (coverUrls.Any())
-            {
-                StartCycling();
             }
         }
         catch (Exception ex)
@@ -113,6 +104,15 @@
             hasError = true;
             isLoading = false;
         }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && coverUrls.Any() && cycleTimer == null)
+        {
+            StartCycling();
+        }
+        await base.OnAfterRenderAsync(firstRender);
     }
 
     private async Task LoadCoverImages()
@@ -127,7 +127,6 @@
             using var scope = ScopeFactory.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
 
-            // Get current votes ordered by game number
             var currentVotes = await db.CurrentVotes
                 .AsNoTracking()
                 .OrderBy(cv => cv.GameNumber)
@@ -141,34 +140,30 @@
                     lastDataHash = string.Empty;
                 }
                 StopCycling();
+                isLoading = false;
                 return;
             }
 
-            // Get cover URLs for the games
             var gameIds = currentVotes.Select(cv => cv.GameId).ToList();
             var covers = await CoverService.GetCoverUrlsAsync(gameIds);
 
-            // Build list of cover URLs in the correct order (by game number)
             var newCoverUrls = currentVotes
                 .Where(cv => covers.ContainsKey(cv.GameId))
                 .Select(cv => covers[cv.GameId])
                 .ToList();
 
-            // Create a hash to detect changes
             var newHash = string.Join("|", newCoverUrls);
 
-            // Only update if data has changed
             if (newHash != lastDataHash)
             {
                 lock (_stateLock)
                 {
                     coverUrls = newCoverUrls;
                     lastDataHash = newHash;
-                    currentCoverIndex = 0; // Reset to first cover
+                    currentCoverIndex = 0;
                 }
 
-                // Restart cycling if we now have covers
-                if (coverUrls.Any())
+                if (coverUrls.Any() && coverUrls.Count > 1)
                 {
                     StopCycling();
                     StartCycling();
@@ -178,6 +173,8 @@
                     StopCycling();
                 }
             }
+            
+            isLoading = false;
         }
         catch (ObjectDisposedException)
         {
@@ -192,9 +189,6 @@
             }
             StopCycling();
             hasError = true;
-        }
-        finally
-        {
             isLoading = false;
         }
     }
@@ -207,10 +201,9 @@
         {
             if (coverUrls.Count <= 1)
             {
-                // No need to cycle if there's 0 or 1 cover
                 return;
             }
-
+            
             cycleTimer = new System.Threading.Timer(async _ =>
             {
                 try
@@ -269,7 +262,6 @@
             try
             {
                 await hubConnection.DisposeAsync();
-                Console.WriteLine("VoteCoversOverlay: Disconnected from SignalR hub");
             }
             catch (Exception ex)
             {

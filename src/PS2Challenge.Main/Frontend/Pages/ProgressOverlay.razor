@@ -1,4 +1,5 @@
 @page "/progress-overlay"
+@rendermode InteractiveServer
 @layout EmptyLayout
 @using PS2Challenge.Backend.Models
 @using Microsoft.EntityFrameworkCore
@@ -57,13 +58,11 @@
         {
             await LoadProgressData();
 
-            // Set up SignalR connection to listen for game updates
             hubConnection = new HubConnectionBuilder()
                 .WithUrl(NavigationManager.ToAbsoluteUri("/gamesHub"))
                 .WithAutomaticReconnect()
                 .Build();
 
-            // Subscribe to game/progress updates
             hubConnection.On("GamesUpdated", async () =>
             {
                 try
@@ -86,12 +85,10 @@
             try
             {
                 await hubConnection.StartAsync();
-                Console.WriteLine("ProgressOverlay: Connected to SignalR hub");
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"Error connecting to SignalR hub: {ex.Message}");
-                // Don't set hasError - the overlay can still function with initial data
             }
         }
         catch (Exception ex)
@@ -114,35 +111,29 @@
             using var scope = ScopeFactory.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
 
-            // Get game IDs that are excluded
             var excludedGameIds = await db.ExcludedGames
                 .AsNoTracking()
                 .Select(eg => eg.GameId)
                 .ToListAsync();
 
-            // Get total games in challenge (not in excluded list)
             var totalGames = await db.Games
                 .AsNoTracking()
                 .Where(g => !excludedGameIds.Contains(g.Id))
                 .CountAsync();
 
-            // Get completed games count (progress with DateFinished)
             var completedGames = await db.GameProgress
                 .AsNoTracking()
                 .Where(p => p.DateFinished.HasValue)
                 .CountAsync();
 
-            // Calculate percentage
             double percentage = 0;
             if (totalGames > 0)
             {
                 percentage = ((double)completedGames / totalGames) * 100;
             }
 
-            // Create a hash to detect changes
             var newHash = $"{completedGames}:{totalGames}";
 
-            // Only update if data has changed
             if (newHash != lastDataHash)
             {
                 lock (_stateLock)
@@ -186,7 +177,6 @@
             try
             {
                 await hubConnection.DisposeAsync();
-                Console.WriteLine("ProgressOverlay: Disconnected from SignalR hub");
             }
             catch (Exception ex)
             {
