@@ -16,8 +16,8 @@ html, body {
 
 .covers-overlay-container {
     display: flex;
-    justify-content: center;
-    align-items: center;
+    justify-content: flex-start;
+    align-items: flex-start;
     width: 1920px;
     height: 1080px;
     padding: 0;
@@ -28,6 +28,8 @@ html, body {
 
 .cover-image {
     position: absolute;
+    top: 0;
+    left: 0;
     max-width: 90%;
     max-height: 90%;
     width: auto;

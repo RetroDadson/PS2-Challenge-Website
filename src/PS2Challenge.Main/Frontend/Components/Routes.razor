@@ -1,5 +1,7 @@
+@using static Microsoft.AspNetCore.Components.Web.RenderMode
+
 <CascadingAuthenticationState>
-    <Router AppAssembly="@typeof(App).Assembly">
+    <Router AppAssembly="@typeof(Routes).Assembly">
         <Found Context="routeData">
             <RouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)" />
             <FocusOnNavigate RouteData="@routeData" Selector="h1" />
@@ -12,3 +14,8 @@
         </NotFound>
     </Router>
 </CascadingAuthenticationState>
+
+@code {
+    [CascadingParameter]
+    private HttpContext? HttpContext { get; set; }
+}

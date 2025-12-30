@@ -455,6 +455,14 @@ tbody td {
     color: var(--text-primary) !important;
 }
 
+/* Hide default Blazor reconnection show/hide/failed UI */
+#components-reconnect-show,
+#components-reconnect-hide, 
+#components-reconnect-failed,
+#components-reconnect-rejected {
+    display: none !important;
+}
+
 /* Remove any white backgrounds from Blazor components */
 blazor-component,
 .blazor-loading {

@@ -15,6 +15,7 @@ using PS2Challenge.Main.Api.Authorization;
 using PS2Challenge.Main.Api.Hubs;
 using System.Globalization;
 using System.Reflection;
+using PS2Challenge.Main.Frontend.Components;
 
 // Fix for PostgreSQL timestamp without time zone
 AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
@@ -98,9 +99,10 @@ builder.Services.AddSwaggerGen(options =>
     }
 });
 
-// Add Blazor Server services
-builder.Services.AddRazorPages();
-builder.Services.AddServerSideBlazor();
+// Add Blazor components with interactive server and WebAssembly support
+builder.Services.AddRazorComponents()
+    .AddInteractiveServerComponents()
+    .AddInteractiveWebAssemblyComponents();
 
 // Add SignalR
 builder.Services.AddSignalR();
@@ -114,10 +116,6 @@ builder.Services.AddScoped(sp =>
     httpClient.BaseAddress = new Uri(builder.Configuration["ApiBaseUrl"] ?? "http://localhost:5001");
     return httpClient;
 });
-
-// Add authentication state provider for Blazor Server
-builder.Services.AddScoped<Microsoft.AspNetCore.Components.Authorization.AuthenticationStateProvider,
-    Microsoft.AspNetCore.Components.Server.ServerAuthenticationStateProvider>();
 
 // Register EnvironmentConfig as a singleton for DI
 builder.Services.AddSingleton(envConfig);
@@ -392,12 +390,16 @@ app.UseStaticFiles();
 app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseAntiforgery();
 
 app.MapControllers();
-app.MapBlazorHub();
 app.MapHub<VotesHub>("/votesHub");
 app.MapHub<GamesHub>("/gamesHub");
-app.MapFallbackToPage("/_Host");
+
+// Map Razor components with interactive render modes
+app.MapRazorComponents<App>()
+    .AddInteractiveServerRenderMode()
+    .AddInteractiveWebAssemblyRenderMode();
 
 app.Run();
 
