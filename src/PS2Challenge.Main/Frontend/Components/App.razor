@@ -44,25 +44,23 @@
     <script src="js/statistics-chart.js"></script>
     
     <script>
-        // Customize Blazor reconnection UI
-        Blazor.start().then(() => {
-            console.log('? Blazor started successfully');
-            
+        // Wait for Blazor to be ready, then customize reconnection UI
+        document.addEventListener('DOMContentLoaded', () => {
             const reconnectModal = document.getElementById('components-reconnect-modal');
             let reconnecting = false;
             
-            // Detect when Blazor circuit is lost
+            // Override Blazor's reconnection behavior
             Blazor.reconnect = async () => {
                 if (reconnecting) return;
                 reconnecting = true;
                 
-                console.log('?? Blazor connection lost, showing reconnection modal');
+                console.log('Blazor connection lost, showing reconnection modal');
                 reconnectModal.style.display = 'flex';
                 
                 // FORCE activate JavaScript filters after a short delay
                 setTimeout(() => {
                     if (window.gamesFilter && !window.gamesFilter.isActive) {
-                        console.log('?? Force activating JavaScript filters');
+                        console.log('Force activating JavaScript filters');
                         window.gamesFilter.init();
                     }
                 }, 1500);
@@ -73,37 +71,35 @@
                 
                 while (attempts < maxAttempts) {
                     attempts++;
-                    console.log(`?? Reconnection attempt ${attempts}/${maxAttempts}`);
+                    console.log(`Reconnection attempt ${attempts}/${maxAttempts}`);
                     
                     try {
                         await new Promise(resolve => setTimeout(resolve, attempts * 1000));
                         
                         // Check if we're back online
                         if (navigator.onLine) {
-                            console.log('? Back online, reloading page');
+                            console.log('Back online, reloading page');
                             window.location.reload();
                             return;
                         }
                     } catch (e) {
-                        console.log(`? Reconnection attempt ${attempts} failed:`, e);
+                        console.log(`Reconnection attempt ${attempts} failed:`, e);
                     }
                 }
                 
-                console.log('? Max reconnection attempts reached');
+                console.log('Max reconnection attempts reached');
                 
                 // Show failure message
-                reconnectModal.querySelector('h3').textContent = '? Unable to Reconnect';
+                reconnectModal.querySelector('h3').textContent = 'Unable to Reconnect';
                 reconnectModal.querySelector('p').textContent = 'Please check your internet connection and refresh the page.';
                 const loadingSpinner = reconnectModal.querySelector('.loading');
                 if (loadingSpinner) loadingSpinner.style.display = 'none';
             };
-        }).catch(error => {
-            console.error('? Blazor failed to start:', error);
         });
         
         // Also detect offline event immediately
         window.addEventListener('offline', () => {
-            console.log('?? Browser detected offline event');
+            console.log('Browser detected offline event');
             
             // Show reconnection modal
             const reconnectModal = document.getElementById('components-reconnect-modal');
@@ -114,7 +110,7 @@
             // Activate filters after a delay
             setTimeout(() => {
                 if (window.gamesFilter && !window.gamesFilter.isActive) {
-                    console.log('?? Activating JavaScript filters due to offline event');
+                    console.log('Activating JavaScript filters due to offline event');
                     window.gamesFilter.init();
                 }
             }, 2000);

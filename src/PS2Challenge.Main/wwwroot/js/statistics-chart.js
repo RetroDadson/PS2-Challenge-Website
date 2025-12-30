@@ -3,9 +3,9 @@ if (typeof Chart !== 'undefined') {
     if (typeof zoomPlugin !== 'undefined') {
         Chart.register(zoomPlugin);
     }
-    console.log('? Chart.js loaded and zoom plugin registered');
+    console.log('Chart.js loaded');
 } else {
-    console.error('? Chart.js failed to load');
+    console.error('Chart.js failed to load');
 }
 
 // Chart instance reference
@@ -19,15 +19,12 @@ window.renderDurationChart = function(chartData) {
         return;
     }
 
-    // Destroy existing chart if it exists
     if (durationChart) {
         durationChart.destroy();
     }
 
-    // Extract game info for tooltips
     const gameInfo = chartData.datasets[0].gameInfo || [];
 
-    // Create new chart
     durationChart = new Chart(ctx, {
         type: 'line',
         data: {
@@ -79,7 +76,6 @@ window.renderDurationChart = function(chartData) {
                         title: function(context) {
                             const index = context[0].dataIndex;
                             if (gameInfo[index]) {
-                                // Try both PascalCase and camelCase
                                 return gameInfo[index].gameTitle || gameInfo[index].GameTitle || 'Unknown Game';
                             }
                             return context[0].label;
@@ -92,7 +88,6 @@ window.renderDurationChart = function(chartData) {
                         afterLabel: function(context) {
                             const index = context.dataIndex;
                             if (gameInfo[index]) {
-                                // Try both PascalCase and camelCase
                                 const completionDate = gameInfo[index].completionDate || gameInfo[index].CompletionDate;
                                 if (completionDate) {
                                     return `Completed: ${completionDate}`;
@@ -180,16 +175,11 @@ window.renderDurationChart = function(chartData) {
             }
         }
     });
-    
-    console.log('? Duration chart rendered successfully');
 };
 
 window.resetChartZoom = function() {
     if (durationChart) {
         durationChart.resetZoom();
-        console.log('? Chart zoom reset');
-    } else {
-        console.warn('?? No chart instance found to reset');
     }
 };
 
@@ -204,28 +194,25 @@ window.renderOwnershipChart = function(chartData) {
         return;
     }
 
-    // Destroy existing chart if it exists
     if (ownershipChart) {
         ownershipChart.destroy();
     }
 
-    // Generate colors for pie chart
     const colors = [
-        'rgba(233, 30, 99, 0.8)',    // Primary pink
-        'rgba(156, 39, 176, 0.8)',   // Purple
-        'rgba(33, 150, 243, 0.8)',   // Blue
-        'rgba(76, 175, 80, 0.8)',    // Green
-        'rgba(255, 152, 0, 0.8)',    // Orange
-        'rgba(244, 67, 54, 0.8)',    // Red
-        'rgba(0, 188, 212, 0.8)',    // Cyan
-        'rgba(255, 193, 7, 0.8)',    // Amber
-        'rgba(121, 85, 72, 0.8)',    // Brown
-        'rgba(158, 158, 158, 0.8)'   // Grey
+        'rgba(233, 30, 99, 0.8)',
+        'rgba(156, 39, 176, 0.8)',
+        'rgba(33, 150, 243, 0.8)',
+        'rgba(76, 175, 80, 0.8)',
+        'rgba(255, 152, 0, 0.8)',
+        'rgba(244, 67, 54, 0.8)',
+        'rgba(0, 188, 212, 0.8)',
+        'rgba(255, 193, 7, 0.8)',
+        'rgba(121, 85, 72, 0.8)',
+        'rgba(158, 158, 158, 0.8)'
     ];
 
     const borderColors = colors.map(color => color.replace('0.8', '1'));
 
-    // Create new pie chart
     ownershipChart = new Chart(ctx, {
         type: 'pie',
         data: {
@@ -272,6 +259,4 @@ window.renderOwnershipChart = function(chartData) {
             }
         }
     });
-    
-    console.log('? Ownership chart rendered successfully');
 };
