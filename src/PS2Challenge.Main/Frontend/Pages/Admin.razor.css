@@ -77,6 +77,58 @@
     margin-bottom: 1.5rem;
 }
 
+.admin-section .help-text {
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    margin-bottom: 1.5rem;
+}
+
+/* Overlays Grid Styles */
+.overlays-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.overlay-card {
+    background: var(--background-card);
+    border: 2px solid var(--border-color);
+    border-radius: 12px;
+    padding: 1.5rem;
+    text-decoration: none;
+    color: var(--text-primary);
+    transition: all 0.3s ease;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+}
+
+.overlay-card:hover {
+    border-color: var(--primary-color);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(233, 30, 99, 0.3);
+}
+
+.overlay-card h3 {
+    margin: 0 0 0.75rem 0;
+    color: var(--text-primary);
+}
+
+.overlay-card p {
+    margin: 0 0 1rem 0;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    flex-grow: 1;
+}
+
+.overlay-card .overlay-size {
+    font-size: 0.85rem;
+    color: var(--primary-color);
+    font-weight: 600;
+    font-family: monospace;
+}
+
 .maintenance-card {
     background: var(--background-card);
     border: 2px solid var(--border-color);
@@ -257,6 +309,10 @@
     }
 
     .admin-navigation {
+        grid-template-columns: 1fr;
+    }
+    
+    .overlays-grid {
         grid-template-columns: 1fr;
     }
 
