@@ -142,6 +142,12 @@ builder.Services.AddScoped<GameRepository>();
 // Register background service for updating cover images
 builder.Services.AddHostedService<CoverImageUpdateService>();
 
+// Add health checks
+builder.Services.AddHealthChecks()
+    .AddDbContextCheck<Ps2ChallengeDbContext>(
+        name: "database",
+        tags: new[] { "db", "postgres" });
+
 // Add FluentMigrator services (skip in testing)
 if (!isTesting)
 {
@@ -395,6 +401,10 @@ app.UseAntiforgery();
 app.MapControllers();
 app.MapHub<VotesHub>("/votesHub");
 app.MapHub<GamesHub>("/gamesHub");
+
+// Map health check endpoints
+app.MapHealthChecks("/api/health");
+app.MapHealthChecks("/health");
 
 // Map Razor components with interactive render modes
 app.MapRazorComponents<App>()
