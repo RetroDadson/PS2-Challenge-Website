@@ -340,13 +340,13 @@
                 isLoadingData = true;
                 
                 // Always start fresh - reset all fields first
-                internalTitle = Game.Title;
-                internalDeveloper = Game.Developer;
-                internalPublisher = Game.Publisher;
-                internalFirstReleased = Game.FirstReleased?.ToDateTime(TimeOnly.MinValue);
-                internalRegion = Game.RegionFirstReleasedIn;
-                internalReleasedInEuPalOrNa = Game.ReleasedInEuPalOrNa;
-                internalIsExcluded = Game.IsExcluded;
+                internalTitle = Game?.Title;
+                internalDeveloper = Game?.Developer;
+                internalPublisher = Game?.Publisher;
+                internalFirstReleased = Game?.FirstReleased?.ToDateTime(TimeOnly.MinValue);
+                internalRegion = Game?.RegionFirstReleasedIn;
+                internalReleasedInEuPalOrNa = Game?.ReleasedInEuPalOrNa ?? false;
+                internalIsExcluded = Game?.IsExcluded ?? false;
                 
                 // Always clear serial numbers and alternate titles and form for new games or when switching
                 serialNumbers.Clear();
@@ -370,7 +370,7 @@
                         LoadCurrentOwnership()
                     };
                     
-                    if (Game.IsExcluded)
+                    if (Game?.IsExcluded == true)
                     {
                         tasks.Add(LoadCurrentExclusion());
                     }

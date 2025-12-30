@@ -538,7 +538,6 @@ public class VotesController : ControllerBase
 
             // Get games that have been started (have progress with date started)
             var startedGameIds = await db.GameProgress
-                .Where(gp => gp.DateStarted != null)
                 .Select(gp => gp.GameId)
                 .ToListAsync();
 
