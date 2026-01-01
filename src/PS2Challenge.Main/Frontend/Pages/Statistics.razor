@@ -108,6 +108,7 @@
                                 <th>Year</th>
                                 <th>Games Started</th>
                                 <th>Games Completed</th>
+                                <th>% Completed</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -117,6 +118,7 @@
                                     <td><strong>@yearStat.Year</strong></td>
                                     <td>@yearStat.GamesStarted</td>
                                     <td>@yearStat.GamesCompleted</td>
+                                    <td>@yearStat.CompletionPercentage.ToString("F2")%</td>
                                 </tr>
                             }
                         </tbody>
@@ -125,6 +127,7 @@
                                 <td><strong>Total</strong></td>
                                 <td><strong>@yearlyStats.Sum(y => y.GamesStarted)</strong></td>
                                 <td><strong>@yearlyStats.Sum(y => y.GamesCompleted)</strong></td>
+                                <td><strong>@CalculateTotalCompletionPercentage().ToString("F2")%</strong></td>
                             </tr>
                         </tfoot>
                     </table>
@@ -431,12 +434,27 @@
             .OrderBy(y => y);
 
         // Build yearly statistics
-        yearlyStats = allYears.Select(year => new YearlyStatistic
+        yearlyStats = allYears.Select(year =>
         {
-            Year = year,
-            GamesStarted = gamesStartedByYear.GetValueOrDefault(year, 0),
-            GamesCompleted = gamesCompletedByYear.GetValueOrDefault(year, 0)
+            var started = gamesStartedByYear.GetValueOrDefault(year, 0);
+            var completed = gamesCompletedByYear.GetValueOrDefault(year, 0);
+            // Calculate percentage as: games completed in this year / total games in challenge * 100
+            var percentage = gamesInChallengeCount > 0 ? ((double)completed / gamesInChallengeCount) * 100 : 0;
+
+            return new YearlyStatistic
+            {
+                Year = year,
+                GamesStarted = started,
+                GamesCompleted = completed,
+                CompletionPercentage = percentage
+            };
         }).ToList();
+    }
+
+    private double CalculateTotalCompletionPercentage()
+    {
+        // This should match the overall challenge completion percentage
+        return percentageComplete;
     }
 
     private string FormatAverageDuration()

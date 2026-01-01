@@ -19,4 +19,9 @@ public record YearlyStatistic
     /// Number of games completed in this year
     /// </summary>
     public int GamesCompleted { get; init; }
+
+    /// <summary>
+    /// Percentage of total challenge games (not excluded) that were completed in this year
+    /// </summary>
+    public double CompletionPercentage { get; init; }
 }
