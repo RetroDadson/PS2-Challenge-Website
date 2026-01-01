@@ -479,6 +479,73 @@
     }
 }
 
+/* Games Table Styles */
+.games-table-container {
+    width: 100%;
+    background: var(--background-card);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+    overflow: auto;
+}
+
+.games-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+.games-table thead {
+    background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+}
+
+.games-table thead th {
+    padding: 1rem;
+    text-align: left;
+    font-weight: 600;
+    color: white;
+}
+
+.games-table tbody tr {
+    border-bottom: 1px solid var(--border-color);
+    transition: background 0.2s ease;
+}
+
+.games-table tbody tr:hover {
+    background: rgba(233, 30, 99, 0.1);
+}
+
+.games-table tbody td {
+    padding: 1rem;
+    color: var(--text-secondary);
+}
+
+/* Table Footer (Total Row) */
+.games-table tfoot {
+    background: linear-gradient(135deg, rgba(233, 30, 99, 0.2) 0%, rgba(156, 39, 176, 0.2) 100%);
+    border-top: 2px solid var(--primary-color);
+}
+
+.games-table tfoot tr {
+    border-top: 2px solid var(--primary-color);
+}
+
+.games-table tfoot td {
+    padding: 1rem;
+    color: var(--text-primary);
+    font-size: 1.05rem;
+    font-weight: 600;
+}
+
+.games-table tfoot .total-row {
+    background: rgba(233, 30, 99, 0.15);
+}
+
+.games-table tfoot .total-row td:first-child {
+    color: var(--primary-color);
+    font-size: 1.1rem;
+}
+
 @media (max-width: 768px) {
     .statistics-container {
         padding: 1rem;

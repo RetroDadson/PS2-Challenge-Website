@@ -96,6 +96,46 @@
             }
         </div>
 
+        <!-- Games by Year Table -->
+        <div class="stats-section">
+            <h2>Games by Year</h2>
+            @if (yearlyStats.Any())
+            {
+                <div class="games-table-container">
+                    <table class="games-table">
+                        <thead>
+                            <tr>
+                                <th>Year</th>
+                                <th>Games Started</th>
+                                <th>Games Completed</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var yearStat in yearlyStats.OrderByDescending(y => y.Year))
+                            {
+                                <tr>
+                                    <td><strong>@yearStat.Year</strong></td>
+                                    <td>@yearStat.GamesStarted</td>
+                                    <td>@yearStat.GamesCompleted</td>
+                                </tr>
+                            }
+                        </tbody>
+                        <tfoot>
+                            <tr class="total-row">
+                                <td><strong>Total</strong></td>
+                                <td><strong>@yearlyStats.Sum(y => y.GamesStarted)</strong></td>
+                                <td><strong>@yearlyStats.Sum(y => y.GamesCompleted)</strong></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            }
+            else
+            {
+                <p class="placeholder-text">No progress data available yet. Start tracking games to see yearly statistics!</p>
+            }
+        </div>
+
         <!-- Collection Statistics -->
         <div class="stats-section">
             <h2>Collection Statistics</h2>
@@ -231,6 +271,9 @@
     private double collectionPercentageInChallenge = 0;
     private double collectionPercentageTotal = 0;
     
+    // Yearly statistics
+    private List<YearlyStatistic> yearlyStats = new();
+    
     private bool isLoading = true;
     private bool hasRenderedChart = false;
 
@@ -269,6 +312,7 @@
 
             // Calculate statistics
             CalculateStatistics();
+            CalculateYearlyStatistics();
         }
         catch (Exception ex)
         {
@@ -359,6 +403,40 @@
 
         // Calculate games remaining count
         gamesRemainingCount = gamesInChallengeCount - gamesCompletedCount;
+    }
+
+    private void CalculateYearlyStatistics()
+    {
+        if (!allProgress.Any())
+        {
+            yearlyStats = new List<YearlyStatistic>();
+            return;
+        }
+
+        // Group by year for games started
+        var gamesStartedByYear = allProgress
+            .GroupBy(p => p.DateStarted.Year)
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        // Group by year for games completed
+        var gamesCompletedByYear = allProgress
+            .Where(p => p.DateFinished.HasValue)
+            .GroupBy(p => p.DateFinished!.Value.Year)
+            .ToDictionary(g => g.Key, g => g.Count());
+
+        // Get all unique years
+        var allYears = gamesStartedByYear.Keys
+            .Union(gamesCompletedByYear.Keys)
+            .Distinct()
+            .OrderBy(y => y);
+
+        // Build yearly statistics
+        yearlyStats = allYears.Select(year => new YearlyStatistic
+        {
+            Year = year,
+            GamesStarted = gamesStartedByYear.GetValueOrDefault(year, 0),
+            GamesCompleted = gamesCompletedByYear.GetValueOrDefault(year, 0)
+        }).ToList();
     }
 
     private string FormatAverageDuration()
