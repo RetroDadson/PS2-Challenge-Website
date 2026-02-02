@@ -1,0 +1,119 @@
+@rendermode InteractiveServer
+@using PS2Challenge.Backend.Services
+@inject GameService GameService
+@inject GameCoverService CoverService
+
+<div class="maintenance-card">
+    <h3><i class="fas fa-image"></i> Update Game Cover Images</h3>
+    <p>Manually trigger an update of all game cover URLs from the ps2-covers repository.</p>
+    <p class="help-text">This process runs automatically every 24 hours, but you can force an immediate update here.</p>
+    
+    @if (isUpdatingCovers)
+    {
+        <div class="update-status">
+            <div class="loading"></div>
+            <p>Updating cover images... This may take a minute.</p>
+        </div>
+    }
+    else if (!string.IsNullOrEmpty(coverUpdateMessage))
+    {
+        <div class="update-message @(coverUpdateSuccess ? "success" : "error")">
+            @((MarkupString)coverUpdateMessage)
+        </div>
+    }
+    
+    <button class="cta-button" 
+            @onclick="UpdateCoverImages" 
+            disabled="@isUpdatingCovers">
+        @if (isUpdatingCovers)
+        {
+            <span><i class="fas fa-spinner fa-spin"></i> Updating...</span>
+        }
+        else
+        {
+            <span><i class="fas fa-sync-alt"></i> Update Cover Images Now</span>
+        }
+    </button>
+</div>
+
+@code {
+    private bool isUpdatingCovers = false;
+    private string coverUpdateMessage = string.Empty;
+    private bool coverUpdateSuccess = false;
+
+    private async Task UpdateCoverImages()
+    {
+        isUpdatingCovers = true;
+        coverUpdateMessage = string.Empty;
+        StateHasChanged();
+
+        try
+        {
+            Console.WriteLine("Starting manual cover image update...");
+            
+            var games = await GameService.GetAllGamesAsync();
+            var gamesList = games.ToList();
+
+            Console.WriteLine($"Updating cover URLs for {gamesList.Count} games");
+
+            var gameIds = gamesList.Select(g => g.Id);
+            var coverUrls = await CoverService.GetCoverUrlsAsync(gameIds);
+
+            int updatedCount = 0;
+            int skippedCount = 0;
+            int errorCount = 0;
+
+            foreach (var game in gamesList)
+            {
+                try
+                {
+                    if (coverUrls.TryGetValue(game.Id, out var coverUrl))
+                    {
+                        if (game.ImageUrl != coverUrl)
+                        {
+                            await GameService.UpdateGameCoverUrlAsync(game.Id, coverUrl);
+                            updatedCount++;
+                        }
+                        else
+                        {
+                            skippedCount++;
+                        }
+                    }
+                    else
+                    {
+                        if (game.ImageUrl != null)
+                        {
+                            await GameService.UpdateGameCoverUrlAsync(game.Id, null);
+                            updatedCount++;
+                        }
+                        else
+                        {
+                            skippedCount++;
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error updating game {game.Id}: {ex.Message}");
+                    errorCount++;
+                }
+            }
+
+            coverUpdateSuccess = true;
+            coverUpdateMessage = $"<i class='fas fa-check-circle'></i> Update completed successfully! Updated: {updatedCount}, Skipped (unchanged): {skippedCount}, Errors: {errorCount}";
+            
+            Console.WriteLine($"Cover image update completed. Updated {updatedCount} out of {gamesList.Count} games");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error during cover update: {ex.Message}");
+            coverUpdateSuccess = false;
+            coverUpdateMessage = $"<i class='fas fa-exclamation-circle'></i> Error updating covers: {ex.Message}";
+        }
+        finally
+        {
+            isUpdatingCovers = false;
+            StateHasChanged();
+        }
+    }
+}

@@ -1,5 +1,4 @@
 @page "/admin"
-@rendermode InteractiveServer
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
 @using PS2Challenge.Backend.Data.Repositories
@@ -71,38 +70,7 @@
                 <div class="admin-section">
                     <h2>System Maintenance</h2>
                     
-                    <div class="maintenance-card">
-                        <h3>🖼️ Update Game Cover Images</h3>
-                        <p>Manually trigger an update of all game cover URLs from the ps2-covers repository.</p>
-                        <p class="help-text">This process runs automatically every 24 hours, but you can force an immediate update here.</p>
-                        
-                        @if (isUpdatingCovers)
-                        {
-                            <div class="update-status">
-                                <div class="loading"></div>
-                                <p>Updating cover images... This may take a minute.</p>
-                            </div>
-                        }
-                        else if (!string.IsNullOrEmpty(coverUpdateMessage))
-                        {
-                            <div class="update-message @(coverUpdateSuccess ? "success" : "error")">
-                                @coverUpdateMessage
-                            </div>
-                        }
-                        
-                        <button class="cta-button" 
-                                @onclick="UpdateCoverImages" 
-                                disabled="@isUpdatingCovers">
-                            @if (isUpdatingCovers)
-                            {
-                                <span>Updating...</span>
-                            }
-                            else
-                            {
-                                <span>🔄 Update Cover Images Now</span>
-                            }
-                        </button>
-                    </div>
+                    <CoverImageUpdater />
                 </div>
 
                 <div class="admin-section">
@@ -170,9 +138,6 @@
 
 @code {
     private bool isLoading = true;
-    private bool isUpdatingCovers = false;
-    private string coverUpdateMessage = string.Empty;
-    private bool coverUpdateSuccess = false;
     
     private List<PS2Challenge.Backend.Models.ApplicationUser> users = new();
     private List<PS2Challenge.Backend.Models.Role> roles = new();
@@ -198,87 +163,6 @@
         finally
         {
             isLoading = false;
-        }
-    }
-
-    private async Task UpdateCoverImages()
-    {
-        isUpdatingCovers = true;
-        coverUpdateMessage = string.Empty;
-        StateHasChanged();
-
-        try
-        {
-            Console.WriteLine("Starting manual cover image update...");
-            
-            // Get all games
-            var games = await GameService.GetAllGamesAsync();
-            var gamesList = games.ToList();
-
-            Console.WriteLine($"Updating cover URLs for {gamesList.Count} games");
-
-            // Get cover URLs for all games in batch
-            var gameIds = gamesList.Select(g => g.Id);
-            var coverUrls = await CoverService.GetCoverUrlsAsync(gameIds);
-
-            // Update each game's ImageUrl
-            int updatedCount = 0;
-            int skippedCount = 0;
-            int errorCount = 0;
-
-            foreach (var game in gamesList)
-            {
-                try
-                {
-                    if (coverUrls.TryGetValue(game.Id, out var coverUrl))
-                    {
-                        // Only update if the URL has changed or is null
-                        if (game.ImageUrl != coverUrl)
-                        {
-                            await GameService.UpdateGameCoverUrlAsync(game.Id, coverUrl);
-                            updatedCount++;
-                        }
-                        else
-                        {
-                            skippedCount++;
-                        }
-                    }
-                    else
-                    {
-                        // No serial number = no cover
-                        if (game.ImageUrl != null)
-                        {
-                            await GameService.UpdateGameCoverUrlAsync(game.Id, null);
-                            updatedCount++;
-                        }
-                        else
-                        {
-                            skippedCount++;
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Error updating game {game.Id}: {ex.Message}");
-                    errorCount++;
-                }
-            }
-
-            coverUpdateSuccess = true;
-            coverUpdateMessage = $"✅ Update completed successfully! Updated: {updatedCount}, Skipped (unchanged): {skippedCount}, Errors: {errorCount}";
-            
-            Console.WriteLine($"Cover image update completed. Updated {updatedCount} out of {gamesList.Count} games");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error during cover update: {ex.Message}");
-            coverUpdateSuccess = false;
-            coverUpdateMessage = $"❌ Error updating covers: {ex.Message}";
-        }
-        finally
-        {
-            isUpdatingCovers = false;
-            StateHasChanged();
         }
     }
 
