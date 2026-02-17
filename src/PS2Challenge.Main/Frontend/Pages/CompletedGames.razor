@@ -1,9 +1,11 @@
 @page "/progress"
 @rendermode InteractiveServer
 @using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Components.Web.Virtualization
 @using Microsoft.EntityFrameworkCore
 @using PS2Challenge.Backend.Data
 @using PS2Challenge.Main.Frontend.Components
+@using PS2Challenge.Main.Frontend.Shared
 @inject GameService GameService
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject IServiceScopeFactory ScopeFactory
@@ -57,7 +59,7 @@
             </div>
 
             <div class="results-count">
-                <p>Showing @FilteredGames.Count() of @gamesWithProgress.Count() games | Completed: @gamesWithProgress.Count(g => g.DateFinished.HasValue) | In Progress: @gamesWithProgress.Count(g => !g.DateFinished.HasValue)</p>
+                <p>Showing @FilteredGames.Count() of @_totalGames games | Completed: @_completedCount | In Progress: @_inProgressCount</p>
             </div>
         </div>
 
@@ -71,6 +73,7 @@
                         <th @onclick='() => SortBy("Status")'>
                             Status @GetSortIcon("Status")
                         </th>
+                        <th style="width: 100px;">Cover</th>
                         <th @onclick="() => SortBy(nameof(GameProgressDto.GameTitle))">
                             Title @GetSortIcon(nameof(GameProgressDto.GameTitle))
                         </th>
@@ -95,8 +98,7 @@
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach (var game in FilteredGames)
-                    {
+                    <Virtualize Items="@FilteredGames.ToList()" Context="game" OverscanCount="20">
                         <tr class="@(game.DateFinished.HasValue ? "completed" : "in-progress")">
                             <td>@game.ProgressId</td>
                             <td>
@@ -104,7 +106,36 @@
                                     @(game.DateFinished.HasValue ? "Completed" : "In Progress")
                                 </span>
                             </td>
-                            <td class="game-title">@game.GameTitle</td>
+                            <td class="cover-cell">
+                                @if (!string.IsNullOrEmpty(game.ImageUrl))
+                                {
+                                    <div class="cover-wrapper">
+                                        <img src="@game.ImageUrl" 
+                                             alt="@game.GameTitle cover" 
+                                             class="game-cover"
+                                             loading="lazy"
+                                             width="80"
+                                             height="112"
+                                             onerror="this.style.display='none'" />
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="no-cover">No Cover</div>
+                                }
+                            </td>
+                            <td class="game-title">
+                                @if (alternateTitles.ContainsKey(game.GameId) && alternateTitles[game.GameId].Any())
+                                {
+                                    <HoverCard Content="@GetAlternateTitles(game.GameId)">
+                                        <span style="border-bottom: 1px dotted var(--primary-color);">@game.GameTitle</span>
+                                    </HoverCard>
+                                }
+                                else
+                                {
+                                    @game.GameTitle
+                                }
+                            </td>
                             <td>@game.DateStarted.ToString("dd/MM/yyyy")</td>
                             <td>@(game.DateFinished?.ToString("dd/MM/yyyy") ?? "-")</td>
                             <td>@FormatCompletionTime(game.CompletionTime)</td>
@@ -118,7 +149,7 @@
                                 </td>
                             }
                         </tr>
-                    }
+                    </Virtualize>
                 </tbody>
             </table>
         </div>
@@ -142,38 +173,53 @@
                   OnSave="@HandleSave" />
 
 @code {
-    private IEnumerable<GameProgressDto>? gamesWithProgress;
-    private bool isLoading = true;
-    private bool isAdmin = false;
-    private string searchQuery = "";
-    private bool showCompletedOnly = false;
-    private bool showInProgressOnly = false;
-    private string sortColumn = "ProgressId";
-    private bool sortAscending = false;
+private IEnumerable<GameProgressDto>? gamesWithProgress;
+private Dictionary<int, List<AlternateTitle>> alternateTitles = new();
+private bool isLoading = true;
+private bool isAdmin = false;
+private string searchQuery = "";
+private bool showCompletedOnly = false;
+private bool showInProgressOnly = false;
+private string sortColumn = "ProgressId";
+private bool sortAscending = false;
 
-    // Modal state
-    private bool showModal = false;
-    private bool isEditMode = false;
-    private int? editingProgressId = null;
+// Modal state
+private bool showModal = false;
+private bool isEditMode = false;
+private int? editingProgressId = null;
 
-    // Edit/Add form state
-    private string editGameTitle = string.Empty;
-    private DateTime? editDateStarted;
-    private DateTime? editDateFinished;
-    private string editPlatform = "Physical";
-    private string? editBeatenCriteria;
-    private string? editReview;
-    private int editCompletionHours = 0;
-    private int editCompletionMinutes = 0;
-    private int editCompletionSeconds = 0;
+// Edit/Add form state
+private string editGameTitle = string.Empty;
+private DateTime? editDateStarted;
+private DateTime? editDateFinished;
+private string editPlatform = "Physical";
+private string? editBeatenCriteria;
+private string? editReview;
+private int editCompletionHours = 0;
+private int editCompletionMinutes = 0;
+private int editCompletionSeconds = 0;
 
-    // suggestions
-    private List<string> allGameTitles = new();
+// suggestions
+private List<string> allGameTitles = new();
+
+// Cache filtered results to avoid recomputing on every access
+private List<GameProgressDto>? _cachedFilteredGames = null;
+private string? _lastSearchQuery = null;
+private bool _lastShowCompletedOnly = false;
+private bool _lastShowInProgressOnly = false;
+private string? _lastSortColumn = null;
+private bool _lastSortAscending = true;
+
+// Cache statistics to avoid multiple enumerations
+private int _totalGames = 0;
+private int _completedCount = 0;
+private int _inProgressCount = 0;
 
     protected override async Task OnInitializedAsync()
     {
         await CheckAdminStatus();
         await LoadProgress();
+        await LoadAlternateTitles();
 
         if (isAdmin)
         {
@@ -206,14 +252,47 @@
         {
             isLoading = true;
             gamesWithProgress = await GameService.GetAllProgressAsync();
+            
+            // Pre-compute statistics once
+            ComputeStatistics();
+            
+            // Invalidate cache when data changes
+            _cachedFilteredGames = null;
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Error loading game progress: {ex.Message}");
+            gamesWithProgress = new List<GameProgressDto>();
+            ComputeStatistics();
+            _cachedFilteredGames = null;
         }
         finally
         {
             isLoading = false;
+        }
+    }
+
+    private void ComputeStatistics()
+    {
+        if (gamesWithProgress == null)
+        {
+            _totalGames = 0;
+            _completedCount = 0;
+            _inProgressCount = 0;
+            return;
+        }
+
+        var gamesList = gamesWithProgress.ToList();
+        _totalGames = gamesList.Count;
+        _completedCount = 0;
+        _inProgressCount = 0;
+
+        foreach (var game in gamesList)
+        {
+            if (game.DateFinished.HasValue)
+                _completedCount++;
+            else
+                _inProgressCount++;
         }
     }
 
@@ -236,6 +315,28 @@
             Console.WriteLine($"Error loading game titles for suggestions: {ex.Message}");
             allGameTitles = new List<string>();
         }
+    }
+
+    private async Task LoadAlternateTitles()
+    {
+        try
+        {
+            alternateTitles = await GameService.GetAlternateTitlesAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading alternate titles: {ex.Message}");
+            alternateTitles = new();
+        }
+    }
+
+    private string GetAlternateTitles(int gameId)
+    {
+        if (alternateTitles.TryGetValue(gameId, out var titles) && titles.Any())
+        {
+            return string.Join("<br />", titles.Select(t => t.Title));
+        }
+        return "No alternate titles";
     }
 
     private void OpenAddModal()
@@ -308,39 +409,79 @@
     {
         get
         {
+            // Check if cache is still valid
+            if (_cachedFilteredGames != null &&
+                _lastSearchQuery == searchQuery &&
+                _lastShowCompletedOnly == showCompletedOnly &&
+                _lastShowInProgressOnly == showInProgressOnly &&
+                _lastSortColumn == sortColumn &&
+                _lastSortAscending == sortAscending)
+            {
+                return _cachedFilteredGames;
+            }
+
+            // Cache is invalid, recalculate using optimized approach
             IEnumerable<GameProgressDto> filtered = gamesWithProgress ?? Enumerable.Empty<GameProgressDto>();
 
-            if (showCompletedOnly)
+            // Apply filters in a single pass
+            var results = new List<GameProgressDto>();
+            
+            foreach (var game in filtered)
             {
-                filtered = filtered.Where(g => g.DateFinished.HasValue);
+                // Apply status filters
+                if (showCompletedOnly && !game.DateFinished.HasValue) continue;
+                if (showInProgressOnly && game.DateFinished.HasValue) continue;
+
+                // Apply search filter
+                if (!string.IsNullOrWhiteSpace(searchQuery))
+                {
+                    var matchesSearch = 
+                        game.GameTitle.Contains(searchQuery, StringComparison.OrdinalIgnoreCase) ||
+                        (game.BeatenCriteria != null && game.BeatenCriteria.Contains(searchQuery, StringComparison.OrdinalIgnoreCase)) ||
+                        (game.Review != null && game.Review.Contains(searchQuery, StringComparison.OrdinalIgnoreCase));
+                    
+                    if (!matchesSearch) continue;
+                }
+
+                results.Add(game);
             }
 
-            if (showInProgressOnly)
+            // Sort the results
+            results = sortColumn switch
             {
-                filtered = filtered.Where(g => !g.DateFinished.HasValue);
-            }
-
-            if (!string.IsNullOrWhiteSpace(searchQuery))
-            {
-                filtered = filtered.Where(g =>
-                    g.GameTitle.Contains(searchQuery, StringComparison.OrdinalIgnoreCase) ||
-                    (g.BeatenCriteria != null && g.BeatenCriteria.Contains(searchQuery, StringComparison.OrdinalIgnoreCase)) ||
-                    (g.Review != null && g.Review.Contains(searchQuery, StringComparison.OrdinalIgnoreCase)));
-            }
-
-            filtered = sortColumn switch
-            {
-                nameof(GameProgressDto.ProgressId) => sortAscending ? filtered.OrderBy(g => g.ProgressId) : filtered.OrderByDescending(g => g.ProgressId),
-                "Status" => sortAscending ? filtered.OrderBy(g => g.DateFinished.HasValue).ThenBy(g => g.GameTitle) : filtered.OrderByDescending(g => g.DateFinished.HasValue).ThenByDescending(g => g.GameTitle),
-                nameof(GameProgressDto.GameTitle) => sortAscending ? filtered.OrderBy(g => g.GameTitle) : filtered.OrderByDescending(g => g.GameTitle),
-                nameof(GameProgressDto.DateStarted) => sortAscending ? filtered.OrderBy(g => g.DateStarted) : filtered.OrderByDescending(g => g.DateStarted),
-                nameof(GameProgressDto.DateFinished) => sortAscending ? filtered.OrderBy(g => g.DateFinished ?? DateOnly.MaxValue) : filtered.OrderByDescending(g => g.DateFinished ?? DateOnly.MinValue),
-                nameof(GameProgressDto.CompletionTime) => sortAscending ? filtered.OrderBy(g => g.CompletionTime) : filtered.OrderByDescending(g => g.CompletionTime),
-                nameof(GameProgressDto.Platform) => sortAscending ? filtered.OrderBy(g => g.Platform) : filtered.OrderByDescending(g => g.Platform),
-                _ => filtered.OrderByDescending(g => g.ProgressId)
+                nameof(GameProgressDto.ProgressId) => sortAscending 
+                    ? results.OrderBy(g => g.ProgressId).ToList() 
+                    : results.OrderByDescending(g => g.ProgressId).ToList(),
+                "Status" => sortAscending 
+                    ? results.OrderBy(g => g.DateFinished.HasValue).ThenBy(g => g.GameTitle).ToList() 
+                    : results.OrderByDescending(g => g.DateFinished.HasValue).ThenByDescending(g => g.GameTitle).ToList(),
+                nameof(GameProgressDto.GameTitle) => sortAscending 
+                    ? results.OrderBy(g => g.GameTitle).ToList() 
+                    : results.OrderByDescending(g => g.GameTitle).ToList(),
+                nameof(GameProgressDto.DateStarted) => sortAscending 
+                    ? results.OrderBy(g => g.DateStarted).ToList() 
+                    : results.OrderByDescending(g => g.DateStarted).ToList(),
+                nameof(GameProgressDto.DateFinished) => sortAscending 
+                    ? results.OrderBy(g => g.DateFinished ?? DateOnly.MaxValue).ToList() 
+                    : results.OrderByDescending(g => g.DateFinished ?? DateOnly.MinValue).ToList(),
+                nameof(GameProgressDto.CompletionTime) => sortAscending 
+                    ? results.OrderBy(g => g.CompletionTime ?? TimeSpan.MaxValue).ToList() 
+                    : results.OrderByDescending(g => g.CompletionTime ?? TimeSpan.MinValue).ToList(),
+                nameof(GameProgressDto.Platform) => sortAscending 
+                    ? results.OrderBy(g => g.Platform).ToList() 
+                    : results.OrderByDescending(g => g.Platform).ToList(),
+                _ => results.OrderByDescending(g => g.ProgressId).ToList()
             };
 
-            return filtered;
+            // Cache the result
+            _cachedFilteredGames = results;
+            _lastSearchQuery = searchQuery;
+            _lastShowCompletedOnly = showCompletedOnly;
+            _lastShowInProgressOnly = showInProgressOnly;
+            _lastSortColumn = sortColumn;
+            _lastSortAscending = sortAscending;
+
+            return _cachedFilteredGames;
         }
     }
 
@@ -381,12 +522,12 @@
     private void ToggleShowCompletedOnly(ChangeEventArgs e)
     {
         showCompletedOnly = e.Value is bool b && b;
-        StateHasChanged();
+        // No need to call StateHasChanged() - Blazor does this automatically after event handlers
     }
 
     private void ToggleShowInProgressOnly(ChangeEventArgs e)
     {
         showInProgressOnly = e.Value is bool b && b;
-        StateHasChanged();
+        // No need to call StateHasChanged() - Blazor does this automatically after event handlers
     }
 }

@@ -305,7 +305,9 @@ public class GameService
                 (progress, game) => new GameProgressDto
                 {
                     ProgressId = progress.ProgressId,
+                    GameId = game.Id,
                     GameTitle = game.Title,
+                    ImageUrl = game.ImageUrl,
                     DateStarted = progress.DateStarted,
                     DateFinished = progress.DateFinished,
                     CompletionTime = progress.CompletionTime,
@@ -326,18 +328,24 @@ public class GameService
 
         var completedGames = await dbContext.GameProgress
             .Where(p => p.DateFinished != null)
+            .Join(
+                dbContext.Games,
+                progress => progress.GameId,
+                game => game.Id,
+                (progress, game) => new GameProgressDto
+                {
+                    ProgressId = progress.ProgressId,
+                    GameId = game.Id,
+                    GameTitle = game.Title,
+                    ImageUrl = game.ImageUrl,
+                    DateStarted = progress.DateStarted,
+                    DateFinished = progress.DateFinished,
+                    CompletionTime = progress.CompletionTime,
+                    BeatenCriteria = progress.BeatenCriteria,
+                    Review = progress.Review,
+                    Platform = progress.Platform
+                })
             .OrderByDescending(p => p.DateFinished)
-            .Select(p => new GameProgressDto
-            {
-                ProgressId = p.ProgressId,
-                GameTitle = dbContext.Games.First(g => g.Id == p.GameId).Title,
-                DateStarted = p.DateStarted,
-                DateFinished = p.DateFinished,
-                CompletionTime = p.CompletionTime,
-                BeatenCriteria = p.BeatenCriteria,
-                Review = p.Review,
-                Platform = p.Platform
-            })
             .ToListAsync();
 
         return completedGames;
