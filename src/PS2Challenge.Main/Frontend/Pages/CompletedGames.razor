@@ -1,5 +1,5 @@
 @page "/progress"
-@rendermode InteractiveServer
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
 @using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.AspNetCore.Components.Web.Virtualization
 @using Microsoft.EntityFrameworkCore
@@ -15,89 +15,107 @@
 <PageTitle>Game Progress - Dadson's PS2 Tracker</PageTitle>
 
 <div class="completed-games-container">
-    <h1>Game Progress</h1>
+<h1>Game Progress</h1>
 
-    @if (isAdmin)
-    {
-        <div style="margin-bottom:1rem;">
-            <button class="cta-button" @onclick="OpenAddModal">Add New Game</button>
-        </div>
-    }
+@if (isAdmin)
+{
+    <div style="margin-bottom:1rem;">
+        <button class="cta-button" @onclick="OpenAddModal" disabled="@isLoading">Add New Game</button>
+    </div>
+}
+
+<div class="search-section">
+    <div class="search-box">
+        <input type="text"
+               placeholder="Search by title, criteria, or review..."
+               @bind="searchQuery"
+               @bind:event="oninput"
+               class="search-input"
+               disabled="@isLoading" />
+        <span class="search-icon">🔍</span>
+    </div>
+
+    <div class="filter-controls">
+        <label>
+            <input type="checkbox" id="showCompletedOnly" checked="@showCompletedOnly" @onchange="ToggleShowCompletedOnly" disabled="@isLoading" />
+            Show Completed Only
+        </label>
+        <label>
+            <input type="checkbox" id="showInProgressOnly" checked="@showInProgressOnly" @onchange="ToggleShowInProgressOnly" disabled="@isLoading" />
+            Show In Progress Only
+        </label>
+    </div>
 
     @if (isLoading)
     {
-        <div class="loading-container">
-            <div class="loading"></div>
-            <p>Loading game progress...</p>
+        <div class="results-count">
+            <p>Loading game progress data...</p>
         </div>
-    }
-    else if (gamesWithProgress == null || !gamesWithProgress.Any())
-    {
-        <p>No games in progress found.</p>
     }
     else
     {
-        <div class="search-section">
-            <div class="search-box">
-                <input type="text"
-                       placeholder="Search by title, criteria, or review..."
-                       @bind="searchQuery"
-                       @bind:event="oninput"
-                       class="search-input" />
-                <span class="search-icon">🔍</span>
-            </div>
-
-            <div class="filter-controls">
-                <label>
-                    <input type="checkbox" id="showCompletedOnly" checked="@showCompletedOnly" @onchange="ToggleShowCompletedOnly" />
-                    Show Completed Only
-                </label>
-                <label>
-                    <input type="checkbox" id="showInProgressOnly" checked="@showInProgressOnly" @onchange="ToggleShowInProgressOnly" />
-                    Show In Progress Only
-                </label>
-            </div>
-
-            <div class="results-count">
-                <p>Showing @FilteredGames.Count() of @_totalGames games | Completed: @_completedCount | In Progress: @_inProgressCount</p>
-            </div>
+        <div class="results-count">
+            <p>Showing @FilteredGames.Count() of @_totalGames games | Completed: @_completedCount | In Progress: @_inProgressCount</p>
         </div>
+    }
+</div>
 
-        <div class="games-table-container">
-            <table class="games-table">
-                <thead>
-                    <tr>
-                        <th @onclick="() => SortBy(nameof(GameProgressDto.ProgressId))">
-                            Game Number @GetSortIcon(nameof(GameProgressDto.ProgressId))
-                        </th>
-                        <th @onclick='() => SortBy("Status")'>
-                            Status @GetSortIcon("Status")
-                        </th>
-                        <th style="width: 100px;">Cover</th>
-                        <th @onclick="() => SortBy(nameof(GameProgressDto.GameTitle))">
-                            Title @GetSortIcon(nameof(GameProgressDto.GameTitle))
-                        </th>
-                        <th @onclick="() => SortBy(nameof(GameProgressDto.DateStarted))">
-                            Started @GetSortIcon(nameof(GameProgressDto.DateStarted))
-                        </th>
-                        <th @onclick="() => SortBy(nameof(GameProgressDto.DateFinished))">
-                            Finished @GetSortIcon(nameof(GameProgressDto.DateFinished))
-                        </th>
-                        <th @onclick="() => SortBy(nameof(GameProgressDto.CompletionTime))">
-                            Time @GetSortIcon(nameof(GameProgressDto.CompletionTime))
-                        </th>
-                        <th @onclick="() => SortBy(nameof(GameProgressDto.Platform))">
-                            Platform @GetSortIcon(nameof(GameProgressDto.Platform))
-                        </th>
-                        <th>Criteria</th>
-                        <th>Review</th>
-                        @if (isAdmin)
-                        {
-                            <th style="width:100px">Actions</th>
-                        }
-                    </tr>
-                </thead>
-                <tbody>
+<div class="games-table-container">
+    <table class="games-table">
+        <thead>
+            <tr>
+                <th @onclick="() => SortBy(nameof(GameProgressDto.ProgressId))">
+                    Game Number @GetSortIcon(nameof(GameProgressDto.ProgressId))
+                </th>
+                <th @onclick='() => SortBy("Status")'>
+                    Status @GetSortIcon("Status")
+                </th>
+                <th style="width: 100px;">Cover</th>
+                <th @onclick="() => SortBy(nameof(GameProgressDto.GameTitle))">
+                    Title @GetSortIcon(nameof(GameProgressDto.GameTitle))
+                </th>
+                <th @onclick="() => SortBy(nameof(GameProgressDto.DateStarted))">
+                    Started @GetSortIcon(nameof(GameProgressDto.DateStarted))
+                </th>
+                <th @onclick="() => SortBy(nameof(GameProgressDto.DateFinished))">
+                    Finished @GetSortIcon(nameof(GameProgressDto.DateFinished))
+                </th>
+                <th @onclick="() => SortBy(nameof(GameProgressDto.CompletionTime))">
+                    Time @GetSortIcon(nameof(GameProgressDto.CompletionTime))
+                </th>
+                <th @onclick="() => SortBy(nameof(GameProgressDto.Platform))">
+                    Platform @GetSortIcon(nameof(GameProgressDto.Platform))
+                </th>
+                <th>Criteria</th>
+                <th>Review</th>
+                @if (isAdmin)
+                {
+                    <th style="width:100px">Actions</th>
+                }
+            </tr>
+        </thead>
+        <tbody>
+            @if (isLoading)
+            {
+                <tr>
+                    <td colspan="@(isAdmin ? 11 : 10)" style="text-align: center; padding: 3rem;">
+                        <div class="loading-container">
+                            <div class="loading"></div>
+                            <p>Loading game progress...</p>
+                        </div>
+                    </td>
+                </tr>
+            }
+            else if (gamesWithProgress == null || !gamesWithProgress.Any())
+            {
+                <tr>
+                    <td colspan="@(isAdmin ? 11 : 10)" style="text-align: center; padding: 2rem;">
+                        <p>No games in progress found.</p>
+                    </td>
+                </tr>
+            }
+            else
+            {
                     <Virtualize Items="@FilteredGames.ToList()" Context="game" OverscanCount="20">
                         <tr class="@(game.DateFinished.HasValue ? "completed" : "in-progress")">
                             <td>@game.ProgressId</td>
@@ -150,10 +168,10 @@
                             }
                         </tr>
                     </Virtualize>
+                }
                 </tbody>
             </table>
         </div>
-    }
 </div>
 
 <GameProgressEdit IsVisible="@showModal"

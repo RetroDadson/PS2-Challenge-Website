@@ -105,13 +105,15 @@
     overflow-y: auto;
     overflow-x: auto;
     position: relative;
+    min-height: 400px;
 }
 
 .games-table {
     width: 100%;
+    table-layout: fixed;
     border-collapse: separate;
     border-spacing: 0;
-    min-width: 800px;
+    min-width: 1400px;
 }
 
 .games-table thead {
@@ -141,7 +143,18 @@
 
 .games-table tbody tr {
     border-bottom: 1px solid var(--border-color);
-    transition: all 0.2s ease;
+    transition: background 0.2s ease;
+    opacity: 0;
+    animation: fadeInRow 0.2s ease-in forwards;
+}
+
+@keyframes fadeInRow {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
 }
 
 .games-table tbody tr:hover {
