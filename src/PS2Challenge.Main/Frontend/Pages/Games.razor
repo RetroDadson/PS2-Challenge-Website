@@ -1,8 +1,9 @@
 @page "/games"
-@rendermode InteractiveServer
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
 @using System.Text.Json
 @using System.Text.Json.Serialization
 @using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Components.Web.Virtualization
 @using PS2Challenge.Main.Frontend.Components
 @using PS2Challenge.Main.Frontend.Shared
 @using PS2Challenge.Backend.Models
@@ -50,7 +51,7 @@
             </div>
 
             <div class="results-count">
-                <p>Showing @FilteredGames.Count() of @allGames.Count games | Owned: @allGames.Count(g => g.IsOwned) | Excluded: @allGames.Count(g => g.IsExcluded) | Completed: @GetCompletedCount() | In Progress: @GetInProgressCount() | Not Started: @GetNotStartedCount()</p>
+                <p>Showing @FilteredGames.Count() of @_totalGames games | Owned: @_ownedCount | Excluded: @_excludedCount | Completed: @_completedCount | In Progress: @_inProgressCount | Not Started: @_notStartedCount</p>
             </div>
 
             @if (isAdmin)
@@ -81,8 +82,7 @@
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach (var game in FilteredGames)
-                    {
+                    <Virtualize Items="@FilteredGames.ToList()" Context="game" OverscanCount="20">
                         <tr class="@GetRowClass(game)">
                             @if (isAdmin)
                             {
@@ -100,6 +100,8 @@
                                              alt="@game.Title cover" 
                                              class="game-cover"
                                              loading="lazy"
+                                             width="80"
+                                             height="112"
                                              onerror="this.style.display='none'" />
                                     </div>
                                 }
@@ -166,7 +168,7 @@
                                 }
                             </td>
                         </tr>
-                    }
+                    </Virtualize>
                 </tbody>
             </table>
         </div>
@@ -182,41 +184,61 @@
     OnDelete="@HandleDelete" />
 
 @code {
-    private List<GameDto> allGames = new();
-    private Dictionary<int, string> ownedTypes = new();
-    private Dictionary<int, string> exclusionReasons = new();
-    private Dictionary<int, string> completionStatus = new();
-    private Dictionary<int, List<AlternateTitle>> alternateTitles = new();
+private List<GameDto> allGames = new();
+private Dictionary<int, string> ownedTypes = new();
+private Dictionary<int, string> exclusionReasons = new();
+private Dictionary<int, string> completionStatus = new();
+private Dictionary<int, List<AlternateTitle>> alternateTitles = new();
 
-    private string searchQuery = string.Empty;
-    private bool showOwnedOnly = false;
-    private bool showExcludedGames = false;
-    private string sortColumn = nameof(GameDto.Title);
-    private bool sortAscending = true;
-    private bool isLoading = true;
-    private bool isAdmin = false;
+private string searchQuery = string.Empty;
+private bool showOwnedOnly = false;
+private bool showExcludedGames = false;
+private string sortColumn = nameof(GameDto.Title);
+private bool sortAscending = true;
+private bool isLoading = true;
+private bool isAdmin = false;
 
-    private bool showModal = false;
-    private bool isEditMode = false;
-    private GameDto? selectedGame = null;
+private bool showModal = false;
+private bool isEditMode = false;
+private GameDto? selectedGame = null;
+
+// Cache filtered results to avoid recomputing on every access
+private List<GameDto>? _cachedFilteredGames = null;
+private string? _lastSearchQuery = null;
+private bool _lastShowOwnedOnly = false;
+private bool _lastShowExcludedGames = false;
+private string? _lastSortColumn = null;
+private bool _lastSortAscending = true;
+
+// Cache statistics to avoid multiple enumerations
+private int _totalGames = 0;
+private int _ownedCount = 0;
+private int _excludedCount = 0;
+private int _completedCount = 0;
+private int _inProgressCount = 0;
+private int _notStartedCount = 0;
 
     protected override async Task OnInitializedAsync()
     {
+        // Load admin status first as it doesn't depend on other data
         await CheckAdminStatus();
-        await LoadGames();
-        await LoadOwnedTypes();
-        await LoadExclusionReasons();
-        await LoadCompletionStatus();
-        await LoadAlternateTitles();
+        
+        // Load all games page data in a single optimized call
+        await LoadAllData();
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
         {
-            // Load user preferences from localStorage
+            // Load user preferences from localStorage after first render
+            // This must be done after render as JSRuntime is not available during SSR
             await LoadPreferences();
-            StateHasChanged();
+            // Only trigger re-render if preferences were actually loaded and affect display
+            if (showOwnedOnly || showExcludedGames)
+            {
+                StateHasChanged();
+            }
         }
     }
 
@@ -274,25 +296,26 @@
         }
     }
 
-    private async Task ToggleShowOwnedOnly(ChangeEventArgs e)
+    private void ToggleShowOwnedOnly(ChangeEventArgs e)
     {
         showOwnedOnly = e.Value is bool b && b;
-        await SavePreferences();
-        StateHasChanged();
+        // Save preferences asynchronously without blocking the UI
+        _ = SavePreferences();
+        // No need to call StateHasChanged() - Blazor does this automatically after event handlers
     }
 
-    private async Task ToggleShowExcluded(ChangeEventArgs e)
+    private void ToggleShowExcluded(ChangeEventArgs e)
     {
         showExcludedGames = e.Value is bool b && b;
-        await SavePreferences();
-        StateHasChanged();
+        // Save preferences asynchronously without blocking the UI
+        _ = SavePreferences();
+        // No need to call StateHasChanged() - Blazor does this automatically after event handlers
     }
 
     private async Task LoadGames()
     {
         try
         {
-            isLoading = true;
             var result = await GameService.GetAllGamesAsync();
             allGames = result?.ToList() ?? new List<GameDto>();
         }
@@ -304,6 +327,87 @@
         finally
         {
             isLoading = false;
+        }
+    }
+
+    private async Task LoadAllData()
+    {
+        try
+        {
+            var pageData = await GameService.GetGamesPageDataAsync();
+            
+            if (pageData != null)
+            {
+                allGames = pageData.Games ?? new List<GameDto>();
+                ownedTypes = pageData.OwnedTypes ?? new Dictionary<int, string>();
+                exclusionReasons = pageData.ExclusionReasons ?? new Dictionary<int, string>();
+                completionStatus = pageData.CompletionStatus ?? new Dictionary<int, string>();
+                alternateTitles = pageData.AlternateTitles ?? new Dictionary<int, List<AlternateTitle>>();
+                
+                // Pre-compute statistics once
+                ComputeStatistics();
+                
+                // Invalidate cache when data changes
+                _cachedFilteredGames = null;
+            }
+            else
+            {
+                allGames = new List<GameDto>();
+                ownedTypes = new();
+                exclusionReasons = new();
+                completionStatus = new();
+                alternateTitles = new();
+                ComputeStatistics();
+                _cachedFilteredGames = null;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"ERROR loading games: {ex.Message}");
+            allGames = new List<GameDto>();
+            ownedTypes = new();
+            exclusionReasons = new();
+            completionStatus = new();
+            alternateTitles = new();
+            ComputeStatistics();
+            _cachedFilteredGames = null;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void ComputeStatistics()
+    {
+        _totalGames = allGames.Count;
+        _ownedCount = 0;
+        _excludedCount = 0;
+        _completedCount = 0;
+        _inProgressCount = 0;
+        _notStartedCount = 0;
+
+        foreach (var game in allGames)
+        {
+            if (game.IsOwned) _ownedCount++;
+            if (game.IsExcluded) _excludedCount++;
+
+            if (!game.IsExcluded)
+            {
+                if (completionStatus.TryGetValue(game.Id, out var status))
+                {
+                    if (status == "Completed")
+                        _completedCount++;
+                    else if (status == "In Progress")
+                        _inProgressCount++;
+                    else
+                        _notStartedCount++;
+                }
+                else
+                {
+                    _notStartedCount++;
+                }
+            }
         }
     }
 
@@ -391,27 +495,6 @@
         return "No alternate titles";
     }
 
-    private int GetCompletedCount()
-    {
-        return allGames.Count(g => !g.IsExcluded && 
-                                   completionStatus.ContainsKey(g.Id) && 
-                                   completionStatus[g.Id] == "Completed");
-    }
-
-    private int GetInProgressCount()
-    {
-        return allGames.Count(g => !g.IsExcluded && 
-                                   completionStatus.ContainsKey(g.Id) && 
-                                   completionStatus[g.Id] == "In Progress");
-    }
-
-    private int GetNotStartedCount()
-    {
-        return allGames.Count(g => !g.IsExcluded && 
-                                   (!completionStatus.ContainsKey(g.Id) || 
-                                    completionStatus[g.Id] == "Not Started"));
-    }
-
     private void OpenAddModal()
     {
         selectedGame = new GameDto();
@@ -437,23 +520,15 @@
 
     private async Task HandleSave()
     {
-        // Reload games list after save
-        await LoadGames();
-        await LoadOwnedTypes();
-        await LoadExclusionReasons();
-        await LoadCompletionStatus();
-        await LoadAlternateTitles();
+        // Reload all data after save using the optimized single call
+        await LoadAllData();
         CloseModal();
     }
 
     private async Task HandleDelete(int gameId)
     {
-        // Reload games list after delete
-        await LoadGames();
-        await LoadOwnedTypes();
-        await LoadExclusionReasons();
-        await LoadCompletionStatus();
-        await LoadAlternateTitles();
+        // Reload all data after delete using the optimized single call
+        await LoadAllData();
         CloseModal();
     }
 
@@ -461,48 +536,111 @@
     {
         get
         {
-            var filtered = allGames.AsEnumerable();
-
-            // search
-            if (!string.IsNullOrWhiteSpace(searchQuery))
+            // Check if cache is still valid
+            if (_cachedFilteredGames != null &&
+                _lastSearchQuery == searchQuery &&
+                _lastShowOwnedOnly == showOwnedOnly &&
+                _lastShowExcludedGames == showExcludedGames &&
+                _lastSortColumn == sortColumn &&
+                _lastSortAscending == sortAscending)
             {
+                return _cachedFilteredGames;
+            }
+
+            // Cache is invalid, recalculate using optimized approach
+            var count = allGames.Count;
+            var results = new List<GameDto>(count);
+
+            // Fast path: no search query
+            if (string.IsNullOrWhiteSpace(searchQuery))
+            {
+                // Apply filters in a single pass
+                for (int i = 0; i < count; i++)
+                {
+                    var game = allGames[i];
+                    
+                    if (showOwnedOnly && !game.IsOwned) continue;
+                    if (!showExcludedGames && game.IsExcluded) continue;
+                    
+                    results.Add(game);
+                }
+            }
+            else
+            {
+                // Search path: filter with search query
                 var q = searchQuery.ToLowerInvariant();
-                filtered = filtered.Where(g =>
-                    (g.Title?.ToLowerInvariant().Contains(q) ?? false) ||
-                    (g.Developer?.ToLowerInvariant().Contains(q) ?? false) ||
-                    (g.Publisher?.ToLowerInvariant().Contains(q) ?? false) ||
-                    (alternateTitles.ContainsKey(g.Id) && 
-                     alternateTitles[g.Id].Any(at => at.Title.ToLowerInvariant().Contains(q))));
+                
+                for (int i = 0; i < count; i++)
+                {
+                    var game = allGames[i];
+                    
+                    // Apply ownership and exclusion filters first (cheaper)
+                    if (showOwnedOnly && !game.IsOwned) continue;
+                    if (!showExcludedGames && game.IsExcluded) continue;
+                    
+                    // Then check search query
+                    bool matchesSearch = 
+                        (game.Title?.ToLowerInvariant().Contains(q) ?? false) ||
+                        (game.Developer?.ToLowerInvariant().Contains(q) ?? false) ||
+                        (game.Publisher?.ToLowerInvariant().Contains(q) ?? false);
+                    
+                    if (!matchesSearch && alternateTitles.TryGetValue(game.Id, out var titles))
+                    {
+                        foreach (var title in titles)
+                        {
+                            if (title.Title.ToLowerInvariant().Contains(q))
+                            {
+                                matchesSearch = true;
+                                break;
+                            }
+                        }
+                    }
+                    
+                    if (matchesSearch)
+                    {
+                        results.Add(game);
+                    }
+                }
             }
 
-            // owned filter
-            if (showOwnedOnly)
+            // Sort the results
+            results = sortColumn switch
             {
-                filtered = filtered.Where(g => g.IsOwned);
-            }
-
-            // excluded filter
-            if (!showExcludedGames)
-            {
-                filtered = filtered.Where(g => !g.IsExcluded);
-            }
-
-            // sorting
-            filtered = sortColumn switch
-            {
-                nameof(GameDto.Developer) => sortAscending ? filtered.OrderBy(g => g.Developer) : filtered.OrderByDescending(g => g.Developer),
-                nameof(GameDto.Publisher) => sortAscending ? filtered.OrderBy(g => g.Publisher) : filtered.OrderByDescending(g => g.Publisher),
-                nameof(GameDto.FirstReleased) => sortAscending ? filtered.OrderBy(g => g.FirstReleased ?? DateOnly.MinValue) : filtered.OrderByDescending(g => g.FirstReleased ?? DateOnly.MinValue),
-                nameof(GameDto.RegionFirstReleasedIn) => sortAscending ? filtered.OrderBy(g => g.RegionFirstReleasedIn) : filtered.OrderByDescending(g => g.RegionFirstReleasedIn),
-                "IsExcluded" => sortAscending ? filtered.OrderBy(g => g.IsExcluded) : filtered.OrderByDescending(g => g.IsExcluded),
-                "IsOwned" => sortAscending ? filtered.OrderBy(g => g.IsOwned) : filtered.OrderByDescending(g => g.IsOwned),
+                nameof(GameDto.Developer) => sortAscending 
+                    ? results.OrderBy(g => g.Developer).ToList()
+                    : results.OrderByDescending(g => g.Developer).ToList(),
+                nameof(GameDto.Publisher) => sortAscending 
+                    ? results.OrderBy(g => g.Publisher).ToList()
+                    : results.OrderByDescending(g => g.Publisher).ToList(),
+                nameof(GameDto.FirstReleased) => sortAscending 
+                    ? results.OrderBy(g => g.FirstReleased ?? DateOnly.MinValue).ToList()
+                    : results.OrderByDescending(g => g.FirstReleased ?? DateOnly.MinValue).ToList(),
+                nameof(GameDto.RegionFirstReleasedIn) => sortAscending 
+                    ? results.OrderBy(g => g.RegionFirstReleasedIn).ToList()
+                    : results.OrderByDescending(g => g.RegionFirstReleasedIn).ToList(),
+                "IsExcluded" => sortAscending 
+                    ? results.OrderBy(g => g.IsExcluded).ToList()
+                    : results.OrderByDescending(g => g.IsExcluded).ToList(),
+                "IsOwned" => sortAscending 
+                    ? results.OrderBy(g => g.IsOwned).ToList()
+                    : results.OrderByDescending(g => g.IsOwned).ToList(),
                 "CompletionStatus" => sortAscending 
-                    ? filtered.OrderBy(g => GetCompletionStatus(g.Id)) 
-                    : filtered.OrderByDescending(g => GetCompletionStatus(g.Id)),
-                _ => sortAscending ? filtered.OrderBy(g => g.Title) : filtered.OrderByDescending(g => g.Title),
+                    ? results.OrderBy(g => GetCompletionStatus(g.Id)).ToList()
+                    : results.OrderByDescending(g => GetCompletionStatus(g.Id)).ToList(),
+                _ => sortAscending 
+                    ? results.OrderBy(g => g.Title).ToList()
+                    : results.OrderByDescending(g => g.Title).ToList()
             };
 
-            return filtered;
+            // Cache the result
+            _cachedFilteredGames = results;
+            _lastSearchQuery = searchQuery;
+            _lastShowOwnedOnly = showOwnedOnly;
+            _lastShowExcludedGames = showExcludedGames;
+            _lastSortColumn = sortColumn;
+            _lastSortAscending = sortAscending;
+
+            return _cachedFilteredGames;
         }
     }
 

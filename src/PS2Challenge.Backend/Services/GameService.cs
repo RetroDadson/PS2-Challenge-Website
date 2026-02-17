@@ -674,4 +674,111 @@ public class GameService
 
         return true;
     }
+
+    /// <summary>
+    /// Gets all data needed for the Games page in a single optimized database query using joins.
+    /// This is significantly faster than multiple separate queries.
+    /// </summary>
+    public virtual async Task<GamesPageDataDto> GetGamesPageDataAsync()
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var dbContext = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
+
+        // Load all games with their related data in one query using explicit loading
+        var games = await dbContext.Games
+            .AsNoTracking()
+            .ToListAsync();
+
+        // Load all related data in parallel using separate contexts (safe because they're independent)
+        var excludedTask = Task.Run(async () =>
+        {
+            using var scope2 = _scopeFactory.CreateScope();
+            var db2 = scope2.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
+            return await db2.ExcludedGames.AsNoTracking().ToListAsync();
+        });
+
+        var ownedTask = Task.Run(async () =>
+        {
+            using var scope3 = _scopeFactory.CreateScope();
+            var db3 = scope3.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
+            return await db3.GamesOwned.AsNoTracking().ToListAsync();
+        });
+
+        var progressTask = Task.Run(async () =>
+        {
+            using var scope4 = _scopeFactory.CreateScope();
+            var db4 = scope4.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
+            return await db4.GameProgress.AsNoTracking().ToListAsync();
+        });
+
+        var alternateTitlesTask = Task.Run(async () =>
+        {
+            using var scope5 = _scopeFactory.CreateScope();
+            var db5 = scope5.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
+            return await db5.AlternateTitles.AsNoTracking().ToListAsync();
+        });
+
+        // Wait for all parallel queries to complete
+        await Task.WhenAll(excludedTask, ownedTask, progressTask, alternateTitlesTask);
+
+        var excludedGames = await excludedTask;
+        var ownedGames = await ownedTask;
+        var progressData = await progressTask;
+        var alternateTitles = await alternateTitlesTask;
+
+        // Build lookup dictionaries
+        var excludedIds = excludedGames.Select(x => x.GameId).ToHashSet();
+        var ownedIds = ownedGames.Select(x => x.GameId).ToHashSet();
+
+        // Set IsExcluded and IsOwned flags on games
+        foreach (var game in games)
+        {
+            game.IsExcluded = excludedIds.Contains(game.Id);
+            game.IsOwned = ownedIds.Contains(game.Id);
+        }
+
+        // Custom sort: Special characters first, then alphanumeric
+        var sortedGames = games.OrderBy(g =>
+        {
+            if (string.IsNullOrEmpty(g.Title)) return 1;
+            var firstChar = g.Title[0];
+            return char.IsLetterOrDigit(firstChar) ? 1 : 0;
+        })
+        .ThenBy(g => g.Title)
+        .ToList();
+
+        // Build owned types dictionary
+        var ownedTypes = ownedGames.ToDictionary(o => o.GameId, o => o.TypeOwned ?? string.Empty);
+
+        // Build exclusion reasons dictionary
+        var exclusionReasons = excludedGames.ToDictionary(e => e.GameId, e => e.Reason ?? "No reason provided");
+
+        // Build completion status dictionary
+        var completionStatus = new Dictionary<int, string>();
+        foreach (var progress in progressData)
+        {
+            if (progress.DateFinished.HasValue)
+            {
+                completionStatus[progress.GameId] = "Completed";
+            }
+            else
+            {
+                completionStatus[progress.GameId] = "In Progress";
+            }
+        }
+
+        // Build alternate titles dictionary
+        var alternateTitlesDict = alternateTitles
+            .GroupBy(at => at.GameId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        return new GamesPageDataDto
+        {
+            Games = sortedGames,
+            OwnedTypes = ownedTypes,
+            ExclusionReasons = exclusionReasons,
+            CompletionStatus = completionStatus,
+            AlternateTitles = alternateTitlesDict
+        };
+    }
 }

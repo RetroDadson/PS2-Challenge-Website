@@ -44,6 +44,40 @@ public class GamesPageTests : BunitContext
         JSInterop.Mode = JSRuntimeMode.Loose;
     }
 
+    /// <summary>
+    /// Helper method to setup game service mock with test data
+    /// </summary>
+    private void SetupGameServiceMock(
+        List<GameDto> games,
+        Dictionary<int, string>? ownedTypes = null,
+        Dictionary<int, string>? exclusionReasons = null,
+        Dictionary<int, string>? completionStatus = null,
+        Dictionary<int, List<AlternateTitle>>? alternateTitles = null)
+    {
+        ownedTypes ??= new Dictionary<int, string>();
+        exclusionReasons ??= new Dictionary<int, string>();
+        completionStatus ??= new Dictionary<int, string>();
+        alternateTitles ??= new Dictionary<int, List<AlternateTitle>>();
+
+        var pageData = new GamesPageDataDto
+        {
+            Games = games,
+            OwnedTypes = ownedTypes,
+            ExclusionReasons = exclusionReasons,
+            CompletionStatus = completionStatus,
+            AlternateTitles = alternateTitles
+        };
+
+        _mockGameService.Setup(s => s.GetGamesPageDataAsync()).ReturnsAsync(pageData);
+        
+        // Also setup individual methods for backwards compatibility if any code still uses them
+        _mockGameService.Setup(s => s.GetAllGamesAsync()).ReturnsAsync(games);
+        _mockGameService.Setup(s => s.GetOwnedTypesAsync()).ReturnsAsync(ownedTypes);
+        _mockGameService.Setup(s => s.GetExclusionReasonsAsync()).ReturnsAsync(exclusionReasons);
+        _mockGameService.Setup(s => s.GetCompletionStatusAsync()).ReturnsAsync(completionStatus);
+        _mockGameService.Setup(s => s.GetAlternateTitlesAsync()).ReturnsAsync(alternateTitles);
+    }
+
     [Fact]
     public async Task GamesPage_WhenLoaded_DisplaysPageTitle()
     {
@@ -54,11 +88,7 @@ public class GamesPageTests : BunitContext
             new GameDto { Id = 2, Title = "Shadow of the Colossus", Developer = "Team Ico", Publisher = "Sony", RegionFirstReleasedIn = "JP", IsOwned = true, IsExcluded = false }
         };
 
-        _mockGameService.Setup(s => s.GetAllGamesAsync()).ReturnsAsync(games);
-        _mockGameService.Setup(s => s.GetOwnedTypesAsync()).ReturnsAsync(new Dictionary<int, string>());
-        _mockGameService.Setup(s => s.GetExclusionReasonsAsync()).ReturnsAsync(new Dictionary<int, string>());
-        _mockGameService.Setup(s => s.GetCompletionStatusAsync()).ReturnsAsync(new Dictionary<int, string>());
-        _mockGameService.Setup(s => s.GetAlternateTitlesAsync()).ReturnsAsync(new Dictionary<int, List<AlternateTitle>>());
+        SetupGameServiceMock(games);
 
         // Act - Render the page as a user would see it
         var cut = Render<Games>();
@@ -82,11 +112,7 @@ public class GamesPageTests : BunitContext
             new GameDto { Id = 3, Title = "Grand Theft Auto: San Andreas", Developer = "Rockstar North", Publisher = "Rockstar", RegionFirstReleasedIn = "NA", IsOwned = true, IsExcluded = false }
         };
 
-        _mockGameService.Setup(s => s.GetAllGamesAsync()).ReturnsAsync(games);
-        _mockGameService.Setup(s => s.GetOwnedTypesAsync()).ReturnsAsync(new Dictionary<int, string>());
-        _mockGameService.Setup(s => s.GetExclusionReasonsAsync()).ReturnsAsync(new Dictionary<int, string>());
-        _mockGameService.Setup(s => s.GetCompletionStatusAsync()).ReturnsAsync(new Dictionary<int, string>());
-        _mockGameService.Setup(s => s.GetAlternateTitlesAsync()).ReturnsAsync(new Dictionary<int, List<AlternateTitle>>());
+        SetupGameServiceMock(games);
 
         // Act - User navigates to the games page
         var cut = Render<Games>();
@@ -112,11 +138,7 @@ public class GamesPageTests : BunitContext
             new GameDto { Id = 3, Title = "Shadow of the Colossus", Developer = "Team Ico", Publisher = "Sony", RegionFirstReleasedIn = "JP", IsOwned = true, IsExcluded = false }
         };
 
-        _mockGameService.Setup(s => s.GetAllGamesAsync()).ReturnsAsync(games);
-        _mockGameService.Setup(s => s.GetOwnedTypesAsync()).ReturnsAsync(new Dictionary<int, string>());
-        _mockGameService.Setup(s => s.GetExclusionReasonsAsync()).ReturnsAsync(new Dictionary<int, string>());
-        _mockGameService.Setup(s => s.GetCompletionStatusAsync()).ReturnsAsync(new Dictionary<int, string>());
-        _mockGameService.Setup(s => s.GetAlternateTitlesAsync()).ReturnsAsync(new Dictionary<int, List<AlternateTitle>>());
+        SetupGameServiceMock(games);
 
         var cut = Render<Games>();
         await Task.Delay(100);
@@ -145,11 +167,7 @@ public class GamesPageTests : BunitContext
             { 1, "Completed" }
         };
 
-        _mockGameService.Setup(s => s.GetAllGamesAsync()).ReturnsAsync(allGames);
-        _mockGameService.Setup(s => s.GetOwnedTypesAsync()).ReturnsAsync(new Dictionary<int, string>());
-        _mockGameService.Setup(s => s.GetExclusionReasonsAsync()).ReturnsAsync(new Dictionary<int, string>());
-        _mockGameService.Setup(s => s.GetCompletionStatusAsync()).ReturnsAsync(completionStatus);
-        _mockGameService.Setup(s => s.GetAlternateTitlesAsync()).ReturnsAsync(new Dictionary<int, List<AlternateTitle>>());
+        SetupGameServiceMock(allGames, completionStatus: completionStatus);
 
         // Act - User views the page
         var cut = Render<Games>();
@@ -166,11 +184,7 @@ public class GamesPageTests : BunitContext
     public async Task GamesPage_WhenNoGames_DisplaysAppropriateMessage()
     {
         // Arrange - Empty game list
-        _mockGameService.Setup(s => s.GetAllGamesAsync()).ReturnsAsync(new List<GameDto>());
-        _mockGameService.Setup(s => s.GetOwnedTypesAsync()).ReturnsAsync(new Dictionary<int, string>());
-        _mockGameService.Setup(s => s.GetExclusionReasonsAsync()).ReturnsAsync(new Dictionary<int, string>());
-        _mockGameService.Setup(s => s.GetCompletionStatusAsync()).ReturnsAsync(new Dictionary<int, string>());
-        _mockGameService.Setup(s => s.GetAlternateTitlesAsync()).ReturnsAsync(new Dictionary<int, List<AlternateTitle>>());
+        SetupGameServiceMock(new List<GameDto>());
 
         // Act - User views the page with no games
         var cut = Render<Games>();
@@ -200,11 +214,7 @@ public class GamesPageTests : BunitContext
             }
         };
 
-        _mockGameService.Setup(s => s.GetAllGamesAsync()).ReturnsAsync(games);
-        _mockGameService.Setup(s => s.GetOwnedTypesAsync()).ReturnsAsync(new Dictionary<int, string>());
-        _mockGameService.Setup(s => s.GetExclusionReasonsAsync()).ReturnsAsync(new Dictionary<int, string>());
-        _mockGameService.Setup(s => s.GetCompletionStatusAsync()).ReturnsAsync(new Dictionary<int, string>());
-        _mockGameService.Setup(s => s.GetAlternateTitlesAsync()).ReturnsAsync(new Dictionary<int, List<AlternateTitle>>());
+        SetupGameServiceMock(games);
 
         // Act - User views game details
         var cut = Render<Games>();
@@ -227,11 +237,7 @@ public class GamesPageTests : BunitContext
             new GameDto { Id = 1, Title = "Test Game", Developer = "Test Dev", Publisher = "Test Pub", RegionFirstReleasedIn = "NA", IsOwned = true, IsExcluded = false }
         };
 
-        _mockGameService.Setup(s => s.GetAllGamesAsync()).ReturnsAsync(games);
-        _mockGameService.Setup(s => s.GetOwnedTypesAsync()).ReturnsAsync(new Dictionary<int, string>());
-        _mockGameService.Setup(s => s.GetExclusionReasonsAsync()).ReturnsAsync(new Dictionary<int, string>());
-        _mockGameService.Setup(s => s.GetCompletionStatusAsync()).ReturnsAsync(new Dictionary<int, string>());
-        _mockGameService.Setup(s => s.GetAlternateTitlesAsync()).ReturnsAsync(new Dictionary<int, List<AlternateTitle>>());
+        SetupGameServiceMock(games);
 
         // Act
         var cut = Render<Games>();
@@ -267,11 +273,7 @@ public class GamesPageTests : BunitContext
             new GameDto { Id = 1, Title = "God of War", Developer = "SCE Santa Monica", Publisher = "Sony", RegionFirstReleasedIn = "NA", IsOwned = true, IsExcluded = false }
         };
 
-        _mockGameService.Setup(s => s.GetAllGamesAsync()).ReturnsAsync(games);
-        _mockGameService.Setup(s => s.GetOwnedTypesAsync()).ReturnsAsync(new Dictionary<int, string>());
-        _mockGameService.Setup(s => s.GetExclusionReasonsAsync()).ReturnsAsync(new Dictionary<int, string>());
-        _mockGameService.Setup(s => s.GetCompletionStatusAsync()).ReturnsAsync(new Dictionary<int, string>());
-        _mockGameService.Setup(s => s.GetAlternateTitlesAsync()).ReturnsAsync(new Dictionary<int, List<AlternateTitle>>());
+        SetupGameServiceMock(games);
 
         // Act - Authenticated user views the page
         var cut = Render<Games>();
@@ -298,11 +300,7 @@ public class GamesPageTests : BunitContext
             { 2, "In Progress" }
         };
 
-        _mockGameService.Setup(s => s.GetAllGamesAsync()).ReturnsAsync(games);
-        _mockGameService.Setup(s => s.GetOwnedTypesAsync()).ReturnsAsync(new Dictionary<int, string>());
-        _mockGameService.Setup(s => s.GetExclusionReasonsAsync()).ReturnsAsync(new Dictionary<int, string>());
-        _mockGameService.Setup(s => s.GetCompletionStatusAsync()).ReturnsAsync(completionStatus);
-        _mockGameService.Setup(s => s.GetAlternateTitlesAsync()).ReturnsAsync(new Dictionary<int, List<AlternateTitle>>());
+        SetupGameServiceMock(games, completionStatus: completionStatus);
 
         // Act
         var cut = Render<Games>();
@@ -325,11 +323,7 @@ public class GamesPageTests : BunitContext
             new GameDto { Id = 2, Title = "Excluded Game", Developer = "Dev", Publisher = "Pub", RegionFirstReleasedIn = "NA", IsOwned = true, IsExcluded = true }
         };
 
-        _mockGameService.Setup(s => s.GetAllGamesAsync()).ReturnsAsync(games);
-        _mockGameService.Setup(s => s.GetOwnedTypesAsync()).ReturnsAsync(new Dictionary<int, string>());
-        _mockGameService.Setup(s => s.GetExclusionReasonsAsync()).ReturnsAsync(new Dictionary<int, string> { { 2, "Test reason" } });
-        _mockGameService.Setup(s => s.GetCompletionStatusAsync()).ReturnsAsync(new Dictionary<int, string>());
-        _mockGameService.Setup(s => s.GetAlternateTitlesAsync()).ReturnsAsync(new Dictionary<int, List<AlternateTitle>>());
+        SetupGameServiceMock(games, exclusionReasons: new Dictionary<int, string> { { 2, "Test reason" } });
 
         // Act
         var cut = Render<Games>();
