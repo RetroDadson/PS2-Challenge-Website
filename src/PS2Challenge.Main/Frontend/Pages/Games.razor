@@ -14,74 +14,92 @@
 <PageTitle>Games - Dadson's PS2 Challenge</PageTitle>
 
 <div class="games-container">
-    <h1>PS2 Games Library</h1>
+<h1>PS2 Games Library</h1>
+
+<div class="search-section">
+    <div class="search-box">
+        <input type="text"
+               placeholder="Search games by title, developer, or publisher..."
+               @bind="searchQuery"
+               @bind:event="oninput"
+               class="search-input"
+               disabled="@isLoading" />
+        <span class="search-icon">🔍</span>
+    </div>
+
+    <div class="filter-controls">
+        <label>
+            <input type="checkbox" id="showOwnedOnly" checked="@showOwnedOnly" @onchange="ToggleShowOwnedOnly" disabled="@isLoading" />
+            Show Owned Only
+        </label>
+        <label>
+            <input type="checkbox" id="showExcludedGames" checked="@showExcludedGames" @onchange="ToggleShowExcluded" disabled="@isLoading" />
+            Show Excluded Games
+        </label>
+    </div>
 
     @if (isLoading)
     {
-        <div class="loading-container">
-            <div class="loading"></div>
-            <p>Loading games...</p>
+        <div class="results-count">
+            <p>Loading games data...</p>
         </div>
-    }
-    else if (allGames == null || !allGames.Any())
-    {
-        <p>No games found.</p>
     }
     else
     {
-        <div class="search-section">
-            <div class="search-box">
-                <input type="text"
-                       placeholder="Search games by title, developer, or publisher..."
-                       @bind="searchQuery"
-                       @bind:event="oninput"
-                       class="search-input" />
-                <span class="search-icon">🔍</span>
-            </div>
-
-            <div class="filter-controls">
-                <label>
-                    <input type="checkbox" id="showOwnedOnly" checked="@showOwnedOnly" @onchange="ToggleShowOwnedOnly" />
-                    Show Owned Only
-                </label>
-                <label>
-                    <input type="checkbox" id="showExcludedGames" checked="@showExcludedGames" @onchange="ToggleShowExcluded" />
-                    Show Excluded Games
-                </label>
-            </div>
-
-            <div class="results-count">
-                <p>Showing @FilteredGames.Count() of @_totalGames games | Owned: @_ownedCount | Excluded: @_excludedCount | Completed: @_completedCount | In Progress: @_inProgressCount | Not Started: @_notStartedCount</p>
-            </div>
-
-            @if (isAdmin)
-            {
-                <div class="admin-actions">
-                    <button class="cta-button" @onclick="OpenAddModal">+ Add New Game</button>
-                </div>
-            }
+        <div class="results-count">
+            <p>Showing @FilteredGames.Count() of @_totalGames games | Owned: @_ownedCount | Excluded: @_excludedCount | Completed: @_completedCount | In Progress: @_inProgressCount | Not Started: @_notStartedCount</p>
         </div>
+    }
 
-        <div class="games-table-container">
-            <table class="games-table">
-                <thead>
-                    <tr>
-                        @if (isAdmin)
-                        {
-                            <th style="width: 80px;">Actions</th>
-                        }
-                        <th style="width: 100px;">Cover</th>
-                        <th @onclick="() => SortBy(nameof(GameDto.Title))">Title @GetSortIcon(nameof(GameDto.Title))</th>
-                        <th @onclick="() => SortBy(nameof(GameDto.Developer))">Developer @GetSortIcon(nameof(GameDto.Developer))</th>
-                        <th @onclick="() => SortBy(nameof(GameDto.Publisher))">Publisher @GetSortIcon(nameof(GameDto.Publisher))</th>
-                        <th @onclick="() => SortBy(nameof(GameDto.FirstReleased))">Release Date @GetSortIcon(nameof(GameDto.FirstReleased))</th>
-                        <th @onclick="() => SortBy(nameof(GameDto.RegionFirstReleasedIn))">Region First Released In @GetSortIcon(nameof(GameDto.RegionFirstReleasedIn))</th>
-                        <th @onclick='() => SortBy("IsExcluded")'>Excluded @GetSortIcon("IsExcluded")</th>
-                        <th @onclick='() => SortBy("IsOwned")'>Owned @GetSortIcon("IsOwned")</th>
-                        <th @onclick='() => SortBy("CompletionStatus")'>Status @GetSortIcon("CompletionStatus")</th>
-                    </tr>
-                </thead>
-                <tbody>
+    @if (isAdmin)
+    {
+        <div class="admin-actions">
+            <button class="cta-button" @onclick="OpenAddModal" disabled="@isLoading">+ Add New Game</button>
+        </div>
+    }
+</div>
+
+<div class="games-table-container">
+    <table class="games-table">
+        <thead>
+            <tr>
+                @if (isAdmin)
+                {
+                    <th style="width: 80px;">Actions</th>
+                }
+                <th style="width: 100px;">Cover</th>
+                <th @onclick="() => SortBy(nameof(GameDto.Title))">Title @GetSortIcon(nameof(GameDto.Title))</th>
+                <th @onclick="() => SortBy(nameof(GameDto.Developer))">Developer @GetSortIcon(nameof(GameDto.Developer))</th>
+                <th @onclick="() => SortBy(nameof(GameDto.Publisher))">Publisher @GetSortIcon(nameof(GameDto.Publisher))</th>
+                <th @onclick="() => SortBy(nameof(GameDto.FirstReleased))">Release Date @GetSortIcon(nameof(GameDto.FirstReleased))</th>
+                <th @onclick="() => SortBy(nameof(GameDto.RegionFirstReleasedIn))">Region First Released In @GetSortIcon(nameof(GameDto.RegionFirstReleasedIn))</th>
+                <th @onclick='() => SortBy("IsExcluded")'>Excluded @GetSortIcon("IsExcluded")</th>
+                <th @onclick='() => SortBy("IsOwned")'>Owned @GetSortIcon("IsOwned")</th>
+                <th @onclick='() => SortBy("CompletionStatus")'>Status @GetSortIcon("CompletionStatus")</th>
+            </tr>
+        </thead>
+        <tbody>
+            @if (isLoading)
+            {
+                <tr>
+                    <td colspan="@(isAdmin ? 10 : 9)" style="text-align: center; padding: 3rem;">
+                        <div class="loading-container">
+                            <div class="loading"></div>
+                            <p>Loading games...</p>
+                        </div>
+                    </td>
+                </tr>
+            }
+            else if (allGames == null || !allGames.Any())
+            {
+                <tr>
+                    <td colspan="@(isAdmin ? 10 : 9)" style="text-align: center; padding: 2rem;">
+                        <p>No games found.</p>
+                    </td>
+                </tr>
+            }
+            else
+            {
                     <Virtualize Items="@FilteredGames.ToList()" Context="game" OverscanCount="20">
                         <tr class="@GetRowClass(game)">
                             @if (isAdmin)
@@ -169,10 +187,10 @@
                             </td>
                         </tr>
                     </Virtualize>
+                }
                 </tbody>
             </table>
         </div>
-    }
 </div>
 
 <GameEditModal 
