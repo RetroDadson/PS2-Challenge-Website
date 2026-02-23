@@ -4,12 +4,15 @@
 @using System.Text.Json.Serialization
 @using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.AspNetCore.Components.Web.Virtualization
+@using Microsoft.AspNetCore.SignalR.Client
 @using PS2Challenge.Main.Frontend.Components
 @using PS2Challenge.Main.Frontend.Shared
 @using PS2Challenge.Backend.Models
+@implements IAsyncDisposable
 @inject GameService GameService
 @inject IJSRuntime JSRuntime
 @inject AuthenticationStateProvider AuthenticationStateProvider
+@inject NavigationManager NavigationManager
 
 <PageTitle>Games - Dadson's PS2 Challenge</PageTitle>
 
@@ -236,6 +239,9 @@ private int _completedCount = 0;
 private int _inProgressCount = 0;
 private int _notStartedCount = 0;
 
+// SignalR connection
+private HubConnection? hubConnection;
+
     protected override async Task OnInitializedAsync()
     {
         // Load admin status first as it doesn't depend on other data
@@ -243,6 +249,9 @@ private int _notStartedCount = 0;
         
         // Load all games page data in a single optimized call
         await LoadAllData();
+
+        // Set up SignalR connection for real-time updates
+        await InitializeSignalRConnection();
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -684,5 +693,46 @@ private int _notStartedCount = 0;
         if (game.IsOwned)
             return "owned-row";
         return string.Empty;
+    }
+
+    private async Task InitializeSignalRConnection()
+    {
+        try
+        {
+            hubConnection = new HubConnectionBuilder()
+                .WithUrl(NavigationManager.ToAbsoluteUri("/gamesHub"))
+                .WithAutomaticReconnect()
+                .Build();
+
+            // Subscribe to GamesUpdated event
+            hubConnection.On("GamesUpdated", async () =>
+            {
+                Console.WriteLine("SignalR: Received GamesUpdated notification - refreshing game data");
+                await LoadAllData();
+                await InvokeAsync(StateHasChanged);
+            });
+
+            await hubConnection.StartAsync();
+            Console.WriteLine("SignalR: Connected to GamesHub");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"SignalR: Error connecting to hub: {ex.Message}");
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (hubConnection is not null)
+        {
+            try
+            {
+                await hubConnection.DisposeAsync();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error disposing SignalR connection: {ex.Message}");
+            }
+        }
     }
 }

@@ -301,8 +301,9 @@
     private System.Threading.Timer? _debounceTimer;
     private readonly int _debounceMilliseconds = 800;
 
-    // SignalR client connection
-    private HubConnection? hubConnection;
+    // SignalR client connections
+    private HubConnection? votesHubConnection;
+    private HubConnection? gamesHubConnection;
 
     protected override async Task OnInitializedAsync()
     {
@@ -315,7 +316,7 @@
             await LoadAllGameTitles();
         }
 
-        // Set up SignalR client connection
+        // Set up SignalR client connections
         await InitializeSignalRConnection();
     }
 
@@ -323,13 +324,14 @@
     {
         try
         {
-            hubConnection = new HubConnectionBuilder()
+            // Connect to VotesHub for vote changes
+            votesHubConnection = new HubConnectionBuilder()
                 .WithUrl(NavigationManager.ToAbsoluteUri("/votesHub"))
                 .WithAutomaticReconnect()
                 .Build();
 
             // Subscribe to VotesUpdated event
-            hubConnection.On("VotesUpdated", async () =>
+            votesHubConnection.On("VotesUpdated", async () =>
             {
                 Console.WriteLine("SignalR: Received VotesUpdated notification");
                 await LoadCurrentVotes();
@@ -337,8 +339,25 @@
                 await InvokeAsync(StateHasChanged);
             });
 
-            await hubConnection.StartAsync();
+            await votesHubConnection.StartAsync();
             Console.WriteLine("SignalR: Connected to VotesHub");
+
+            // Connect to GamesHub for cover URL updates
+            gamesHubConnection = new HubConnectionBuilder()
+                .WithUrl(NavigationManager.ToAbsoluteUri("/gamesHub"))
+                .WithAutomaticReconnect()
+                .Build();
+
+            // Subscribe to GamesUpdated event (for cover URL updates)
+            gamesHubConnection.On("GamesUpdated", async () =>
+            {
+                Console.WriteLine("SignalR: Received GamesUpdated notification - refreshing vote covers");
+                await LoadCurrentVotes(); // Reload to get updated cover URLs
+                await InvokeAsync(StateHasChanged);
+            });
+
+            await gamesHubConnection.StartAsync();
+            Console.WriteLine("SignalR: Connected to GamesHub");
         }
         catch (Exception ex)
         {
@@ -696,9 +715,28 @@
     {
         _debounceTimer?.Dispose();
         
-        if (hubConnection != null)
+        if (votesHubConnection != null)
         {
-            await hubConnection.DisposeAsync();
+            try
+            {
+                await votesHubConnection.DisposeAsync();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error disposing VotesHub connection: {ex.Message}");
+            }
+        }
+
+        if (gamesHubConnection != null)
+        {
+            try
+            {
+                await gamesHubConnection.DisposeAsync();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error disposing GamesHub connection: {ex.Message}");
+            }
         }
     }
 
