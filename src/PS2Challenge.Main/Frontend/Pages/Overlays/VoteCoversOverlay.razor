@@ -54,7 +54,8 @@
     private bool isLoading = true;
     private bool hasError = false;
     private bool isDisposed = false;
-    private HubConnection? hubConnection;
+    private HubConnection? votesHubConnection;
+    private HubConnection? gamesHubConnection;
     private System.Threading.Timer? cycleTimer;
     private readonly int cycleDurationMs = 2000;
     private string? lastDataHash;
@@ -66,17 +67,19 @@
         {
             await LoadCoverImages();
 
-            hubConnection = new HubConnectionBuilder()
+            // Connect to VotesHub for vote changes
+            votesHubConnection = new HubConnectionBuilder()
                 .WithUrl(NavigationManager.ToAbsoluteUri("/votesHub"))
                 .WithAutomaticReconnect()
                 .Build();
 
-            hubConnection.On("VotesUpdated", async () =>
+            votesHubConnection.On("VotesUpdated", async () =>
             {
                 try
                 {
                     if (isDisposed) return;
                     
+                    Console.WriteLine("VoteCoversOverlay: Received VotesUpdated - reloading covers");
                     await LoadCoverImages();
                     
                     if (!isDisposed)
@@ -92,11 +95,48 @@
 
             try
             {
-                await hubConnection.StartAsync();
+                await votesHubConnection.StartAsync();
+                Console.WriteLine("VoteCoversOverlay: Connected to VotesHub");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error connecting to SignalR hub: {ex.Message}");
+                Console.WriteLine($"Error connecting to VotesHub: {ex.Message}");
+            }
+
+            // Connect to GamesHub for cover URL updates
+            gamesHubConnection = new HubConnectionBuilder()
+                .WithUrl(NavigationManager.ToAbsoluteUri("/gamesHub"))
+                .WithAutomaticReconnect()
+                .Build();
+
+            gamesHubConnection.On("GamesUpdated", async () =>
+            {
+                try
+                {
+                    if (isDisposed) return;
+                    
+                    Console.WriteLine("VoteCoversOverlay: Received GamesUpdated - reloading covers");
+                    await LoadCoverImages();
+                    
+                    if (!isDisposed)
+                    {
+                        await InvokeAsync(StateHasChanged);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error in GamesUpdated handler: {ex.Message}");
+                }
+            });
+
+            try
+            {
+                await gamesHubConnection.StartAsync();
+                Console.WriteLine("VoteCoversOverlay: Connected to GamesHub");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error connecting to GamesHub: {ex.Message}");
             }
         }
         catch (Exception ex)
@@ -258,15 +298,27 @@
         
         StopCycling();
         
-        if (hubConnection is not null)
+        if (votesHubConnection is not null)
         {
             try
             {
-                await hubConnection.DisposeAsync();
+                await votesHubConnection.DisposeAsync();
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error disposing SignalR connection: {ex.Message}");
+                Console.WriteLine($"Error disposing VotesHub connection: {ex.Message}");
+            }
+        }
+
+        if (gamesHubConnection is not null)
+        {
+            try
+            {
+                await gamesHubConnection.DisposeAsync();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error disposing GamesHub connection: {ex.Message}");
             }
         }
     }

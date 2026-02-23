@@ -5,9 +5,9 @@ using Microsoft.AspNetCore.Localization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
 using PS2Challenge.Backend;
-using PS2Challenge.Backend.BackgroundServices;
 using PS2Challenge.Backend.Configuration;
 using PS2Challenge.Backend.Data;
+using PS2Challenge.Main.BackgroundServices;
 using PS2Challenge.Backend.Data.Repositories;
 using PS2Challenge.Backend.Services;
 using PS2Challenge.Main.Api.Authentication;
@@ -139,8 +139,8 @@ builder.Services.AddScoped<UserRepository>();
 // Add GameRepository
 builder.Services.AddScoped<GameRepository>();
 
-// Register background service for updating cover images
-builder.Services.AddHostedService<CoverImageUpdateService>();
+// Register background service for updating cover images with SignalR notifications
+builder.Services.AddHostedService<CoverImageUpdateServiceWrapper>();
 
 // Add health checks
 builder.Services.AddHealthChecks()
