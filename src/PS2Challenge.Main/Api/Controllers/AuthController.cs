@@ -133,7 +133,7 @@ public class AuthController : ControllerBase
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> GetCurrentUser()
     {
-        if (User.Identity?.IsAuthenticated is not true)
+        if (User.Identity?.IsAuthenticated is not bool isAuthenticated || !isAuthenticated)
         {
             return Ok(new UserProfileDto { IsAuthenticated = false });
         }
