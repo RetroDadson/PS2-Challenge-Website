@@ -168,10 +168,7 @@ public class VoteService
                 ref updatedCount);
         }
 
-        if (toInsert.Any())
-        {
-            await db.CurrentVotes.AddRangeAsync(toInsert);
-        }
+        await db.CurrentVotes.AddRangeAsync(toInsert);
 
         await db.SaveChangesAsync();
 

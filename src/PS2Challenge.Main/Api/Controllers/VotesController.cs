@@ -67,9 +67,9 @@ public class VotesController : ControllerBase
     /// Each round must contain exactly 3 votes with distinct game titles.
     /// Vote counts must be non-negative, and positions (if provided) must be 1, 2, or 3.
     /// Existing vote records will be updated, new records will be inserted.
-    /// 
+    ///
     /// Sample request:
-    /// 
+    ///
     ///     POST /api/votes/upload
     ///     [
     ///         {
@@ -160,10 +160,7 @@ public class VotesController : ControllerBase
             }
         }
 
-        if (toInsert.Any())
-        {
-            await db.VoteHistory.AddRangeAsync(toInsert);
-        }
+        await db.VoteHistory.AddRangeAsync(toInsert);
 
         // Save changes (updates tracked existing rows + inserted ones)
         await db.SaveChangesAsync();
@@ -206,9 +203,9 @@ public class VotesController : ControllerBase
     /// <remarks>
     /// Updates existing vote entries or creates new ones. Triggers real-time update to connected clients via SignalR.
     /// Vote counts must be non-negative.
-    /// 
+    ///
     /// Sample request:
-    /// 
+    ///
     ///     POST /api/votes/current
     ///     [
     ///         { "gameTitle": "Final Fantasy X", "voteCount": 150, "gameNumber": 1 },
@@ -451,15 +448,15 @@ public class VotesController : ControllerBase
     /// - Owned (marked in game_owned table)
     /// - Not excluded (not in excluded_games table)
     /// - Not started (no entry in progress table or entry without date_started)
-    /// 
+    ///
     /// The number of games added is calculated as: min(count, 3 - current_votes_count)
     /// This ensures you never have more than 3 games in the current votes table.
-    /// 
+    ///
     /// Each game is assigned a game number (1-3) based on available slots.
     /// All added games start with 0 votes.
-    /// 
+    ///
     /// Sample request:
-    /// 
+    ///
     ///     POST /api/votes/current/fill-random
     ///     {
     ///         "count": 3
@@ -535,8 +532,8 @@ public class VotesController : ControllerBase
 
             if (eligibleGameIds.Count < gamesToAdd)
             {
-                return BadRequest(new 
-                { 
+                return BadRequest(new
+                {
                     message = $"Only {eligibleGameIds.Count} eligible game(s) available, but {gamesToAdd} requested.",
                     availableGames = eligibleGameIds.Count,
                     requestedGames = gamesToAdd
