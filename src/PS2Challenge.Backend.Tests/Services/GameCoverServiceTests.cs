@@ -9,6 +9,7 @@ public class GameCoverServiceTests : IDisposable
 {
     private readonly Ps2ChallengeDbContext _context;
     private readonly GameCoverService _service;
+    private bool _disposed;
 
     public GameCoverServiceTests()
     {
@@ -18,8 +19,24 @@ public class GameCoverServiceTests : IDisposable
 
     public void Dispose()
     {
-        _context.Database.EnsureDeleted();
-        _context.Dispose();
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        if (disposing)
+        {
+            _context.Database.EnsureDeleted();
+            _context.Dispose();
+        }
+
+        _disposed = true;
     }
 
     [Fact]

@@ -15,6 +15,10 @@ namespace PS2Challenge.Api.Api.Controllers;
 [Route("api/[controller]")]
 public class GamesController : ControllerBase
 {
+    private const string InternalServerErrorMessage = "Internal server error";
+    private const string RequestDataRequiredMessage = "Request data is required";
+    private const string TitleRequiredMessage = "Title is required";
+
     private readonly GameService _gameService;
     private readonly ILogger<GamesController> _logger;
 
@@ -73,7 +77,7 @@ public class GamesController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error getting ownership types");
-            return StatusCode(500, new { message = "Internal server error", error = ex.Message });
+            return StatusCode(500, new { message = InternalServerErrorMessage, error = ex.Message });
         }
     }
 
@@ -119,7 +123,7 @@ public class GamesController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error getting game by ID {GameId}", id);
-            return StatusCode(500, new { message = "Internal server error", error = ex.Message });
+            return StatusCode(500, new { message = InternalServerErrorMessage, error = ex.Message });
         }
     }
 
@@ -242,7 +246,7 @@ public class GamesController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error updating game {GameId}", id);
-            return StatusCode(500, new { message = "Internal server error", error = ex.Message });
+            return StatusCode(500, new { message = InternalServerErrorMessage, error = ex.Message });
         }
     }
 
@@ -292,7 +296,7 @@ public class GamesController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error deleting game {GameId}", id);
-            return StatusCode(500, new { message = "Internal server error", error = ex.Message });
+            return StatusCode(500, new { message = InternalServerErrorMessage, error = ex.Message });
         }
     }
 
@@ -324,14 +328,14 @@ public class GamesController : ControllerBase
     {
         if (request == null)
         {
-            return BadRequest(new { message = "Request data is required" });
+            return BadRequest(new { message = RequestDataRequiredMessage });
         }
 
         var validationErrors = new List<string>();
 
         if (string.IsNullOrWhiteSpace(request.Title))
         {
-            validationErrors.Add("Title is required");
+            validationErrors.Add(TitleRequiredMessage);
         }
 
         if (string.IsNullOrWhiteSpace(request.Reason))
@@ -432,7 +436,7 @@ public class GamesController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error updating exclusion for game {GameId}", id);
-            return StatusCode(500, new { message = "Internal server error", error = ex.Message });
+            return StatusCode(500, new { message = InternalServerErrorMessage, error = ex.Message });
         }
     }
 
@@ -465,14 +469,14 @@ public class GamesController : ControllerBase
     {
         if (request == null)
         {
-            return BadRequest(new { message = "Request data is required" });
+            return BadRequest(new { message = RequestDataRequiredMessage });
         }
 
         var validationErrors = new List<string>();
 
         if (string.IsNullOrWhiteSpace(request.Title))
         {
-            validationErrors.Add("Title is required");
+            validationErrors.Add(TitleRequiredMessage);
         }
 
         validationErrors.AddRange(ValidateOwnershipRequest(request));
@@ -573,7 +577,7 @@ public class GamesController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error updating ownership for game {GameId}", id);
-            return StatusCode(500, new { message = "Internal server error", error = ex.Message });
+            return StatusCode(500, new { message = InternalServerErrorMessage, error = ex.Message });
         }
     }
 
@@ -608,14 +612,14 @@ public class GamesController : ControllerBase
     {
         if (request == null)
         {
-            return BadRequest(new { message = "Request data is required" });
+            return BadRequest(new { message = RequestDataRequiredMessage });
         }
 
         var validationErrors = new List<string>();
 
         if (string.IsNullOrWhiteSpace(request.Title))
         {
-            validationErrors.Add("Title is required");
+            validationErrors.Add(TitleRequiredMessage);
         }
 
         if (string.IsNullOrWhiteSpace(request.Platform))
@@ -706,34 +710,10 @@ public class GamesController : ControllerBase
     {
         if (request == null)
         {
-            return BadRequest(new { message = "Request data is required" });
+            return BadRequest(new { message = RequestDataRequiredMessage });
         }
 
-        var validationErrors = new List<string>();
-
-        if (string.IsNullOrWhiteSpace(request.Title))
-        {
-            validationErrors.Add("Title is required");
-        }
-
-        if (string.IsNullOrWhiteSpace(request.SerialNumber))
-        {
-            validationErrors.Add("Serial number is required");
-        }
-        else if (request.SerialNumber.Length > 50)
-        {
-            validationErrors.Add("Serial number cannot exceed 50 characters");
-        }
-
-        if (!string.IsNullOrWhiteSpace(request.Region) && request.Region.Length > 50)
-        {
-            validationErrors.Add("Region cannot exceed 50 characters");
-        }
-
-        if (!string.IsNullOrWhiteSpace(request.Notes) && request.Notes.Length > 500)
-        {
-            validationErrors.Add("Notes cannot exceed 500 characters");
-        }
+        var validationErrors = ValidateAddSerialNumberRequest(request);
 
         if (validationErrors.Any())
         {
@@ -771,43 +751,12 @@ public class GamesController : ControllerBase
         }
         catch (InvalidOperationException ex)
         {
-            // Check if this is a serial number conflict or game not found
-            if (ex.Message.Contains("already exists for game ID"))
-            {
-                // Extract game ID and title from the exception message
-                // Message format: "Serial number 'XXX' already exists for game ID Y ('Title')"
-                var match = System.Text.RegularExpressions.Regex.Match(
-                    ex.Message,
-                    @"game ID (\d+) \('([^']+)'\)",
-                    System.Text.RegularExpressions.RegexOptions.None,
-                    TimeSpan.FromMilliseconds(250));
-
-                if (match.Success && int.TryParse(match.Groups[1].Value, out var existingGameId))
-                {
-                    var conflictResponse = new SerialNumberConflictResponse
-                    {
-                        Error = $"Serial number '{request.SerialNumber}' already exists",
-                        ExistingGameId = existingGameId,
-                        ExistingGameTitle = match.Groups[2].Value,
-                        SerialNumber = request.SerialNumber
-                    };
-
-                    return Conflict(conflictResponse);
-                }
-
-                // Fallback if regex doesn't match
-                return Conflict(new { error = ex.Message });
-            }
-            else
-            {
-                // Game not found
-                return NotFound(new { error = ex.Message });
-            }
+            return HandleAddSerialNumberInvalidOperation(ex, request);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error adding serial number for game '{GameTitle}'", request.Title);
-            return StatusCode(500, new { message = "Internal server error", error = ex.Message });
+            return StatusCode(500, new { message = InternalServerErrorMessage, error = ex.Message });
         }
     }
 
@@ -843,7 +792,7 @@ public class GamesController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error getting alternate titles for game {GameId}", id);
-            return StatusCode(500, new { message = "Internal server error", error = ex.Message });
+            return StatusCode(500, new { message = InternalServerErrorMessage, error = ex.Message });
         }
     }
 
@@ -884,14 +833,14 @@ public class GamesController : ControllerBase
     {
         if (request == null)
         {
-            return BadRequest(new { message = "Request data is required" });
+            return BadRequest(new { message = RequestDataRequiredMessage });
         }
 
         var validationErrors = new List<string>();
 
         if (string.IsNullOrWhiteSpace(request.Title))
         {
-            validationErrors.Add("Title is required");
+            validationErrors.Add(TitleRequiredMessage);
         }
         else if (request.Title.Length > 150)
         {
@@ -945,12 +894,12 @@ public class GamesController : ControllerBase
             
             // Otherwise it's a different error (shouldn't happen as we check game existence above)
             _logger.LogError(ex, "Error adding alternate title for game {GameId}", id);
-            return StatusCode(500, new { message = "Internal server error", error = ex.Message });
+            return StatusCode(500, new { message = InternalServerErrorMessage, error = ex.Message });
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error adding alternate title for game {GameId}", id);
-            return StatusCode(500, new { message = "Internal server error", error = ex.Message });
+            return StatusCode(500, new { message = InternalServerErrorMessage, error = ex.Message });
         }
     }
 
@@ -998,21 +947,81 @@ public class GamesController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error deleting alternate title {AlternateTitleId} for game {GameId}", alternateTitleId, id);
-            return StatusCode(500, new { message = "Internal server error", error = ex.Message });
+            return StatusCode(500, new { message = InternalServerErrorMessage, error = ex.Message });
         }
+    }
+
+    private static List<string> ValidateAddSerialNumberRequest(AddSerialNumberRequest request)
+    {
+        var validationErrors = new List<string>();
+
+        if (string.IsNullOrWhiteSpace(request.Title))
+        {
+            validationErrors.Add(TitleRequiredMessage);
+        }
+
+        if (string.IsNullOrWhiteSpace(request.SerialNumber))
+        {
+            validationErrors.Add("Serial number is required");
+        }
+        else if (request.SerialNumber.Length > 50)
+        {
+            validationErrors.Add("Serial number cannot exceed 50 characters");
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Region) && request.Region.Length > 50)
+        {
+            validationErrors.Add("Region cannot exceed 50 characters");
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Notes) && request.Notes.Length > 500)
+        {
+            validationErrors.Add("Notes cannot exceed 500 characters");
+        }
+
+        return validationErrors;
+    }
+
+    private IActionResult HandleAddSerialNumberInvalidOperation(InvalidOperationException exception, AddSerialNumberRequest request)
+    {
+        if (!exception.Message.Contains("already exists for game ID", StringComparison.Ordinal))
+        {
+            return NotFound(new { error = exception.Message });
+        }
+
+        var match = System.Text.RegularExpressions.Regex.Match(
+            exception.Message,
+            @"game ID (\d+) \('([^']+)'\)",
+            System.Text.RegularExpressions.RegexOptions.None,
+            TimeSpan.FromMilliseconds(250));
+
+        if (match.Success && int.TryParse(match.Groups[1].Value, out var existingGameId))
+        {
+            var conflictResponse = new SerialNumberConflictResponse
+            {
+                Error = $"Serial number '{request.SerialNumber}' already exists",
+                ExistingGameId = existingGameId,
+                ExistingGameTitle = match.Groups[2].Value,
+                SerialNumber = request.SerialNumber
+            };
+
+            return Conflict(conflictResponse);
+        }
+
+        return Conflict(new { error = exception.Message });
     }
 
     // ============================================================================
     // HELPER METHODS
     // ============================================================================
 
-    private List<string> ValidateGameDto(GameDto gameDto)
+    private static List<string> ValidateGameDto(GameDto gameDto)
     {
         var validationErrors = new List<string>();
 
         if (string.IsNullOrWhiteSpace(gameDto.Title))
         {
-            validationErrors.Add("Title is required");
+            validationErrors.Add(TitleRequiredMessage);
         }
         else if (gameDto.Title.Length > 150)
         {
@@ -1049,7 +1058,7 @@ public class GamesController : ControllerBase
         return validationErrors;
     }
 
-    private List<string> ValidateOwnershipRequest(AddGameOwnedRequest request)
+    private static List<string> ValidateOwnershipRequest(AddGameOwnedRequest request)
     {
         var validationErrors = new List<string>();
 

@@ -12,6 +12,7 @@ namespace PS2Challenge.Backend.Tests.BackgroundServices;
 public class CoverImageUpdateServiceTests : IDisposable
 {
     private readonly Ps2ChallengeDbContext _context;
+    private bool _disposed;
 
     public CoverImageUpdateServiceTests()
     {
@@ -20,8 +21,24 @@ public class CoverImageUpdateServiceTests : IDisposable
 
     public void Dispose()
     {
-        _context.Database.EnsureDeleted();
-        _context.Dispose();
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        if (disposing)
+        {
+            _context.Database.EnsureDeleted();
+            _context.Dispose();
+        }
+
+        _disposed = true;
     }
 
     [Fact]
@@ -86,7 +103,7 @@ public class CoverImageUpdateServiceTests : IDisposable
         var service = new CoverImageUpdateService(provider, NullLogger<CoverImageUpdateService>.Instance);
 
         using var cts = new CancellationTokenSource();
-        cts.Cancel();
+        await cts.CancelAsync();
 
         var updateMethod = typeof(CoverImageUpdateService).GetMethod(
             "UpdateCoverImagesAsync",
