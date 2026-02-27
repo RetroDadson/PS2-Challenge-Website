@@ -26,46 +26,8 @@ public class AuthenticationFlowTests : BunitContext
 
     private IRenderedComponent<TComponent> RenderWithAuth<TComponent>(ClaimsPrincipal user) where TComponent : IComponent
     {
-        var authContext = new Mock<AuthenticationStateProvider>();
-        var authState = new AuthenticationState(user);
-        authContext.Setup(x => x.GetAuthenticationStateAsync()).ReturnsAsync(authState);
-        
-        // Register the provider and authorization
-        Services.AddSingleton(authContext.Object);
-        Services.AddAuthorizationCore();
-        
-        // Add an authorization service that checks if the user is authenticated
-        var mockAuthService = new Mock<IAuthorizationService>();
-        mockAuthService.Setup(x => x.AuthorizeAsync(
-            It.IsAny<ClaimsPrincipal>(),
-            It.IsAny<object>(),
-            It.IsAny<IEnumerable<IAuthorizationRequirement>>()))
-            .ReturnsAsync((ClaimsPrincipal principal, object resource, IEnumerable<IAuthorizationRequirement> requirements) =>
-            {
-                // Check if user is authenticated
-                if (principal.Identity?.IsAuthenticated == true)
-                {
-                    return AuthorizationResult.Success();
-                }
-                return AuthorizationResult.Failed();
-            });
-        Services.AddSingleton(mockAuthService.Object);
-        
-        // Create a custom auth state provider wrapper
-        var authStateTask = Task.FromResult(authState);
-        
-        // Render wrapped in cascading auth state by providing it through RenderTree
-        return Render<TComponent>(builder =>
-        {
-            builder.OpenComponent<CascadingValue<Task<AuthenticationState>>>(0);
-            builder.AddComponentParameter(1, "Value", authStateTask);
-            builder.AddComponentParameter(2, "ChildContent", (RenderFragment)(childBuilder =>
-            {
-                childBuilder.OpenComponent<TComponent>(0);
-                childBuilder.CloseComponent();
-            }));
-            builder.CloseComponent();
-        });
+        var authState = this.AddTestAuthentication(user);
+        return this.RenderWithAuthState<TComponent>(authState);
     }
 
     [Fact]
@@ -73,7 +35,7 @@ public class AuthenticationFlowTests : BunitContext
     {
         // Arrange - Setup unauthenticated user
         var user = new ClaimsPrincipal(new ClaimsIdentity()); // No authentication
-        
+
         // Act - User views the login display component
         var cut = RenderWithAuth<LoginDisplay>(user);
 
@@ -182,7 +144,7 @@ public class AuthenticationFlowTests : BunitContext
         // Assert - Should have navigation elements
         var markup = cut.Markup;
         Assert.NotEmpty(markup);
-        
+
         // Check for navigation text (may be in different elements)
         Assert.True(markup.Contains("Games") || markup.Contains("Challenge") || markup.Contains("All Games"),
             $"Expected navigation links but got: {markup.Substring(0, Math.Min(200, markup.Length))}...");
@@ -280,7 +242,7 @@ public class AuthenticationFlowTests : BunitContext
 
         Services.AddSingleton(authContext.Object);
         Services.AddAuthorizationCore();
-        
+
         // Add a simple authorization service
         var mockAuthService = new Mock<IAuthorizationService>();
         mockAuthService.Setup(x => x.AuthorizeAsync(
@@ -294,9 +256,9 @@ public class AuthenticationFlowTests : BunitContext
         var authStateTask = Task.FromException<AuthenticationState>(new Exception("Authentication failed"));
 
         // Act & Assert - Component should handle the error or throw expected exception
-        var exception = Assert.ThrowsAny<Exception>(() => 
+        var exception = Assert.ThrowsAny<Exception>(() =>
         {
-            var cut = Render<LoginDisplay>(builder =>
+            _ = Render<LoginDisplay>(builder =>
             {
                 builder.OpenComponent<CascadingValue<Task<AuthenticationState>>>(0);
                 builder.AddComponentParameter(1, "Value", authStateTask);
@@ -308,9 +270,9 @@ public class AuthenticationFlowTests : BunitContext
                 builder.CloseComponent();
             });
         });
-        
+
         // The exception should be from the authentication provider
-        Assert.True(exception.Message.Contains("Authentication failed") || 
+        Assert.True(exception.Message.Contains("Authentication failed") ||
                     exception.InnerException?.Message.Contains("Authentication failed") == true,
             $"Expected authentication failure but got: {exception.Message}");
     }

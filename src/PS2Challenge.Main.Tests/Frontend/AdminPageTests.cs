@@ -7,9 +7,7 @@ using PS2Challenge.Main.Frontend.Pages;
 using Xunit;
 using Moq;
 using System.Security.Claims;
-using Microsoft.AspNetCore.Components.Authorization;
-using Microsoft.AspNetCore.Components;
-using Microsoft.AspNetCore.Authorization;
+using PS2Challenge.Main.Api.Hubs;
 
 namespace PS2Challenge.Main.Tests.Frontend;
 
@@ -28,54 +26,22 @@ public class AdminPageTests : BunitContext
         _mockGameService = new Mock<GameService>(null!);
         _mockCoverService = new Mock<GameCoverService>(null!); // Only one parameter
         _mockUserRepository = new Mock<UserRepository>(null!);
-        
+
         // Configure JSInterop
         JSInterop.Mode = JSRuntimeMode.Loose;
     }
 
     private IRenderedComponent<Admin> RenderAdminWithAuth(ClaimsPrincipal user)
     {
-        var authContext = new Mock<AuthenticationStateProvider>();
-        var authState = new AuthenticationState(user);
-        authContext.Setup(x => x.GetAuthenticationStateAsync()).ReturnsAsync(authState);
-        
+        var authState = this.AddTestAuthentication(user);
+
         // Register services
         Services.AddSingleton(_mockGameService.Object);
         Services.AddSingleton(_mockCoverService.Object);
         Services.AddSingleton(_mockUserRepository.Object);
-        Services.AddSingleton(authContext.Object);
-        Services.AddAuthorizationCore();
-        
-        // Add authorization service that checks if user is authenticated
-        var mockAuthService = new Mock<IAuthorizationService>();
-        mockAuthService.Setup(x => x.AuthorizeAsync(
-            It.IsAny<ClaimsPrincipal>(),
-            It.IsAny<object>(),
-            It.IsAny<IEnumerable<IAuthorizationRequirement>>()))
-            .ReturnsAsync((ClaimsPrincipal principal, object resource, IEnumerable<IAuthorizationRequirement> requirements) =>
-            {
-                if (principal.Identity?.IsAuthenticated == true)
-                {
-                    return AuthorizationResult.Success();
-                }
-                return AuthorizationResult.Failed();
-            });
-        Services.AddSingleton(mockAuthService.Object);
-        
-        // Create cascading auth state
-        var authStateTask = Task.FromResult(authState);
-        
-        return Render<Admin>(builder =>
-        {
-            builder.OpenComponent<CascadingValue<Task<AuthenticationState>>>(0);
-            builder.AddComponentParameter(1, "Value", authStateTask);
-            builder.AddComponentParameter(2, "ChildContent", (RenderFragment)(childBuilder =>
-            {
-                childBuilder.OpenComponent<Admin>(0);
-                childBuilder.CloseComponent();
-            }));
-            builder.CloseComponent();
-        });
+        Services.AddMockHubContext<GamesHub>();
+
+        return this.RenderWithAuthState<Admin>(authState);
     }
 
     [Fact]
@@ -117,20 +83,20 @@ public class AdminPageTests : BunitContext
 
         var users = new List<ApplicationUser>
         {
-            new ApplicationUser 
-            { 
-                Id = 1, 
-                TwitchUsername = "User1", 
+            new ApplicationUser
+            {
+                Id = 1,
+                TwitchUsername = "User1",
                 TwitchId = "twitch-1",
                 RoleId = 2,
                 Role = new Role { Id = 2, Name = "User" },
                 CreatedAt = DateTime.UtcNow,
                 LastLoginAt = DateTime.UtcNow
             },
-            new ApplicationUser 
-            { 
-                Id = 2, 
-                TwitchUsername = "User2", 
+            new ApplicationUser
+            {
+                Id = 2,
+                TwitchUsername = "User2",
                 TwitchId = "twitch-2",
                 RoleId = 2,
                 Role = new Role { Id = 2, Name = "User" },

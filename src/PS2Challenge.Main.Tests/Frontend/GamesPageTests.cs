@@ -7,7 +7,6 @@ using Xunit;
 using Moq;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Components.Authorization;
-using Microsoft.AspNetCore.SignalR;
 using PS2Challenge.Main.Api.Hubs;
 
 namespace PS2Challenge.Main.Tests.Frontend;
@@ -20,26 +19,24 @@ public class GamesPageTests : BunitContext
 {
     private readonly Mock<GameService> _mockGameService;
     private readonly Mock<AuthenticationStateProvider> _mockAuthStateProvider;
-    private readonly Mock<IHubContext<GamesHub>> _mockGamesHubContext;
 
     public GamesPageTests()
     {
         // Create mock with null parameters (won't be used in tests)
         _mockGameService = new Mock<GameService>(null!);
         _mockAuthStateProvider = new Mock<AuthenticationStateProvider>();
-        _mockGamesHubContext = new Mock<IHubContext<GamesHub>>();
-        
+
         // Setup default unauthenticated user
         var anonymousUser = new ClaimsPrincipal(new ClaimsIdentity());
         var authState = Task.FromResult(new AuthenticationState(anonymousUser));
         _mockAuthStateProvider.Setup(x => x.GetAuthenticationStateAsync()).Returns(authState);
-        
+
         // Register services
         Services.AddSingleton(_mockGameService.Object);
         Services.AddSingleton(_mockAuthStateProvider.Object);
-        Services.AddSingleton(_mockGamesHubContext.Object);
+        Services.AddMockHubContext<GamesHub>();
         Services.AddAuthorizationCore();
-        
+
         // Add JSInterop for localStorage calls
         JSInterop.Mode = JSRuntimeMode.Loose;
     }
@@ -69,7 +66,7 @@ public class GamesPageTests : BunitContext
         };
 
         _mockGameService.Setup(s => s.GetGamesPageDataAsync()).ReturnsAsync(pageData);
-        
+
         // Also setup individual methods for backwards compatibility if any code still uses them
         _mockGameService.Setup(s => s.GetAllGamesAsync()).ReturnsAsync(games);
         _mockGameService.Setup(s => s.GetOwnedTypesAsync()).ReturnsAsync(ownedTypes);
@@ -92,7 +89,7 @@ public class GamesPageTests : BunitContext
 
         // Act - Render the page as a user would see it
         var cut = Render<Games>();
-        
+
         // Wait for async initialization
         await Task.Delay(100);
 
@@ -116,7 +113,7 @@ public class GamesPageTests : BunitContext
 
         // Act - User navigates to the games page
         var cut = Render<Games>();
-        
+
         // Wait for async initialization
         await Task.Delay(100);
 
@@ -175,7 +172,7 @@ public class GamesPageTests : BunitContext
 
         // Assert - User should see game statistics
         var markup = cut.Markup;
-        
+
         // Should show owned count
         Assert.Contains("Owned: 3", markup);
     }
@@ -201,10 +198,10 @@ public class GamesPageTests : BunitContext
         // Arrange - Setup a game with all details
         var games = new List<GameDto>
         {
-            new GameDto 
-            { 
-                Id = 1, 
-                Title = "God of War", 
+            new GameDto
+            {
+                Id = 1,
+                Title = "God of War",
                 Developer = "SCE Santa Monica Studio",
                 Publisher = "Sony",
                 FirstReleased = new DateOnly(2005, 3, 22),
@@ -247,7 +244,7 @@ public class GamesPageTests : BunitContext
         var searchInput = cut.Find("input[placeholder*='Search']");
         var ownedOnlyCheckbox = cut.Find("#showOwnedOnly");
         var excludedCheckbox = cut.Find("#showExcludedGames");
-        
+
         Assert.NotNull(searchInput);
         Assert.NotNull(ownedOnlyCheckbox);
         Assert.NotNull(excludedCheckbox);
@@ -334,5 +331,61 @@ public class GamesPageTests : BunitContext
         Assert.Contains("Included Game", markup);
         // The "Excluded Game" text might appear in the status badge, so we check the overall structure
         Assert.Contains("Showing 1 of 2 games", markup);
+    }
+
+    [Fact]
+    public async Task GamesPage_AsAdmin_ShowsAddNewGameAction()
+    {
+        var claims = new[]
+        {
+            new Claim(ClaimTypes.Name, "AdminUser"),
+            new Claim(ClaimTypes.NameIdentifier, "admin-123"),
+            new Claim(ClaimTypes.Role, "Admin")
+        };
+        var user = new ClaimsPrincipal(new ClaimsIdentity(claims, "Test"));
+        _mockAuthStateProvider.Setup(x => x.GetAuthenticationStateAsync())
+            .Returns(Task.FromResult(new AuthenticationState(user)));
+
+        SetupGameServiceMock(new List<GameDto>
+        {
+            new GameDto { Id = 1, Title = "Admin Game", Developer = "Dev", Publisher = "Pub", RegionFirstReleasedIn = "NA", IsOwned = true, IsExcluded = false }
+        });
+
+        var cut = Render<Games>();
+        await Task.Delay(100);
+
+        Assert.Contains("+ Add New Game", cut.Markup);
+    }
+
+    [Fact]
+    public async Task GamesPage_WhenDataLoadThrows_ShowsNoGamesMessage()
+    {
+        _mockGameService.Setup(s => s.GetGamesPageDataAsync())
+            .ThrowsAsync(new InvalidOperationException("load failed"));
+
+        var cut = Render<Games>();
+        await Task.Delay(100);
+
+        Assert.Contains("No games found.", cut.Markup);
+    }
+
+    [Fact]
+    public async Task GamesPage_SearchByDeveloper_FiltersResultsCount()
+    {
+        var games = new List<GameDto>
+        {
+            new GameDto { Id = 1, Title = "Game A", Developer = "Rockstar North", Publisher = "Rockstar", RegionFirstReleasedIn = "NA", IsOwned = true, IsExcluded = false },
+            new GameDto { Id = 2, Title = "Game B", Developer = "Square", Publisher = "Square Enix", RegionFirstReleasedIn = "JP", IsOwned = true, IsExcluded = false }
+        };
+
+        SetupGameServiceMock(games);
+
+        var cut = Render<Games>();
+        await Task.Delay(100);
+
+        var searchInput = cut.Find("input[placeholder*='Search games']");
+        await searchInput.InputAsync("Rockstar");
+
+        Assert.Contains("Showing 1 of 2 games", cut.Markup);
     }
 }

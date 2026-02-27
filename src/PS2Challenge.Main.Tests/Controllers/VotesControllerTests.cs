@@ -378,6 +378,165 @@ public class VotesControllerTests : IDisposable
         Assert.Equal(0, remainingVotes);
     }
 
+    [Fact]
+    public async Task ArchiveCurrentVotes_ReturnsBadRequest_WhenNoCurrentVotesExist()
+    {
+        var result = await _controller.ArchiveCurrentVotes(new ArchiveVotesRequest { Notes = "Round note" });
+
+        Assert.IsType<BadRequestObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task ArchiveCurrentVotes_ReturnsOk_WhenCurrentVotesExist()
+    {
+        _context.Games.AddRange(
+            new GameDto { Id = 1, Title = "Game 1" },
+            new GameDto { Id = 2, Title = "Game 2" });
+        _context.CurrentVotes.AddRange(
+            new CurrentVote { GameId = 1, VoteCount = 25, GameNumber = 1 },
+            new CurrentVote { GameId = 2, VoteCount = 10, GameNumber = 2 });
+        await _context.SaveChangesAsync();
+
+        var result = await _controller.ArchiveCurrentVotes(new ArchiveVotesRequest { Notes = "Archived" });
+
+        Assert.IsType<OkObjectResult>(result);
+        Assert.Equal(0, await _context.CurrentVotes.CountAsync());
+        Assert.Equal(2, await _context.VoteHistory.CountAsync());
+    }
+
+    [Fact]
+    public async Task UpdateVoteCountByGameNumber_ReturnsBadRequest_WhenRequestIsNull()
+    {
+        var result = await _controller.UpdateVoteCountByGameNumber(null!);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task UpdateVoteCountByGameNumber_ReturnsBadRequest_WhenGameNumberInvalid()
+    {
+        var result = await _controller.UpdateVoteCountByGameNumber(new UpdateVoteByGameNumberRequest
+        {
+            GameNumber = 4,
+            VoteCount = 12
+        });
+
+        Assert.IsType<BadRequestObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task UpdateVoteCountByGameNumber_ReturnsBadRequest_WhenVoteCountNegative()
+    {
+        var result = await _controller.UpdateVoteCountByGameNumber(new UpdateVoteByGameNumberRequest
+        {
+            GameNumber = 1,
+            VoteCount = -1
+        });
+
+        Assert.IsType<BadRequestObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task UpdateVoteCountByGameNumber_ReturnsNotFound_WhenCurrentVoteMissing()
+    {
+        var result = await _controller.UpdateVoteCountByGameNumber(new UpdateVoteByGameNumberRequest
+        {
+            GameNumber = 2,
+            VoteCount = 10
+        });
+
+        Assert.IsType<NotFoundObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task UpdateVoteCountByGameNumber_ReturnsOk_AndUpdatesVoteCount()
+    {
+        _context.Games.Add(new GameDto { Id = 1, Title = "Game 1" });
+        _context.CurrentVotes.Add(new CurrentVote { GameId = 1, VoteCount = 5, GameNumber = 2 });
+        await _context.SaveChangesAsync();
+
+        var result = await _controller.UpdateVoteCountByGameNumber(new UpdateVoteByGameNumberRequest
+        {
+            GameNumber = 2,
+            VoteCount = 33
+        });
+
+        Assert.IsType<OkObjectResult>(result);
+        _context.ChangeTracker.Clear();
+        var updated = await _context.CurrentVotes.FirstAsync(cv => cv.GameNumber == 2);
+        Assert.Equal(33, updated.VoteCount);
+    }
+
+    [Fact]
+    public async Task FillCurrentVotesWithRandom_ReturnsBadRequest_WhenRequestIsNull()
+    {
+        var result = await _controller.FillCurrentVotesWithRandom(null);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task FillCurrentVotesWithRandom_ReturnsBadRequest_WhenCountIsZero()
+    {
+        var result = await _controller.FillCurrentVotesWithRandom(new FillRandomVotesRequest { Count = 0 });
+
+        Assert.IsType<BadRequestObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task FillCurrentVotesWithRandom_ReturnsBadRequest_WhenNoSlotsAvailable()
+    {
+        _context.CurrentVotes.AddRange(
+            new CurrentVote { GameId = 1, VoteCount = 0, GameNumber = 1 },
+            new CurrentVote { GameId = 2, VoteCount = 0, GameNumber = 2 },
+            new CurrentVote { GameId = 3, VoteCount = 0, GameNumber = 3 });
+        await _context.SaveChangesAsync();
+
+        var result = await _controller.FillCurrentVotesWithRandom(new FillRandomVotesRequest { Count = 1 });
+
+        Assert.IsType<BadRequestObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task FillCurrentVotesWithRandom_ReturnsBadRequest_WhenNoEligibleGames()
+    {
+        var result = await _controller.FillCurrentVotesWithRandom(new FillRandomVotesRequest { Count = 2 });
+
+        Assert.IsType<BadRequestObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task FillCurrentVotesWithRandom_ReturnsBadRequest_WhenInsufficientEligibleGames()
+    {
+        _context.Games.Add(new GameDto { Id = 10, Title = "Only Eligible" });
+        _context.GamesOwned.Add(new GameOwned { OwnershipId = 1, GameId = 10, OwnPhysicalCopy = true, TypeOwned = "PAL" });
+        await _context.SaveChangesAsync();
+
+        var result = await _controller.FillCurrentVotesWithRandom(new FillRandomVotesRequest { Count = 3 });
+
+        Assert.IsType<BadRequestObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task FillCurrentVotesWithRandom_ReturnsOk_AndCreatesVotes_WhenEligibleGamesExist()
+    {
+        _context.Games.AddRange(
+            new GameDto { Id = 20, Title = "Game 20" },
+            new GameDto { Id = 21, Title = "Game 21" },
+            new GameDto { Id = 22, Title = "Game 22" });
+        _context.GamesOwned.AddRange(
+            new GameOwned { OwnershipId = 20, GameId = 20, OwnPhysicalCopy = true, TypeOwned = "PAL" },
+            new GameOwned { OwnershipId = 21, GameId = 21, OwnPhysicalCopy = true, TypeOwned = "PAL" },
+            new GameOwned { OwnershipId = 22, GameId = 22, OwnPhysicalCopy = true, TypeOwned = "PAL" });
+        await _context.SaveChangesAsync();
+
+        var result = await _controller.FillCurrentVotesWithRandom(new FillRandomVotesRequest { Count = 2 });
+
+        Assert.IsType<OkObjectResult>(result);
+        var currentVotesCount = await _context.CurrentVotes.CountAsync();
+        Assert.Equal(2, currentVotesCount);
+    }
+
     private void SetupAdminUser()
     {
         var claims = new List<Claim>
