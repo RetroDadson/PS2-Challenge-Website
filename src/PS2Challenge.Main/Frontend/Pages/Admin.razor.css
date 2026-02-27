@@ -167,7 +167,7 @@
 
 .update-status p {
     margin: 0;
-    color: #ff9800;
+    color: var(--text-primary);
 }
 
 .update-message {
@@ -180,13 +180,13 @@
 .update-message.success {
     background: rgba(76, 175, 80, 0.1);
     border: 1px solid rgba(76, 175, 80, 0.3);
-    color: #4caf50;
+    color: var(--text-primary);
 }
 
 .update-message.error {
     background: rgba(244, 67, 54, 0.1);
     border: 1px solid rgba(244, 67, 54, 0.3);
-    color: #f44336;
+    color: var(--text-primary);
 }
 
 .cta-button {
@@ -277,17 +277,17 @@
 
 .role-admin {
     background: rgba(255, 215, 0, 0.2);
-    color: #ffd700;
+    color: var(--text-primary);
 }
 
 .role-user {
     background: rgba(33, 150, 243, 0.2);
-    color: #2196F3;
+    color: var(--text-primary);
 }
 
 .role-default {
     background: rgba(158, 158, 158, 0.2);
-    color: #9e9e9e;
+    color: var(--text-primary);
 }
 
 .role-select {

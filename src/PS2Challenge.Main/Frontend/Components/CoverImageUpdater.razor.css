@@ -36,7 +36,7 @@
 
 .update-status p {
     margin: 0;
-    color: #ff9800;
+    color: var(--text-primary);
 }
 
 .update-message {
@@ -49,13 +49,13 @@
 .update-message.success {
     background: rgba(76, 175, 80, 0.1);
     border: 1px solid rgba(76, 175, 80, 0.3);
-    color: #4caf50;
+    color: var(--text-primary);
 }
 
 .update-message.error {
     background: rgba(244, 67, 54, 0.1);
     border: 1px solid rgba(244, 67, 54, 0.3);
-    color: #f44336;
+    color: var(--text-primary);
 }
 
 .cta-button {

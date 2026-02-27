@@ -1,5 +1,5 @@
 // Cover hover effect that follows the mouse cursor
-window.coverHoverHelper = {
+globalThis.coverHoverHelper = {
     initialize: function() {
         document.addEventListener('mouseover', function(e) {
             const coverWrapper = e.target.closest('.cover-wrapper');
@@ -16,7 +16,7 @@ window.coverHoverHelper = {
             const coverWrapper = e.target.closest('.cover-wrapper');
             if (coverWrapper) {
                 const img = coverWrapper.querySelector('.game-cover');
-                if (img && img.dataset.following === 'true') {
+                if (img?.dataset.following === 'true') {
                     coverHoverHelper.updatePosition(e, img);
                 }
             }
@@ -47,8 +47,8 @@ window.coverHoverHelper = {
 // Initialize when DOM is ready
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', function() {
-        window.coverHoverHelper.initialize();
+        globalThis.coverHoverHelper.initialize();
     });
 } else {
-    window.coverHoverHelper.initialize();
+    globalThis.coverHoverHelper.initialize();
 }

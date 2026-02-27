@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Globalization;
 
 namespace PS2Challenge.Api.Api.Models;
 
@@ -13,7 +14,7 @@ public class TimeSpanConverter : JsonConverter<TimeSpan?>
             return null;
 
         // Parse format like "30:15:45" or "1.06:15:45" (days.hours:minutes:seconds)
-        if (TimeSpan.TryParse(value, out var timeSpan))
+        if (TimeSpan.TryParse(value, CultureInfo.InvariantCulture, out var timeSpan))
         {
             return timeSpan;
         }

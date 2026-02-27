@@ -4,11 +4,14 @@ using PS2Challenge.Backend.Data;
 using PS2Challenge.Backend.Data.Repositories;
 using PS2Challenge.Backend.Models;
 using PS2Challenge.Backend.Helpers;
+using System.Globalization;
 
 namespace PS2Challenge.Backend.Services;
 
 public class GameService
 {
+    private const string NoReasonProvided = "No reason provided";
+
     private readonly IServiceScopeFactory _scopeFactory;
 
     public GameService(IServiceScopeFactory scopeFactory)
@@ -49,7 +52,7 @@ public class GameService
     /// <param name="dbContext">The database context</param>
     /// <param name="title">The title to search for</param>
     /// <returns>The matching game, or null if not found</returns>
-    private async Task<GameDto?> FindGameByTitleAsync(Ps2ChallengeDbContext dbContext, string title)
+    private static async Task<GameDto?> FindGameByTitleAsync(Ps2ChallengeDbContext dbContext, string title)
     {
         if (string.IsNullOrWhiteSpace(title))
             return null;
@@ -243,13 +246,13 @@ public class GameService
             // Split the time string to handle hours > 24
             var parts = completionTimeString.Split(':');
             if (parts.Length == 3 &&
-                int.TryParse(parts[0], out var hours) &&
-                int.TryParse(parts[1], out var minutes) &&
-                int.TryParse(parts[2], out var seconds))
+                int.TryParse(parts[0], NumberStyles.None, CultureInfo.InvariantCulture, out var hours) &&
+                int.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out var minutes) &&
+                int.TryParse(parts[2], NumberStyles.None, CultureInfo.InvariantCulture, out var seconds))
             {
                 completionTime = new TimeSpan(hours, minutes, seconds);
             }
-            else if (TimeSpan.TryParse(completionTimeString, out var parsedTime))
+            else if (TimeSpan.TryParse(completionTimeString, CultureInfo.InvariantCulture, out var parsedTime))
             {
                 // Fallback to standard parsing for formats like "1.06:00:00"
                 completionTime = parsedTime;
@@ -374,7 +377,7 @@ public class GameService
             .ToListAsync();
 
         // Map GameId -> Reason
-        return excluded.ToDictionary(e => e.GameId, e => e.Reason ?? "No reason provided");
+        return excluded.ToDictionary(e => e.GameId, e => e.Reason ?? NoReasonProvided);
     }
 
     /// <summary>
@@ -487,12 +490,12 @@ public class GameService
             if (existingExclusion != null)
             {
                 // Update existing exclusion reason
-                await repository.UpdateExclusionAsync(gameId, reason ?? "No reason provided");
+                await repository.UpdateExclusionAsync(gameId, reason ?? NoReasonProvided);
             }
             else
             {
                 // Add new exclusion
-                await repository.AddExclusionAsync(gameId, reason ?? "No reason provided");
+                await repository.AddExclusionAsync(gameId, reason ?? NoReasonProvided);
             }
         }
         else
@@ -759,7 +762,7 @@ public class GameService
         var ownedTypes = ownedGames.ToDictionary(o => o.GameId, o => o.TypeOwned ?? string.Empty);
 
         // Build exclusion reasons dictionary
-        var exclusionReasons = excludedGames.ToDictionary(e => e.GameId, e => e.Reason ?? "No reason provided");
+        var exclusionReasons = excludedGames.ToDictionary(e => e.GameId, e => e.Reason ?? NoReasonProvided);
 
         // Build completion status dictionary
         var completionStatus = new Dictionary<int, string>();

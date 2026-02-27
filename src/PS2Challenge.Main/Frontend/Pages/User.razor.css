@@ -93,7 +93,7 @@
 
 .role-user {
     background-color: rgba(255, 255, 255, 0.2);
-    color: white;
+    color: var(--text-primary);
 }
 
 .role-admin {
@@ -103,7 +103,7 @@
 
 .role-moderator {
     background-color: #4caf50;
-    color: white;
+    color: var(--background-dark);
 }
 
 .profile-details {
@@ -224,7 +224,7 @@
 
 .btn-copy {
     background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
-    color: white;
+    color: var(--text-primary);
     box-shadow: 0 4px 15px rgba(0, 123, 255, 0.3);
 }
 
@@ -256,7 +256,7 @@
     margin-top: 0.75rem;
     padding: 0.75rem;
     background-color: rgba(220, 53, 69, 0.2);
-    color: #ff6b6b;
+    color: var(--text-primary);
     border: 1px solid rgba(220, 53, 69, 0.3);
     border-radius: 8px;
     font-size: 0.875rem;

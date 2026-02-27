@@ -1,17 +1,17 @@
 // Register Chart.js plugins
-if (typeof Chart !== 'undefined') {
+if (typeof Chart === 'undefined') {
+    console.error('Chart.js failed to load');
+} else {
     if (typeof zoomPlugin !== 'undefined') {
         Chart.register(zoomPlugin);
     }
     console.log('Chart.js loaded');
-} else {
-    console.error('Chart.js failed to load');
 }
 
 // Chart instance reference
 let durationChart = null;
 
-window.renderDurationChart = function(chartData) {
+globalThis.renderDurationChart = function(chartData) {
     const ctx = document.getElementById('durationChart');
     
     if (!ctx) {
@@ -177,7 +177,7 @@ window.renderDurationChart = function(chartData) {
     });
 };
 
-window.resetChartZoom = function() {
+globalThis.resetChartZoom = function() {
     if (durationChart) {
         durationChart.resetZoom();
     }
@@ -186,7 +186,7 @@ window.resetChartZoom = function() {
 // Ownership pie chart instance
 let ownershipChart = null;
 
-window.renderOwnershipChart = function(chartData) {
+globalThis.renderOwnershipChart = function(chartData) {
     const ctx = document.getElementById('ownershipChart');
     
     if (!ctx) {

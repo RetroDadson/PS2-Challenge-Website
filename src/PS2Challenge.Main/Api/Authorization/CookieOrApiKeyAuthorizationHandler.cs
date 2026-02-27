@@ -39,13 +39,10 @@ public class CookieOrApiKeyAuthorizationHandler : AuthorizationHandler<CookieOrA
         }
 
         // Check if user has any of the required roles
-        foreach (var role in requirement.AllowedRoles)
+        if (requirement.AllowedRoles.Any(context.User.IsInRole))
         {
-            if (context.User.IsInRole(role))
-            {
-                context.Succeed(requirement);
-                return Task.CompletedTask;
-            }
+            context.Succeed(requirement);
+            return Task.CompletedTask;
         }
 
         return Task.CompletedTask;
