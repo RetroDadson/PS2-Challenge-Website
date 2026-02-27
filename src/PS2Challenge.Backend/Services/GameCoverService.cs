@@ -9,7 +9,9 @@ namespace PS2Challenge.Backend.Services;
 public class GameCoverService
 {
     private readonly Ps2ChallengeDbContext _context;
-    private const string CoverRepositoryBaseUrl = "https://raw.githubusercontent.com/xlenore/ps2-covers/main/covers/default";
+    private const string CoverRepositoryScheme = "https";
+    private const string CoverRepositoryHost = "raw.githubusercontent.com";
+    private const string CoverRepositoryPath = "xlenore/ps2-covers/main/covers/default";
 
     public GameCoverService(Ps2ChallengeDbContext context)
     {
@@ -27,10 +29,9 @@ public class GameCoverService
         var serialNumber = await _context.GameSerialNumbers
             .AsNoTracking()
             .Where(s => s.GameId == gameId)
-            .OrderBy(s => s.Region != null && s.Region.StartsWith("NTSC-U") ? 0 
-                        : s.Region != null && s.Region.StartsWith("PAL") ? 1 
-                        : s.Region != null && s.Region.StartsWith("NTSC-J") ? 2 
-                        : 3)
+            .OrderBy(s => s.Region != null && s.Region.StartsWith("NTSC-U") ? 0 : 1)
+            .ThenBy(s => s.Region != null && s.Region.StartsWith("PAL") ? 0 : 1)
+            .ThenBy(s => s.Region != null && s.Region.StartsWith("NTSC-J") ? 0 : 1)
             .Select(s => s.SerialNumber)
             .FirstOrDefaultAsync();
 
@@ -43,7 +44,7 @@ public class GameCoverService
         var formattedSerial = serialNumber.Trim().ToUpperInvariant();
 
         // Return URL for default cover
-        return $"{CoverRepositoryBaseUrl}/{formattedSerial}.jpg";
+        return BuildCoverUrl(formattedSerial);
     }
 
     /// <summary>
@@ -63,10 +64,9 @@ public class GameCoverService
             .Select(g => new
             {
                 GameId = g.Key,
-                SerialNumber = g.OrderBy(s => s.Region != null && s.Region.StartsWith("NTSC-U") ? 0 
-                                            : s.Region != null && s.Region.StartsWith("PAL") ? 1 
-                                            : s.Region != null && s.Region.StartsWith("NTSC-J") ? 2 
-                                            : 3)
+                SerialNumber = g.OrderBy(s => s.Region != null && s.Region.StartsWith("NTSC-U") ? 0 : 1)
+                                .ThenBy(s => s.Region != null && s.Region.StartsWith("PAL") ? 0 : 1)
+                                .ThenBy(s => s.Region != null && s.Region.StartsWith("NTSC-J") ? 0 : 1)
                                 .Select(s => s.SerialNumber)
                                 .FirstOrDefault()
             })
@@ -76,7 +76,17 @@ public class GameCoverService
         // Generate URLs
         return serialNumbers.ToDictionary(
             kvp => kvp.Key,
-            kvp => $"{CoverRepositoryBaseUrl}/{kvp.Value.Trim().ToUpperInvariant()}.jpg"
+            kvp => BuildCoverUrl(kvp.Value.Trim().ToUpperInvariant())
         );
+    }
+
+    private static string BuildCoverUrl(string formattedSerial)
+    {
+        var builder = new UriBuilder(CoverRepositoryScheme, CoverRepositoryHost)
+        {
+            Path = $"{CoverRepositoryPath}/{formattedSerial}.jpg"
+        };
+
+        return builder.Uri.ToString();
     }
 }

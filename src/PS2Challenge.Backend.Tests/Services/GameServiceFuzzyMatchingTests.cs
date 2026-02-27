@@ -6,7 +6,7 @@ using PS2Challenge.Backend.Tests.Helpers;
 
 namespace PS2Challenge.Backend.Tests.Services;
 
-public class GameServiceFuzzyMatchingTests : IDisposable
+public sealed class GameServiceFuzzyMatchingTests : IDisposable
 {
     private readonly Ps2ChallengeDbContext _context;
     private readonly GameService _gameService;

@@ -248,12 +248,12 @@
 
 .status-completed {
     background: rgba(76, 175, 76, 0.2);
-    color: #4caf50;
+    color: var(--text-primary);
 }
 
 .status-inprogress {
     background: rgba(255, 152, 0, 0.2);
-    color: #ff9800;
+    color: var(--text-primary);
 }
 
 .platform-badge {
@@ -267,12 +267,12 @@
 
 .platform-physical {
     background: rgba(76, 175, 76, 0.2);
-    color: #4caf50;
+    color: var(--text-primary);
 }
 
 .platform-emulated {
     background: rgba(33, 150, 243, 0.2);
-    color: #2196F3;
+    color: var(--text-primary);
 }
 
 .criteria, .review {

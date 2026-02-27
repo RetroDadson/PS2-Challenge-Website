@@ -42,7 +42,6 @@ public class AdminController : ControllerBase
             _logger.LogInformation("GetAllUsers called by {User}", User.Identity?.Name);
 
             var users = await _userRepository.GetAllUsersAsync();
-            _logger.LogInformation("Found {Count} users in database", users.Count);
 
             var result = users.Select(u => new
             {
@@ -86,7 +85,6 @@ public class AdminController : ControllerBase
             _logger.LogInformation("GetAllRoles called by {User}", User.Identity?.Name);
 
             var roles = await _userRepository.GetAllRolesAsync();
-            _logger.LogInformation("Found {Count} roles in database", roles.Count);
 
             var result = roles.Select(r => new
             {
@@ -151,9 +149,15 @@ public class AdminController : ControllerBase
 
         // Prevent self-demotion from Admin role
         var adminRole = await _userRepository.GetRoleByNameAsync("Admin");
+        if (adminRole == null)
+        {
+            _logger.LogError("Admin role not found when validating role update for user ID {UserId}", userId);
+            return StatusCode(500, new { message = "Configuration error: Admin role is missing" });
+        }
+
         if (currentUserId == userId.ToString() &&
-            user.RoleId == adminRole?.Id &&
-            request.RoleId != adminRole?.Id)
+            user.RoleId == adminRole.Id &&
+            request.RoleId != adminRole.Id)
         {
             _logger.LogWarning("Admin {AdminUser} attempted to remove their own admin role", adminUsername);
             return BadRequest(new { message = "You cannot remove your own admin role" });

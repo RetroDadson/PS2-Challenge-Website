@@ -12,7 +12,7 @@ using System.Security.Claims;
 
 namespace PS2Challenge.Main.Tests.Controllers;
 
-public class VotesControllerTests : IDisposable
+public sealed class VotesControllerTests : IDisposable
 {
     private readonly DbContextOptions<Ps2ChallengeDbContext> _options;
     private readonly Ps2ChallengeDbContext _context;
@@ -183,7 +183,7 @@ public class VotesControllerTests : IDisposable
         var result = await _controller.UploadHistory(rounds);
 
         // Assert
-        var okResult = Assert.IsType<OkObjectResult>(result);
+        Assert.IsType<OkObjectResult>(result);
         var insertedVotes = await _context.VoteHistory.CountAsync();
         Assert.Equal(3, insertedVotes);
     }
@@ -193,8 +193,10 @@ public class VotesControllerTests : IDisposable
     {
         // Arrange
         var game1 = new GameDto { Id = 1, Title = "Game 1" };
-        _context.Games.Add(game1);
-        _context.VoteHistory.Add(new VoteHistory { GameId = 1, VoteRound = 1, VoteCount = 5 });
+        var game2 = new GameDto { Id = 2, Title = "Game 2" };
+        var game3 = new GameDto { Id = 3, Title = "Game 3" };
+        _context.Games.AddRange(game1, game2, game3);
+        _context.VoteHistory.Add(new VoteHistory { GameId = 1, VoteRound = 1, VoteCount = 5, Position = 1 });
         await _context.SaveChangesAsync();
 
         var rounds = new List<UploadRoundDto>
@@ -205,15 +207,25 @@ public class VotesControllerTests : IDisposable
                 Votes = new List<UploadGameVote>
                 {
                     new() { GameTitle = "Game 1", Count = 15 },
-                    new() { GameTitle = "Game 1", Count = 0 }, // Needs 3 total, so duplicate
-                    new() { GameTitle = "Game 1", Count = 0 }
+                    new() { GameTitle = "Game 2", Count = 8 },
+                    new() { GameTitle = "Game 3", Count = 4 }
                 }
             }
         };
 
-        // This test needs adjustment - let me fix it
-        // Actually, the controller validates for exactly 3 DISTINCT titles
-        // Let's create a proper test
+        // Act
+        var result = await _controller.UploadHistory(rounds);
+
+        // Assert
+        var okResult = Assert.IsType<OkObjectResult>(result);
+        Assert.NotNull(okResult.Value);
+
+        await using var verificationContext = new Ps2ChallengeDbContext(_options);
+        var updatedEntry = await verificationContext.VoteHistory.FirstAsync(v => v.GameId == 1 && v.VoteRound == 1);
+        Assert.Equal(15, updatedEntry.VoteCount);
+
+        var totalEntries = await verificationContext.VoteHistory.CountAsync(v => v.VoteRound == 1);
+        Assert.Equal(3, totalEntries);
     }
 
     [Fact]
@@ -294,7 +306,7 @@ public class VotesControllerTests : IDisposable
         var result = await _controller.SetCurrentVotes(votes);
 
         // Assert
-        var okResult = Assert.IsType<OkObjectResult>(result);
+        Assert.IsType<OkObjectResult>(result);
         var currentVotes = await _context.CurrentVotes.CountAsync();
         Assert.Equal(1, currentVotes);
     }
@@ -314,7 +326,7 @@ public class VotesControllerTests : IDisposable
         };
 
         // Act
-        var result = await _controller.SetCurrentVotes(votes);
+        await _controller.SetCurrentVotes(votes);
 
         // Assert
         // Clear the change tracker to force a fresh query from the database
@@ -373,7 +385,7 @@ public class VotesControllerTests : IDisposable
         var result = await _controller.RemoveCurrentVote("Game 1");
 
         // Assert
-        var okResult = Assert.IsType<OkObjectResult>(result);
+        Assert.IsType<OkObjectResult>(result);
         var remainingVotes = await _context.CurrentVotes.CountAsync();
         Assert.Equal(0, remainingVotes);
     }
@@ -569,7 +581,7 @@ public class VotesControllerTests : IDisposable
         }
     }
 
-    private class TestServiceScope : IServiceScope
+    private sealed class TestServiceScope : IServiceScope
     {
         public TestServiceScope(IServiceProvider serviceProvider)
         {

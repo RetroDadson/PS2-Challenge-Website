@@ -1,5 +1,5 @@
 // Client-side filtering for Games page (works offline)
-window.gamesFilter = {
+globalThis.gamesFilter = {
     isActive: false,
     searchHandler: null,
     ownedHandler: null,
@@ -8,9 +8,7 @@ window.gamesFilter = {
     // Check if Blazor is connected
     isBlazorConnected: function() {
         try {
-            return window.Blazor && 
-                   window.Blazor._internal && 
-                   window.Blazor._internal.navigationManager &&
+                 return globalThis.Blazor?._internal?.navigationManager &&
                    navigator.onLine;
         } catch {
             return false;
@@ -148,7 +146,7 @@ window.gamesFilter = {
             }
         }, 1000);
         
-        window.addEventListener('offline', () => {
+        globalThis.addEventListener('offline', () => {
             if (!this.isActive && !disconnectDetected) {
                 disconnectDetected = true;
                 clearInterval(checkInterval);
@@ -156,8 +154,8 @@ window.gamesFilter = {
             }
         });
         
-        window.addEventListener('online', () => {
-            setTimeout(() => window.location.reload(), 1000);
+        globalThis.addEventListener('online', () => {
+            setTimeout(() => globalThis.location.reload(), 1000);
         });
     }
 };
@@ -165,8 +163,8 @@ window.gamesFilter = {
 // Start monitoring for Blazor disconnect
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
-        setTimeout(() => window.gamesFilter.activateOnDisconnect(), 500);
+        setTimeout(() => globalThis.gamesFilter.activateOnDisconnect(), 500);
     });
 } else {
-    setTimeout(() => window.gamesFilter.activateOnDisconnect(), 500);
+    setTimeout(() => globalThis.gamesFilter.activateOnDisconnect(), 500);
 }

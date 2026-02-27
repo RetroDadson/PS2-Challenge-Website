@@ -23,7 +23,7 @@ html, body {
     height: 150px;
     padding: 0;
     box-sizing: border-box;
-    background: transparent;
+    background-color: transparent;
 }
 
 .progress-box {

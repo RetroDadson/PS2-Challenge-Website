@@ -5,6 +5,8 @@ namespace PS2Challenge.Backend.Data;
 
 public class Ps2ChallengeDbContext : DbContext
 {
+    private const string GameIdColumn = "game_id";
+
     public Ps2ChallengeDbContext(DbContextOptions<Ps2ChallengeDbContext> options)
         : base(options)
     {
@@ -29,7 +31,7 @@ public class Ps2ChallengeDbContext : DbContext
         {
             entity.ToTable("games");
             entity.HasKey(e => e.Id);
-            entity.Property(e => e.Id).HasColumnName("game_id");
+            entity.Property(e => e.Id).HasColumnName(GameIdColumn);
             entity.Property(e => e.Title).HasColumnName("title");
             entity.Property(e => e.Developer).HasColumnName("developer");
             entity.Property(e => e.Publisher).HasColumnName("publisher");
@@ -46,7 +48,7 @@ public class Ps2ChallengeDbContext : DbContext
             entity.ToTable("excluded_games");
             entity.HasKey(e => e.ExclusionId);
             entity.Property(e => e.ExclusionId).HasColumnName("exclusion_id");
-            entity.Property(e => e.GameId).HasColumnName("game_id");
+            entity.Property(e => e.GameId).HasColumnName(GameIdColumn);
             entity.Property(e => e.Reason).HasColumnName("reason");
         });
 
@@ -55,7 +57,7 @@ public class Ps2ChallengeDbContext : DbContext
             entity.ToTable("game_owned");
             entity.HasKey(e => e.OwnershipId);
             entity.Property(e => e.OwnershipId).HasColumnName("ownership_id");
-            entity.Property(e => e.GameId).HasColumnName("game_id");
+            entity.Property(e => e.GameId).HasColumnName(GameIdColumn);
             entity.Property(e => e.OwnPhysicalCopy).HasColumnName("own_physical_copy");
             entity.Property(e => e.TypeOwned).HasColumnName("type_owned");
         });
@@ -65,7 +67,7 @@ public class Ps2ChallengeDbContext : DbContext
             entity.ToTable("progress");
             entity.HasKey(e => e.ProgressId);
             entity.Property(e => e.ProgressId).HasColumnName("progress_id");
-            entity.Property(e => e.GameId).HasColumnName("game_id");
+            entity.Property(e => e.GameId).HasColumnName(GameIdColumn);
             entity.Property(e => e.DateStarted).HasColumnName("date_started");
             entity.Property(e => e.DateFinished).HasColumnName("date_finished");
             entity.Property(e => e.CompletionTime).HasColumnName("completion_time");
@@ -86,7 +88,7 @@ public class Ps2ChallengeDbContext : DbContext
             entity.ToTable("game_serial_numbers");
             entity.HasKey(e => e.SerialId);
             entity.Property(e => e.SerialId).HasColumnName("serial_id");
-            entity.Property(e => e.GameId).HasColumnName("game_id");
+            entity.Property(e => e.GameId).HasColumnName(GameIdColumn);
             entity.Property(e => e.SerialNumber).HasColumnName("serial_number");
             entity.Property(e => e.Region).HasColumnName("region");
             entity.Property(e => e.Notes).HasColumnName("notes");
@@ -102,7 +104,7 @@ public class Ps2ChallengeDbContext : DbContext
             entity.ToTable("alternate_titles");
             entity.HasKey(e => e.AlternateTitleId);
             entity.Property(e => e.AlternateTitleId).HasColumnName("alternate_title_id");
-            entity.Property(e => e.GameId).HasColumnName("game_id");
+            entity.Property(e => e.GameId).HasColumnName(GameIdColumn);
             entity.Property(e => e.Title).HasColumnName("title");
             entity.Property(e => e.Notes).HasColumnName("notes");
 
@@ -149,7 +151,7 @@ public class Ps2ChallengeDbContext : DbContext
             entity.HasKey(e => e.VoteId);
             entity.Property(e => e.VoteId).HasColumnName("vote_id");
             entity.Property(e => e.VoteRound).HasColumnName("vote_round");
-            entity.Property(e => e.GameId).HasColumnName("game_id");
+            entity.Property(e => e.GameId).HasColumnName(GameIdColumn);
             entity.Property(e => e.CreatedAt).HasColumnName("created_at");
             entity.HasIndex(e => e.VoteRound).HasDatabaseName("idx_votes_round");
         });
@@ -159,7 +161,7 @@ public class Ps2ChallengeDbContext : DbContext
             entity.ToTable("vote_history");
             entity.HasKey(e => e.HistoryId);
             entity.Property(e => e.HistoryId).HasColumnName("history_id");
-            entity.Property(e => e.GameId).HasColumnName("game_id");
+            entity.Property(e => e.GameId).HasColumnName(GameIdColumn);
             entity.Property(e => e.VoteRound).HasColumnName("vote_round");
             entity.Property(e => e.VoteCount).HasColumnName("vote_count");
             entity.Property(e => e.Position).HasColumnName("position");
@@ -171,7 +173,7 @@ public class Ps2ChallengeDbContext : DbContext
             entity.ToTable("current_vote");
             entity.HasKey(e => e.VoteId);
             entity.Property(e => e.VoteId).HasColumnName("vote_id");
-            entity.Property(e => e.GameId).HasColumnName("game_id");
+            entity.Property(e => e.GameId).HasColumnName(GameIdColumn);
             entity.Property(e => e.VoteCount).HasColumnName("vote_count");
             entity.Property(e => e.GameNumber).HasColumnName("game_number");
         });

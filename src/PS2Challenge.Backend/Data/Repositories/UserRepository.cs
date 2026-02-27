@@ -110,12 +110,7 @@ public class UserRepository
 
     public virtual async Task<ApplicationUser?> GetUserByTwitchIdAsync(string twitchId)
     {
-        using var scope = _scopeFactory.CreateScope();
-        var dbContext = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
-
-        return await dbContext.Users
-            .Include(u => u.Role)
-            .FirstOrDefaultAsync(u => u.TwitchId == twitchId);
+        return await GetByTwitchIdAsync(twitchId);
     }
 
     public virtual async Task<ApplicationUser> CreateUserAsync(string twitchId, string username)

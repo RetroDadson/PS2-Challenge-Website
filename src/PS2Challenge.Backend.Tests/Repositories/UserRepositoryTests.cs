@@ -5,7 +5,7 @@ using PS2Challenge.Backend.Tests.Helpers;
 
 namespace PS2Challenge.Backend.Tests.Repositories;
 
-public class UserRepositoryTests : IDisposable
+public sealed class UserRepositoryTests : IDisposable
 {
     private readonly Ps2ChallengeDbContext _context;
     private readonly UserRepository _userRepository;
@@ -255,8 +255,11 @@ public class UserRepositoryTests : IDisposable
     [Fact]
     public async Task UpdateLastLoginAsync_DoesNotThrow_WhenUserNotFound()
     {
-        // Act & Assert (should not throw)
-        await _userRepository.UpdateLastLoginAsync(999);
+        // Act
+        var exception = await Record.ExceptionAsync(() => _userRepository.UpdateLastLoginAsync(999));
+
+        // Assert
+        Assert.Null(exception);
     }
 
     [Fact]
