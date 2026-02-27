@@ -16,7 +16,7 @@ public class CompletedGamesPageTests : BunitContext
 
     public CompletedGamesPageTests()
     {
-        _mockGameService = new Mock<GameService>(null!);
+        _mockGameService = new Mock<GameService>(Mock.Of<IServiceScopeFactory>());
         JSInterop.Mode = JSRuntimeMode.Loose;
     }
 
@@ -75,23 +75,21 @@ public class CompletedGamesPageTests : BunitContext
         };
 
         var cut = RenderCompletedGamesAsAnonymous(progress);
-        await Task.Delay(100);
-
-        var markup = cut.Markup;
-        Assert.Contains("Game Progress", markup);
-        Assert.Contains("Showing 2 of 2 games", markup);
-        Assert.Contains("Completed: 1", markup);
-        Assert.Contains("In Progress: 1", markup);
+        await cut.WaitForAssertionAsync(() =>
+        {
+            var markup = cut.Markup;
+            Assert.Contains("Game Progress", markup);
+            Assert.Contains("Showing 2 of 2 games", markup);
+            Assert.Contains("Completed: 1", markup);
+            Assert.Contains("In Progress: 1", markup);
+        });
     }
 
     [Fact]
     public async Task CompletedGames_WhenLoadFails_ShowsEmptyState()
     {
         var cut = RenderCompletedGamesAsAnonymous(throwOnLoad: true);
-        await Task.Delay(100);
-
-        var markup = cut.Markup;
-        Assert.Contains("No games in progress found.", markup);
+        await cut.WaitForAssertionAsync(() => Assert.Contains("No games in progress found.", cut.Markup));
     }
 
     [Fact]
@@ -118,11 +116,11 @@ public class CompletedGamesPageTests : BunitContext
         };
 
         var cut = RenderCompletedGamesAsAnonymous(progress);
-        await Task.Delay(100);
+        await cut.WaitForAssertionAsync(() => Assert.Contains("Showing 2 of 2 games", cut.Markup));
 
         await cut.InvokeAsync(() =>
             cut.Find("input[placeholder*='Search by title']").Input("Final"));
 
-        cut.WaitForAssertion(() => Assert.Contains("Showing 1 of 2 games", cut.Markup));
+        await cut.WaitForAssertionAsync(() => Assert.Contains("Showing 1 of 2 games", cut.Markup));
     }
 }

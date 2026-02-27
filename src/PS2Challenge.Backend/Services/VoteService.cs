@@ -48,36 +48,7 @@ public class VoteService
         for (int i = 0; i < sortedVotes.Count; i++)
         {
             var cv = sortedVotes[i];
-            int? position = null;
-
-            // Check if manual position is specified
-            if (manualPositions != null && manualPositions.TryGetValue(cv.GameId, out var manualPos))
-            {
-                position = manualPos;
-            }
-            else
-            {
-                // Auto-assign position if there are no ties
-                if (i == 0)
-                {
-                    // Check if first place is unique
-                    if (sortedVotes.Count == 1 || sortedVotes[1].VoteCount != cv.VoteCount)
-                        position = 1;
-                }
-                else if (i == 1)
-                {
-                    // Check if second place is unique and different from first
-                    if (sortedVotes[0].VoteCount != cv.VoteCount &&
-                        (sortedVotes.Count == 2 || sortedVotes[2].VoteCount != cv.VoteCount))
-                        position = 2;
-                }
-                else if (i == 2)
-                {
-                    // Check if third place is unique and different from second
-                    if (sortedVotes[1].VoteCount != cv.VoteCount)
-                        position = 3;
-                }
-            }
+            var position = DeterminePosition(sortedVotes, i, cv, manualPositions);
 
             historyEntries.Add(new VoteHistory
             {
@@ -183,36 +154,18 @@ public class VoteService
 
         foreach (var v in votes)
         {
-            var rawTitle = v.GameTitle?.Trim() ?? string.Empty;
-            if (string.IsNullOrEmpty(rawTitle) || v.VoteCount < 0 || v.GameNumber < 1 || v.GameNumber > 3)
+            if (!TryResolveGameId(v, titleToId, out var gameId))
             {
                 continue;
             }
 
-            if (!titleToId.TryGetValue(rawTitle, out var gameId))
-            {
-                continue;
-            }
-
-            if (existingDict.TryGetValue(gameId, out var existingRow))
-            {
-                if (existingRow.VoteCount != v.VoteCount || existingRow.GameNumber != v.GameNumber)
-                {
-                    existingRow.VoteCount = v.VoteCount;
-                    existingRow.GameNumber = v.GameNumber;
-                    updatedCount++;
-                }
-            }
-            else
-            {
-                toInsert.Add(new CurrentVote
-                {
-                    GameId = gameId,
-                    VoteCount = v.VoteCount,
-                    GameNumber = v.GameNumber
-                });
-                insertedCount++;
-            }
+            ApplyCurrentVote(
+                v,
+                gameId,
+                existingDict,
+                toInsert,
+                ref insertedCount,
+                ref updatedCount);
         }
 
         if (toInsert.Any())
@@ -261,6 +214,69 @@ public class VoteService
         await db.SaveChangesAsync();
 
         return true;
+    }
+
+    private static int? DeterminePosition(List<CurrentVote> sortedVotes, int index, CurrentVote vote, Dictionary<int, int>? manualPositions)
+    {
+        if (manualPositions != null && manualPositions.TryGetValue(vote.GameId, out var manualPos))
+        {
+            return manualPos;
+        }
+
+        return index switch
+        {
+            0 when sortedVotes.Count == 1 || sortedVotes[1].VoteCount != vote.VoteCount => 1,
+            1 when sortedVotes[0].VoteCount != vote.VoteCount && (sortedVotes.Count == 2 || sortedVotes[2].VoteCount != vote.VoteCount) => 2,
+            2 when sortedVotes[1].VoteCount != vote.VoteCount => 3,
+            _ => null
+        };
+    }
+
+    private static bool IsValidCurrentVoteInput(CurrentVoteDto vote, string title)
+    {
+        return !string.IsNullOrEmpty(title)
+            && vote.VoteCount >= 0
+            && vote.GameNumber >= 1
+            && vote.GameNumber <= 3;
+    }
+
+    private static bool TryResolveGameId(CurrentVoteDto vote, Dictionary<string, int> titleToId, out int gameId)
+    {
+        var rawTitle = vote.GameTitle?.Trim() ?? string.Empty;
+        gameId = 0;
+
+        return IsValidCurrentVoteInput(vote, rawTitle)
+            && titleToId.TryGetValue(rawTitle, out gameId);
+    }
+
+    private static void ApplyCurrentVote(
+        CurrentVoteDto vote,
+        int gameId,
+        Dictionary<int, CurrentVote> existingDict,
+        List<CurrentVote> toInsert,
+        ref int insertedCount,
+        ref int updatedCount)
+    {
+        if (existingDict.TryGetValue(gameId, out var existingRow))
+        {
+            if (existingRow.VoteCount == vote.VoteCount && existingRow.GameNumber == vote.GameNumber)
+            {
+                return;
+            }
+
+            existingRow.VoteCount = vote.VoteCount;
+            existingRow.GameNumber = vote.GameNumber;
+            updatedCount++;
+            return;
+        }
+
+        toInsert.Add(new CurrentVote
+        {
+            GameId = gameId,
+            VoteCount = vote.VoteCount,
+            GameNumber = vote.GameNumber
+        });
+        insertedCount++;
     }
 
     /// <summary>

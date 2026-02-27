@@ -18,6 +18,8 @@ namespace PS2Challenge.Api.Api.Controllers;
 [Route("api/[controller]")]
 public class VotesController : ControllerBase
 {
+    private const string VotesUpdatedEvent = "VotesUpdated";
+
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly IHubContext<VotesHub> _hubContext;
     private readonly VoteService _voteService;
@@ -139,50 +141,22 @@ public class VotesController : ControllerBase
 
         foreach (var round in rounds)
         {
-            // validate exactly 3 votes and distinct titles within the round
-            if (round.Votes == null || round.Votes.Count != 3)
-                return BadRequest(new { message = $"Round {round.VoteRound} must contain exactly 3 vote entries" });
-
-            var titlesInRound = round.Votes.Select(v => (v.GameTitle ?? string.Empty).Trim()).ToList();
-            if (titlesInRound.Count != titlesInRound.Distinct(StringComparer.OrdinalIgnoreCase).Count())
-                return BadRequest(new { message = $"Round {round.VoteRound} contains duplicate game titles" });
-
-            foreach (var v in round.Votes)
+            var validationError = ValidateUploadRound(round);
+            if (validationError != null)
             {
-                if (string.IsNullOrWhiteSpace(v.GameTitle))
-                    return BadRequest(new { message = $"Empty game title in round {round.VoteRound}" });
+                return validationError;
+            }
 
-                if (v.Count < 0)
-                    return BadRequest(new { message = $"Invalid vote count in round {round.VoteRound} for '{v.GameTitle}'" });
-
-                // Validate position if provided
-                if (v.Position.HasValue && (v.Position < 1 || v.Position > 3))
-                    return BadRequest(new { message = $"Invalid position {v.Position} in round {round.VoteRound} for '{v.GameTitle}'. Position must be 1, 2, or 3." });
-
-                var titleKey = v.GameTitle.Trim().ToLowerInvariant();
-                var gameId = titleToId[titleKey];
-
-                var existingRow = existing.FirstOrDefault(e => e.VoteRound == round.VoteRound && e.GameId == gameId);
-                if (existingRow != null)
-                {
-                    // overwrite existing (including notes and position)
-                    existingRow.VoteCount = v.Count;
-                    existingRow.Position = v.Position;
-                    existingRow.Notes = round.Notes?.Trim();
-                    updatedCount++;
-                }
-                else
-                {
-                    toInsert.Add(new VoteHistory
-                    {
-                        GameId = gameId,
-                        VoteRound = round.VoteRound,
-                        VoteCount = v.Count,
-                        Position = v.Position,
-                        Notes = round.Notes?.Trim()
-                    });
-                    insertedCount++;
-                }
+            foreach (var vote in round.Votes!)
+            {
+                UpsertVoteHistoryEntry(
+                    round,
+                    vote,
+                    titleToId,
+                    existing,
+                    toInsert,
+                    ref insertedCount,
+                    ref updatedCount);
             }
         }
 
@@ -259,7 +233,7 @@ public class VotesController : ControllerBase
             var (inserted, updated) = await _voteService.SetCurrentVotesAsync(votes);
 
             // Notify SignalR clients that votes were updated
-            await _hubContext.Clients.All.SendAsync("VotesUpdated");
+            await _hubContext.Clients.All.SendAsync(VotesUpdatedEvent);
 
             return Ok(new { inserted, updated });
         }
@@ -308,7 +282,7 @@ public class VotesController : ControllerBase
             }
 
             // Notify SignalR clients that votes were updated
-            await _hubContext.Clients.All.SendAsync("VotesUpdated");
+            await _hubContext.Clients.All.SendAsync(VotesUpdatedEvent);
 
             return Ok(new { message = $"Current vote for '{gameTitle}' removed successfully" });
         }
@@ -355,7 +329,7 @@ public class VotesController : ControllerBase
             var (roundNumber, archivedCount) = await _voteService.ArchiveCurrentVotesAsync(request?.Notes);
 
             // Notify SignalR clients that votes were updated
-            await _hubContext.Clients.All.SendAsync("VotesUpdated");
+            await _hubContext.Clients.All.SendAsync(VotesUpdatedEvent);
 
             return Ok(new
             {
@@ -445,7 +419,7 @@ public class VotesController : ControllerBase
             await db.SaveChangesAsync();
 
             // Notify SignalR clients that votes were updated
-            await _hubContext.Clients.All.SendAsync("VotesUpdated");
+            await _hubContext.Clients.All.SendAsync(VotesUpdatedEvent);
 
             return Ok(new
             {
@@ -622,7 +596,7 @@ public class VotesController : ControllerBase
             }).ToList();
 
             // Notify SignalR clients that votes were updated
-            await _hubContext.Clients.All.SendAsync("VotesUpdated");
+            await _hubContext.Clients.All.SendAsync(VotesUpdatedEvent);
 
             return Ok(new
             {
@@ -634,6 +608,73 @@ public class VotesController : ControllerBase
         {
             return StatusCode(500, new { message = $"Error filling current votes: {ex.Message}" });
         }
+    }
+
+    private IActionResult? ValidateUploadRound(UploadRoundDto round)
+    {
+        if (round.Votes == null || round.Votes.Count != 3)
+        {
+            return BadRequest(new { message = $"Round {round.VoteRound} must contain exactly 3 vote entries" });
+        }
+
+        var titlesInRound = round.Votes.Select(v => (v.GameTitle ?? string.Empty).Trim()).ToList();
+        if (titlesInRound.Count != titlesInRound.Distinct(StringComparer.OrdinalIgnoreCase).Count())
+        {
+            return BadRequest(new { message = $"Round {round.VoteRound} contains duplicate game titles" });
+        }
+
+        foreach (var vote in round.Votes)
+        {
+            if (string.IsNullOrWhiteSpace(vote.GameTitle))
+            {
+                return BadRequest(new { message = $"Empty game title in round {round.VoteRound}" });
+            }
+
+            if (vote.Count < 0)
+            {
+                return BadRequest(new { message = $"Invalid vote count in round {round.VoteRound} for '{vote.GameTitle}'" });
+            }
+
+            if (vote.Position is < 1 or > 3)
+            {
+                return BadRequest(new { message = $"Invalid position {vote.Position} in round {round.VoteRound} for '{vote.GameTitle}'. Position must be 1, 2, or 3." });
+            }
+        }
+
+        return null;
+    }
+
+    private static void UpsertVoteHistoryEntry(
+        UploadRoundDto round,
+        UploadGameVote vote,
+        Dictionary<string, int> titleToId,
+        List<VoteHistory> existing,
+        List<VoteHistory> toInsert,
+        ref int insertedCount,
+        ref int updatedCount)
+    {
+        var titleKey = vote.GameTitle!.Trim().ToLowerInvariant();
+        var gameId = titleToId[titleKey];
+
+        var existingRow = existing.FirstOrDefault(e => e.VoteRound == round.VoteRound && e.GameId == gameId);
+        if (existingRow != null)
+        {
+            existingRow.VoteCount = vote.Count;
+            existingRow.Position = vote.Position;
+            existingRow.Notes = round.Notes?.Trim();
+            updatedCount++;
+            return;
+        }
+
+        toInsert.Add(new VoteHistory
+        {
+            GameId = gameId,
+            VoteRound = round.VoteRound,
+            VoteCount = vote.Count,
+            Position = vote.Position,
+            Notes = round.Notes?.Trim()
+        });
+        insertedCount++;
     }
 }
 
