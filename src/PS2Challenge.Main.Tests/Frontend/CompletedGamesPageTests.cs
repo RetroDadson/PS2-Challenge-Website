@@ -120,9 +120,9 @@ public class CompletedGamesPageTests : BunitContext
         var cut = RenderCompletedGamesAsAnonymous(progress);
         await Task.Delay(100);
 
-        var search = cut.Find("input[placeholder*='Search by title']");
-        await search.InputAsync("Final");
+        await cut.InvokeAsync(() =>
+            cut.Find("input[placeholder*='Search by title']").Input("Final"));
 
-        Assert.Contains("Showing 1 of 2 games", cut.Markup);
+        cut.WaitForAssertion(() => Assert.Contains("Showing 1 of 2 games", cut.Markup));
     }
 }
