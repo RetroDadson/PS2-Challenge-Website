@@ -32,9 +32,9 @@ jobs:
         with:
           name: test-binaries
           path: |
-            src/PS2Challenge.Backend.Tests/bin/Release/net10.0
-            src/PS2Challenge.Main.Tests/bin/Release/net10.0
-            src/PS2Challenge.IntegrationTests/bin/Release/net10.0
+            src/PS2Challenge.Backend.Tests/bin/Release/**
+            src/PS2Challenge.Main.Tests/bin/Release/**
+            src/PS2Challenge.IntegrationTests/bin/Release/**
 
       - name: dotnet publish
         run: dotnet publish src/PS2Challenge.Main/PS2Challenge.Main.csproj -c Release -o ${{env.DOTNET_ROOT}}/myapp --no-build
