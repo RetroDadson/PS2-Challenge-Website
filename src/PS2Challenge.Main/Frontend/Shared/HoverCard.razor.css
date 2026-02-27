@@ -3,6 +3,12 @@
     display: inline-block;
 }
 
+.hover-wrapper:hover,
+.hover-wrapper:focus,
+.hover-wrapper:focus-within {
+    z-index: 30000;
+}
+
 .hover-target {
     display: inline-block;
     cursor: help;
@@ -11,7 +17,7 @@
 .hover-card {
     display: none;
     position: absolute;
-    z-index: 10000;
+    z-index: 30001;
     /* Center by default, but allow overflow on left */
     left: 50%;
     transform: translateX(-50%);
@@ -20,7 +26,8 @@
     min-width: 200px;
     max-width: 400px;
     padding: 1rem 1.25rem;
-    background: #1a1a1a !important;
+    background: rgb(26, 26, 26) !important;
+    background-color: rgb(26, 26, 26) !important;
     color: #ffffff !important;
     border: 2px solid #e91e63 !important;
     border-radius: 8px;
@@ -31,6 +38,7 @@
     white-space: normal;
     pointer-events: none;
     opacity: 1 !important;
+    isolation: isolate;
 }
 
 /* For last column (Owned), position card to the left to avoid right overflow */
