@@ -457,7 +457,7 @@ tbody td {
 
 /* Hide default Blazor reconnection show/hide/failed UI */
 #components-reconnect-show,
-#components-reconnect-hide, 
+#components-reconnect-hide,
 #components-reconnect-failed,
 #components-reconnect-rejected {
     display: none !important;
@@ -509,7 +509,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 /* Gradient text headings styling */
-h1[style*="background"], 
+h1[style*="background"],
 .hero h1,
 .hero-section h1,
 .statistics-container h1,

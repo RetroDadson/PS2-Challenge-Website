@@ -124,7 +124,7 @@ public class AuthController : ControllerBase
     /// <remarks>
     /// Returns user profile information if authenticated. If not authenticated, returns an object
     /// with IsAuthenticated: false. This endpoint can be called without authentication.
-    /// 
+    ///
     /// Note: The ApiKey field is intentionally excluded from this response for security reasons.
     /// Use the dedicated /api/user endpoint to retrieve API key information.
     /// </remarks>
