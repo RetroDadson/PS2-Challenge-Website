@@ -86,7 +86,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: test-binaries
-          path: .
+          path: src
 
       - name: Run ${{ matrix.suite }} tests
         shell: bash
