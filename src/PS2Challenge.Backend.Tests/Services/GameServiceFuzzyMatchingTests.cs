@@ -98,7 +98,7 @@ public sealed class GameServiceFuzzyMatchingTests : IDisposable
         // Arrange
         var game = new GameDtoBuilder().WithId(1).WithTitle("Ratchet & Clank").Build();
         _context.Games.Add(game);
-        
+
         var alternateTitle = new AlternateTitle
         {
             GameId = 1,
@@ -122,7 +122,7 @@ public sealed class GameServiceFuzzyMatchingTests : IDisposable
         // Arrange
         var game = new GameDtoBuilder().WithId(1).WithTitle("Grand Theft Auto: San Andreas").Build();
         _context.Games.Add(game);
-        
+
         var alternateTitle = new AlternateTitle
         {
             GameId = 1,
@@ -155,7 +155,7 @@ public sealed class GameServiceFuzzyMatchingTests : IDisposable
         // Act & Assert
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(
             () => _gameService.AddGameAsync(duplicateGame));
-        
+
         Assert.Contains("already exists", exception.Message);
     }
 
@@ -175,7 +175,7 @@ public sealed class GameServiceFuzzyMatchingTests : IDisposable
         // Act & Assert
         var exception = await Assert.ThrowsAsync<InvalidOperationException>(
             () => _gameService.AddGameAsync(duplicateGame));
-        
+
         Assert.Contains("already exists", exception.Message);
     }
 

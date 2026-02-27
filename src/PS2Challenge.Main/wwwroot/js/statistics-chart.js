@@ -13,7 +13,7 @@ let durationChart = null;
 
 globalThis.renderDurationChart = function(chartData) {
     const ctx = document.getElementById('durationChart');
-    
+
     if (!ctx) {
         console.error('Chart canvas not found');
         return;
@@ -188,7 +188,7 @@ let ownershipChart = null;
 
 globalThis.renderOwnershipChart = function(chartData) {
     const ctx = document.getElementById('ownershipChart');
-    
+
     if (!ctx) {
         console.error('Ownership chart canvas not found');
         return;

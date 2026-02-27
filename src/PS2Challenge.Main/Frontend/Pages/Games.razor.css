@@ -392,12 +392,12 @@
     .games-table tbody td {
         padding: 0.75rem;
     }
-    
+
     .game-cover {
         max-width: 60px;
         max-height: 84px;
     }
-    
+
     .no-cover {
         width: 60px;
         height: 84px;
@@ -434,16 +434,16 @@
         right: 1rem;
         bottom: 1rem;
     }
-    
+
     .game-cover {
         max-width: 50px;
         max-height: 70px;
     }
-    
+
     .game-cover:hover {
         transform: scale(2);
     }
-    
+
     .no-cover {
         width: 50px;
         height: 70px;

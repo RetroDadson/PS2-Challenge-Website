@@ -21,7 +21,7 @@ public class AddImageUrlToGames : Migration
     public override void Down()
     {
         Delete.Index("idx_games_image_url").OnTable(GamesTable);
-        
+
         Delete.Column("image_url")
             .FromTable(GamesTable);
     }

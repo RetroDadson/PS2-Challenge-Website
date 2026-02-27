@@ -69,7 +69,7 @@ public class GameService
         // Step 2: Try normalized fuzzy match
         var normalizedSearch = TitleMatchingHelper.NormalizeTitle(trimmedTitle);
         var allGames = await dbContext.Games.ToListAsync();
-        
+
         var fuzzyMatch = allGames
             .FirstOrDefault(g => TitleMatchingHelper.NormalizeTitle(g.Title) == normalizedSearch);
 

@@ -55,7 +55,7 @@ public class GameCoverService
     public virtual async Task<Dictionary<int, string>> GetCoverUrlsAsync(IEnumerable<int> gameIds)
     {
         var gameIdsList = gameIds.ToList();
-        
+
         // Get the first serial number for each game
         var serialNumbers = await _context.GameSerialNumbers
             .AsNoTracking()

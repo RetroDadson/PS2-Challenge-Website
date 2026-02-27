@@ -40,7 +40,7 @@
     .nav-container {
         padding: 0 2rem;
     }
-    
+
     .nav-top-right {
         position: absolute;
         right: 0;
@@ -51,7 +51,7 @@
     }
     /* ensure hamburger is hidden on desktop (already set elsewhere) */
     .nav-toggle { display: none; }
-    
+
     /* Keep brand on the left on desktop */
     .nav-brand {
         text-align: left;
@@ -107,24 +107,24 @@
     transition: all 0.3s ease;
     border-radius: 2px;
 }
-.nav-toggle-icon::before { 
-    content:""; 
-    position:absolute; 
-    top:-8px; 
-    left:0; 
-    width:24px; 
-    height:3px; 
-    background:#fff; 
+.nav-toggle-icon::before {
+    content:"";
+    position:absolute;
+    top:-8px;
+    left:0;
+    width:24px;
+    height:3px;
+    background:#fff;
     border-radius: 2px;
 }
-.nav-toggle-icon::after  { 
-    content:""; 
-    position:absolute; 
-    top:8px;  
-    left:0; 
-    width:24px; 
-    height:3px; 
-    background:#fff; 
+.nav-toggle-icon::after  {
+    content:"";
+    position:absolute;
+    top:8px;
+    left:0;
+    width:24px;
+    height:3px;
+    background:#fff;
     border-radius: 2px;
 }
 
@@ -265,13 +265,13 @@
         top: 0;
         z-index: 1000;
     }
-    
+
     .nav-container {
         padding: 0 1rem;
     }
-    
+
     /* Show hamburger and position on left */
-    .nav-toggle { 
+    .nav-toggle {
         display: inline-flex;
         min-width: 44px; /* Touch target minimum */
         min-height: 44px;
@@ -279,7 +279,7 @@
         justify-content: center;
         margin-right: 0.5rem;
     }
-    
+
     /* Center the brand on mobile when hamburger is visible */
     .nav-brand {
         text-align: center;
@@ -292,9 +292,9 @@
         opacity: 0;
         overflow: hidden;
     }
-    
-    .nav-menu.collapsed .nav-list { 
-        display: none; 
+
+    .nav-menu.collapsed .nav-list {
+        display: none;
     }
 
     /* when expanded stack the list */
@@ -302,7 +302,7 @@
         background: #000;
         box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
     }
-    
+
     .nav-menu .nav-list {
         display: flex;
         flex-direction: column;
@@ -316,8 +316,8 @@
         width: 100%;
     }
 
-    .nav-link { 
-        padding: 1rem 1.25rem; 
+    .nav-link {
+        padding: 1rem 1.25rem;
         border-top: 1px solid rgba(255,255,255,0.06);
         width: 100%;
         display: flex;
@@ -325,7 +325,7 @@
         align-items: center;
         min-height: 48px; /* Touch-friendly height */
     }
-    
+
     .nav-item:first-child .nav-link {
         border-top: 1px solid rgba(255,255,255,0.06);
     }
@@ -344,17 +344,17 @@
         border-radius: 0;
         padding: 0;
     }
-    
+
     .dropdown .dropdown-item .nav-link {
         padding-left: 2rem;
         border-top: 1px solid rgba(255,255,255,0.03);
         min-height: 44px;
     }
-    
+
     .dropdown .dropdown-item:first-child .nav-link {
         border-top: 1px solid rgba(255,255,255,0.03);
     }
-    
+
     /* Mobile dropdown toggle styling */
     .dropdown-toggle {
         width: 100%;
@@ -407,11 +407,11 @@
     .nav-container {
         padding: 0 0.75rem;
     }
-    
+
     .nav-brand {
         font-size: 1.1rem;
     }
-    
+
     .nav-link {
         font-size: 0.95rem;
     }
