@@ -333,16 +333,12 @@
 .swagger-ui .response-col_status {
     color: var(--swagger-primary) !important;
     font-weight: 600 !important;
+    border-radius: 6px !important;
+    padding: 0.25rem 0.75rem !important;
 }
 
 .swagger-ui .response-col_description {
     color: var(--swagger-text-secondary) !important;
-}
-
-/* Response Codes */
-.swagger-ui .response-col_status {
-    border-radius: 6px !important;
-    padding: 0.25rem 0.75rem !important;
 }
 
 /* ============================================
