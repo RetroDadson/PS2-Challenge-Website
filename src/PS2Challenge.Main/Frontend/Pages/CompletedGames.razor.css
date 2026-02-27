@@ -146,6 +146,8 @@
     transition: background 0.2s ease;
     opacity: 0;
     animation: fadeInRow 0.2s ease-in forwards;
+    position: relative;
+    z-index: 1;
 }
 
 @keyframes fadeInRow {
@@ -159,6 +161,11 @@
 
 .games-table tbody tr:hover {
     background: rgba(233, 30, 99, 0.1);
+    z-index: 20000;
+}
+
+.games-table tbody tr:focus-within {
+    z-index: 20000;
 }
 
 .games-table tbody tr.completed {
