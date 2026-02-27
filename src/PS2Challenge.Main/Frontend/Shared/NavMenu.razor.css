@@ -15,20 +15,12 @@
     padding: 0 2rem;
     margin: 0 auto;
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
     position: relative;
     z-index: 1001;
     box-sizing: border-box;
-}
-
-/* container stacked: top row (brand + login) then nav row */
-.nav-container {
-    display: flex;
-    flex-direction: column;
-    gap: 0;
-    align-items: stretch;
 }
 
 /* Top row with hamburger + brand + login */
