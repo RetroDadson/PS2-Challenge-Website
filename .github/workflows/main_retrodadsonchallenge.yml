@@ -32,9 +32,9 @@ jobs:
         with:
           name: test-binaries
           path: |
-            src/PS2Challenge.Backend.Tests/bin/Release/**
-            src/PS2Challenge.Main.Tests/bin/Release/**
-            src/PS2Challenge.IntegrationTests/bin/Release/**
+            src/PS2Challenge.Backend.Tests/bin/Release/net10.0/**
+            src/PS2Challenge.Main.Tests/bin/Release/net10.0/**
+            src/PS2Challenge.IntegrationTests/bin/Release/net10.0/**
 
       - name: dotnet publish
         run: dotnet publish src/PS2Challenge.Main/PS2Challenge.Main.csproj -c Release -o ${{env.DOTNET_ROOT}}/myapp --no-build
@@ -95,27 +95,23 @@ jobs:
 
           if [[ "${{ matrix.suite }}" == "backend" ]]; then
             MIGRATION_TEST_CONNECTION_STRING="Host=localhost;Port=5432;Database=postgres;Username=postgres;Password=postgres;Pooling=false" \
-            dotnet test src/PS2Challenge.Backend.Tests/PS2Challenge.Backend.Tests.csproj \
-              --configuration Release --no-build \
-              --logger "trx;LogFileName=backend.trx" \
-              --results-directory ./TestResults
+            dotnet vstest src/PS2Challenge.Backend.Tests/bin/Release/net10.0/PS2Challenge.Backend.Tests.dll \
+              --logger:"trx;LogFileName=backend.trx" \
+              --ResultsDirectory:./TestResults
           elif [[ "${{ matrix.suite }}" == "main" ]]; then
-            dotnet test src/PS2Challenge.Main.Tests/PS2Challenge.Main.Tests.csproj \
-              --configuration Release --no-build \
-              --filter "FullyQualifiedName!~Frontend" \
-              --logger "trx;LogFileName=main.trx" \
-              --results-directory ./TestResults
+            dotnet vstest src/PS2Challenge.Main.Tests/bin/Release/net10.0/PS2Challenge.Main.Tests.dll \
+              --TestCaseFilter:"FullyQualifiedName!~Frontend" \
+              --logger:"trx;LogFileName=main.trx" \
+              --ResultsDirectory:./TestResults
           elif [[ "${{ matrix.suite }}" == "frontend" ]]; then
-            dotnet test src/PS2Challenge.Main.Tests/PS2Challenge.Main.Tests.csproj \
-              --configuration Release --no-build \
-              --filter "FullyQualifiedName~Frontend" \
-              --logger "trx;LogFileName=frontend.trx" \
-              --results-directory ./TestResults
+            dotnet vstest src/PS2Challenge.Main.Tests/bin/Release/net10.0/PS2Challenge.Main.Tests.dll \
+              --TestCaseFilter:"FullyQualifiedName~Frontend" \
+              --logger:"trx;LogFileName=frontend.trx" \
+              --ResultsDirectory:./TestResults
           else
-            dotnet test src/PS2Challenge.IntegrationTests/PS2Challenge.IntegrationTests.csproj \
-              --configuration Release --no-build \
-              --logger "trx;LogFileName=integration.trx" \
-              --results-directory ./TestResults
+            dotnet vstest src/PS2Challenge.IntegrationTests/bin/Release/net10.0/PS2Challenge.IntegrationTests.dll \
+              --logger:"trx;LogFileName=integration.trx" \
+              --ResultsDirectory:./TestResults
           fi
 
       - name: Publish ${{ matrix.suite }} test results
