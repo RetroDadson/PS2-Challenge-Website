@@ -45,7 +45,7 @@ public class GamesController : ControllerBase
     public async Task<ActionResult<IEnumerable<GameDto>>> GetGames([FromQuery] string? title = null)
     {
         IEnumerable<GameDto> games;
-        
+
         if (!string.IsNullOrWhiteSpace(title))
         {
             games = await _gameService.SearchGamesByTitleAsync(title);
@@ -143,7 +143,7 @@ public class GamesController : ControllerBase
     /// <response code="409">Conflict - game with this title already exists</response>
     /// <remarks>
     /// Sample request:
-    /// 
+    ///
     ///     POST /api/games
     ///     {
     ///         "title": "Final Fantasy X",
@@ -686,9 +686,9 @@ public class GamesController : ControllerBase
     /// <remarks>
     /// Each serial number must be unique across all games in the database.
     /// If the serial number already exists, the response will include the game ID and title of the existing game.
-    /// 
+    ///
     /// Sample request:
-    /// 
+    ///
     ///     POST /api/games/serial-numbers
     ///     {
     ///         "title": "Final Fantasy X",
@@ -811,9 +811,9 @@ public class GamesController : ControllerBase
     /// <response code="500">Internal server error</response>
     /// <remarks>
     /// Add an alternate title for a game (e.g., regional release names).
-    /// 
+    ///
     /// Sample request:
-    /// 
+    ///
     ///     POST /api/games/1/alternate-titles
     ///     {
     ///         "title": "Ratchet &amp; Clank 2: Going Commando",
@@ -891,7 +891,7 @@ public class GamesController : ControllerBase
             {
                 return Conflict(new { error = ex.Message });
             }
-            
+
             // Otherwise it's a different error (shouldn't happen as we check game existence above)
             _logger.LogError(ex, "Error adding alternate title for game {GameId}", id);
             return StatusCode(500, new { message = InternalServerErrorMessage, error = ex.Message });
