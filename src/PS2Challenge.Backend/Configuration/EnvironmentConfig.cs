@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Configuration;
+
 // New location for EnvironmentConfig (moved from Api project)
 namespace PS2Challenge.Backend.Configuration;
 
@@ -22,6 +24,28 @@ public class EnvironmentConfig
         ConnectionString = GetEnvironmentVariable("DATABASE_CONNECTION_STRING") ?? string.Empty;
         TwitchClientId = GetEnvironmentVariable("TWITCH_CLIENT_ID") ?? string.Empty;
         TwitchClientSecret = GetEnvironmentVariable("TWITCH_CLIENT_SECRET") ?? string.Empty;
+    }
+
+    public void Initialize(IConfiguration configuration)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+
+        Console.WriteLine("[EnvironmentConfig] Initializing configuration from environment variables and appsettings...");
+
+        ConnectionString =
+            GetEnvironmentVariable("DATABASE_CONNECTION_STRING")
+            ?? configuration.GetConnectionString("DefaultConnection")
+            ?? string.Empty;
+
+        TwitchClientId =
+            GetEnvironmentVariable("TWITCH_CLIENT_ID")
+            ?? configuration["Twitch:ClientId"]
+            ?? string.Empty;
+
+        TwitchClientSecret =
+            GetEnvironmentVariable("TWITCH_CLIENT_SECRET")
+            ?? configuration["Twitch:ClientSecret"]
+            ?? string.Empty;
     }
 
     private static string? GetEnvironmentVariable(string key)
