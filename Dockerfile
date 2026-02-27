@@ -19,7 +19,7 @@ RUN dotnet build "PS2Challenge.Main.csproj" -c Release -o /app/build
 RUN dotnet publish "PS2Challenge.Main.csproj" -c Release -o /app/publish /p:UseAppHost=false
 
 # Runtime stage
-FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 WORKDIR /app
 
 # Install curl for health checks
