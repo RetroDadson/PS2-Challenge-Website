@@ -7,11 +7,7 @@ using PS2Challenge.Main.Frontend.Pages;
 using Xunit;
 using Moq;
 using System.Security.Claims;
-using Microsoft.AspNetCore.Components.Authorization;
-using Microsoft.AspNetCore.SignalR;
 using PS2Challenge.Main.Api.Hubs;
-using Microsoft.AspNetCore.Components;
-using Microsoft.AspNetCore.Authorization;
 
 namespace PS2Challenge.Main.Tests.Frontend;
 
@@ -24,63 +20,28 @@ public class VotesPageTests : BunitContext
     private readonly Mock<VoteService> _mockVoteService;
     private readonly Mock<GameCoverService> _mockCoverService;
     private readonly Mock<IServiceScopeFactory> _mockScopeFactory;
-    private readonly Mock<IHubContext<VotesHub>> _mockHubContext;
 
     public VotesPageTests()
     {
         _mockVoteService = new Mock<VoteService>(null!);
         _mockCoverService = new Mock<GameCoverService>(null!);
         _mockScopeFactory = new Mock<IServiceScopeFactory>();
-        _mockHubContext = new Mock<IHubContext<VotesHub>>();
-        
+
         // Configure JSInterop
         JSInterop.Mode = JSRuntimeMode.Loose;
     }
 
     private IRenderedComponent<Votes> RenderVotesWithAuth(ClaimsPrincipal user)
     {
-        var authContext = new Mock<AuthenticationStateProvider>();
-        var authState = new AuthenticationState(user);
-        authContext.Setup(x => x.GetAuthenticationStateAsync()).ReturnsAsync(authState);
-        
+        var authState = this.AddTestAuthentication(user);
+
         // Register services
         Services.AddSingleton(_mockVoteService.Object);
         Services.AddSingleton(_mockCoverService.Object);
         Services.AddSingleton(_mockScopeFactory.Object);
-        Services.AddSingleton(_mockHubContext.Object);
-        Services.AddSingleton(authContext.Object);
-        Services.AddAuthorizationCore();
-        
-        // Add authorization service
-        var mockAuthService = new Mock<IAuthorizationService>();
-        mockAuthService.Setup(x => x.AuthorizeAsync(
-            It.IsAny<ClaimsPrincipal>(),
-            It.IsAny<object>(),
-            It.IsAny<IEnumerable<IAuthorizationRequirement>>()))
-            .ReturnsAsync((ClaimsPrincipal principal, object resource, IEnumerable<IAuthorizationRequirement> requirements) =>
-            {
-                if (principal.Identity?.IsAuthenticated == true)
-                {
-                    return AuthorizationResult.Success();
-                }
-                return AuthorizationResult.Failed();
-            });
-        Services.AddSingleton(mockAuthService.Object);
-        
-        // Create cascading auth state
-        var authStateTask = Task.FromResult(authState);
-        
-        return Render<Votes>(builder =>
-        {
-            builder.OpenComponent<CascadingValue<Task<AuthenticationState>>>(0);
-            builder.AddComponentParameter(1, "Value", authStateTask);
-            builder.AddComponentParameter(2, "ChildContent", (RenderFragment)(childBuilder =>
-            {
-                childBuilder.OpenComponent<Votes>(0);
-                childBuilder.CloseComponent();
-            }));
-            builder.CloseComponent();
-        });
+        Services.AddMockHubContext<VotesHub>();
+
+        return this.RenderWithAuthState<Votes>(authState);
     }
 
     [Fact]
@@ -104,7 +65,7 @@ public class VotesPageTests : BunitContext
     {
         // Arrange - Setup current voting games
         var user = new ClaimsPrincipal(new ClaimsIdentity());
-        
+
         var currentVotes = new List<CurrentVoteDto>
         {
             new CurrentVoteDto { GameTitle = "God of War", VoteCount = 150, GameNumber = 1 },
@@ -141,7 +102,7 @@ public class VotesPageTests : BunitContext
     {
         // Arrange - Setup vote counts
         var user = new ClaimsPrincipal(new ClaimsIdentity());
-        
+
         var currentVotes = new List<CurrentVoteDto>
         {
             new CurrentVoteDto { GameTitle = "God of War", VoteCount = 42, GameNumber = 1 }
@@ -162,14 +123,14 @@ public class VotesPageTests : BunitContext
 
         // Assert - Vote count should be displayed
         var markup = cut.Markup;
-        
+
         // Debug: Print markup if test is failing
         if (!markup.Contains("42"))
         {
             Console.WriteLine($"Markup length: {markup.Length}");
             Console.WriteLine($"Markup preview: {markup.Substring(0, Math.Min(500, markup.Length))}");
         }
-        
+
         Assert.True(markup.Contains("42") || markup.Contains("God of War"),
             $"Expected vote count '42' or game title 'God of War' but got markup of length {markup.Length}");
     }
@@ -179,11 +140,11 @@ public class VotesPageTests : BunitContext
     {
         // Arrange - Setup vote history
         var user = new ClaimsPrincipal(new ClaimsIdentity());
-        
+
         var voteHistory = new List<VoteRoundDto>
         {
-            new VoteRoundDto 
-            { 
+            new VoteRoundDto
+            {
                 VoteRound = 1,
                 TopGameTitle = "Final Fantasy X",
                 TopVotes = 200,
@@ -225,7 +186,7 @@ public class VotesPageTests : BunitContext
     {
         // Arrange - No current votes
         var user = new ClaimsPrincipal(new ClaimsIdentity());
-        
+
         _mockVoteService.Setup(s => s.GetCurrentVotesAsync()).ReturnsAsync(new List<CurrentVoteDto>());
         _mockVoteService.Setup(s => s.GetVoteHistoryAsync()).ReturnsAsync(new List<VoteRoundDto>());
         _mockCoverService.Setup(s => s.GetCoverUrlsAsync(It.IsAny<IEnumerable<int>>())).ReturnsAsync(new Dictionary<int, string>());
@@ -321,11 +282,11 @@ public class VotesPageTests : BunitContext
     {
         // Arrange
         var user = new ClaimsPrincipal(new ClaimsIdentity());
-        
+
         var voteHistory = new List<VoteRoundDto>
         {
-            new VoteRoundDto 
-            { 
+            new VoteRoundDto
+            {
                 VoteRound = 1,
                 TopGameTitle = "Final Fantasy X",
                 TopVotes = 200,
@@ -360,7 +321,7 @@ public class VotesPageTests : BunitContext
     {
         // Arrange - Setup current votes with different counts for pie chart
         var user = new ClaimsPrincipal(new ClaimsIdentity());
-        
+
         var currentVotes = new List<CurrentVoteDto>
         {
             new CurrentVoteDto { GameTitle = "Popular Game", VoteCount = 80, GameNumber = 1 },
@@ -385,6 +346,98 @@ public class VotesPageTests : BunitContext
         Assert.Contains("pie-chart", markup);
         Assert.Contains("Popular Game", markup);
         Assert.Contains("Less Popular", markup);
+    }
+
+    [Fact]
+    public async Task VotesPage_AsAdmin_WithNoCurrentVotes_ShowsAdminEmptyMessage()
+    {
+        var claims = new[]
+        {
+            new Claim(ClaimTypes.Name, "AdminUser"),
+            new Claim(ClaimTypes.NameIdentifier, "admin-123"),
+            new Claim(ClaimTypes.Role, "Admin")
+        };
+        var user = new ClaimsPrincipal(new ClaimsIdentity(claims, "Test"));
+
+        _mockVoteService.Setup(s => s.GetCurrentVotesAsync()).ReturnsAsync(new List<CurrentVoteDto>());
+        _mockVoteService.Setup(s => s.GetVoteHistoryAsync()).ReturnsAsync(new List<VoteRoundDto>());
+        _mockCoverService.Setup(s => s.GetCoverUrlsAsync(It.IsAny<IEnumerable<int>>())).ReturnsAsync(new Dictionary<int, string>());
+
+        var mockScope = new Mock<IServiceScope>();
+        var mockServiceProvider = new Mock<IServiceProvider>();
+        mockScope.Setup(s => s.ServiceProvider).Returns(mockServiceProvider.Object);
+        _mockScopeFactory.Setup(f => f.CreateScope()).Returns(mockScope.Object);
+
+        var cut = RenderVotesWithAuth(user);
+        await Task.Delay(100);
+
+        Assert.Contains("No current votes configured. Add games below.", cut.Markup);
+    }
+
+    [Fact]
+    public async Task VotesPage_FilterRoundsWithVotes_UpdatesShownCount()
+    {
+        var user = new ClaimsPrincipal(new ClaimsIdentity());
+
+        var voteHistory = new List<VoteRoundDto>
+        {
+            new VoteRoundDto { VoteRound = 1, TopGameTitle = "Game 1", TopVotes = 10, SecondGameTitle = "Game 2", SecondVotes = 5, LastGameTitle = "Game 3", LastVotes = 1 },
+            new VoteRoundDto { VoteRound = 2, TopGameTitle = "Game 4", TopVotes = 0, SecondGameTitle = "Game 5", SecondVotes = 0, LastGameTitle = "Game 6", LastVotes = 0 }
+        };
+
+        _mockVoteService.Setup(s => s.GetCurrentVotesAsync()).ReturnsAsync(new List<CurrentVoteDto>());
+        _mockVoteService.Setup(s => s.GetVoteHistoryAsync()).ReturnsAsync(voteHistory);
+        _mockCoverService.Setup(s => s.GetCoverUrlsAsync(It.IsAny<IEnumerable<int>>())).ReturnsAsync(new Dictionary<int, string>());
+
+        var mockScope = new Mock<IServiceScope>();
+        var mockServiceProvider = new Mock<IServiceProvider>();
+        mockScope.Setup(s => s.ServiceProvider).Returns(mockServiceProvider.Object);
+        _mockScopeFactory.Setup(f => f.CreateScope()).Returns(mockScope.Object);
+
+        var cut = RenderVotesWithAuth(user);
+        await Task.Delay(100);
+
+        var filterCheckbox = cut.Find("input[type='checkbox']");
+        await filterCheckbox.ChangeAsync(true);
+
+        Assert.Contains("Showing 1 of 2 rounds", cut.Markup);
+    }
+
+    [Fact]
+    public async Task VotesPage_ShowsTiedIndicator_WhenPositionsAreNotSetAndVotesTie()
+    {
+        var user = new ClaimsPrincipal(new ClaimsIdentity());
+
+        var voteHistory = new List<VoteRoundDto>
+        {
+            new VoteRoundDto
+            {
+                VoteRound = 9,
+                TopGameTitle = "Tie A",
+                TopVotes = 100,
+                TopPosition = null,
+                SecondGameTitle = "Tie B",
+                SecondVotes = 100,
+                SecondPosition = null,
+                LastGameTitle = "Tie C",
+                LastVotes = 50,
+                LastPosition = null
+            }
+        };
+
+        _mockVoteService.Setup(s => s.GetCurrentVotesAsync()).ReturnsAsync(new List<CurrentVoteDto>());
+        _mockVoteService.Setup(s => s.GetVoteHistoryAsync()).ReturnsAsync(voteHistory);
+        _mockCoverService.Setup(s => s.GetCoverUrlsAsync(It.IsAny<IEnumerable<int>>())).ReturnsAsync(new Dictionary<int, string>());
+
+        var mockScope = new Mock<IServiceScope>();
+        var mockServiceProvider = new Mock<IServiceProvider>();
+        mockScope.Setup(s => s.ServiceProvider).Returns(mockServiceProvider.Object);
+        _mockScopeFactory.Setup(f => f.CreateScope()).Returns(mockScope.Object);
+
+        var cut = RenderVotesWithAuth(user);
+        await Task.Delay(100);
+
+        Assert.Contains("(Tied)", cut.Markup);
     }
 
     private void SetupBasicVotingData()

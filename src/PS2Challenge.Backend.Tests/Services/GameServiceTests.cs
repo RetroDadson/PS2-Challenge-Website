@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using PS2Challenge.Backend.Data;
 using PS2Challenge.Backend.Models;
 using PS2Challenge.Backend.Services;
@@ -492,5 +493,220 @@ public class GameServiceTests : IDisposable
 
         var allSerials = await _context.GameSerialNumbers.Where(s => s.GameId == 1).ToListAsync();
         Assert.Equal(3, allSerials.Count);
+    }
+
+    [Fact]
+    public async Task UpdateGameAsync_ThrowsWhenGameNotFound()
+    {
+        var updateDto = new GameDtoBuilder().WithTitle("Updated").Build();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => _gameService.UpdateGameAsync(999, updateDto));
+    }
+
+    [Fact]
+    public async Task UpdateGameAsync_ThrowsWhenTitleConflictsWithAnotherGame()
+    {
+        _context.Games.AddRange(
+            new GameDtoBuilder().WithId(1).WithTitle("Original").Build(),
+            new GameDtoBuilder().WithId(2).WithTitle("Conflicting").Build()
+        );
+        await _context.SaveChangesAsync();
+
+        var updateDto = new GameDtoBuilder().WithTitle("Conflicting").Build();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => _gameService.UpdateGameAsync(1, updateDto));
+    }
+
+    [Fact]
+    public async Task UpdateGameCoverUrlAsync_UpdatesCoverUrl()
+    {
+        var game = new GameDtoBuilder().WithId(1).WithTitle("Cover Game").Build();
+        game.ImageUrl = null;
+        _context.Games.Add(game);
+        await _context.SaveChangesAsync();
+
+        await _gameService.UpdateGameCoverUrlAsync(1, "new-cover.jpg");
+
+        var updated = await _context.Games.FindAsync(1);
+        Assert.NotNull(updated);
+        Assert.Equal("new-cover.jpg", updated.ImageUrl);
+    }
+
+    [Fact]
+    public async Task UpdateGameCoverUrlAsync_ThrowsWhenGameNotFound()
+    {
+        await Assert.ThrowsAsync<InvalidOperationException>(() => _gameService.UpdateGameCoverUrlAsync(999, "x.jpg"));
+    }
+
+    [Fact]
+    public async Task DeleteGameAsync_ReturnsTrueWhenDeleted()
+    {
+        _context.Games.Add(new GameDtoBuilder().WithId(1).WithTitle("Delete Me").Build());
+        await _context.SaveChangesAsync();
+
+        var deleted = await _gameService.DeleteGameAsync(1);
+
+        Assert.True(deleted);
+        Assert.Null(await _context.Games.FindAsync(1));
+    }
+
+    [Fact]
+    public async Task UpdateExclusionAsync_AddsAndThenRemovesExclusion()
+    {
+        _context.Games.Add(new GameDtoBuilder().WithId(1).WithTitle("Exclude Me").Build());
+        await _context.SaveChangesAsync();
+
+        await _gameService.UpdateExclusionAsync(1, true, "Testing");
+        Assert.NotNull(await _context.ExcludedGames.FirstOrDefaultAsync(e => e.GameId == 1));
+
+        await _gameService.UpdateExclusionAsync(1, false);
+        Assert.Null(await _context.ExcludedGames.FirstOrDefaultAsync(e => e.GameId == 1));
+    }
+
+    [Fact]
+    public async Task UpdateExclusionAsync_UpdatesExistingReason()
+    {
+        _context.Games.Add(new GameDtoBuilder().WithId(1).WithTitle("Existing Exclusion").Build());
+        _context.ExcludedGames.Add(new ExcludedGame { GameId = 1, Reason = "Old" });
+        await _context.SaveChangesAsync();
+
+        await _gameService.UpdateExclusionAsync(1, true, "New Reason");
+
+        var exclusion = await _context.ExcludedGames.FirstAsync(e => e.GameId == 1);
+        Assert.Equal("New Reason", exclusion.Reason);
+    }
+
+    [Fact]
+    public async Task UpdateOwnershipAsync_AddsUpdatesAndRemovesOwnership()
+    {
+        _context.Games.Add(new GameDtoBuilder().WithId(1).WithTitle("Own Me").Build());
+        await _context.SaveChangesAsync();
+
+        await _gameService.UpdateOwnershipAsync(1, true, "PAL");
+        var ownership = await _context.GamesOwned.FirstOrDefaultAsync(o => o.GameId == 1);
+        Assert.NotNull(ownership);
+        Assert.Equal("PAL", ownership!.TypeOwned);
+
+        await _gameService.UpdateOwnershipAsync(1, true, "NTSC-U");
+        ownership = await _context.GamesOwned.FirstOrDefaultAsync(o => o.GameId == 1);
+        Assert.NotNull(ownership);
+        Assert.Equal("NTSC-U", ownership!.TypeOwned);
+
+        await _gameService.UpdateOwnershipAsync(1, false, string.Empty);
+        Assert.Null(await _context.GamesOwned.FirstOrDefaultAsync(o => o.GameId == 1));
+    }
+
+    [Fact]
+    public async Task GetAllOwnershipTypesAsync_ReturnsOrderedTypes()
+    {
+        _context.OwnershipTypes.AddRange(
+            new OwnershipType { TypeOwned = "Physical" },
+            new OwnershipType { TypeOwned = "Digital" }
+        );
+        await _context.SaveChangesAsync();
+
+        var result = await _gameService.GetAllOwnershipTypesAsync();
+
+        Assert.Equal(2, result.Count);
+        Assert.Equal("Digital", result[0].TypeOwned);
+        Assert.Equal("Physical", result[1].TypeOwned);
+    }
+
+    [Fact]
+    public async Task AlternateTitleMethods_AddListDelete_WorkAsExpected()
+    {
+        _context.Games.Add(new GameDtoBuilder().WithId(1).WithTitle("Main Title").Build());
+        await _context.SaveChangesAsync();
+
+        var alt = await _gameService.AddAlternateTitleAsync(1, "Alt Title", "note");
+        var listForGame = await _gameService.GetAlternateTitlesForGameAsync(1);
+        var grouped = await _gameService.GetAlternateTitlesAsync();
+
+        Assert.Single(listForGame);
+        Assert.Equal("Alt Title", listForGame[0].Title);
+        Assert.True(grouped.ContainsKey(1));
+        Assert.Single(grouped[1]);
+
+        var deleted = await _gameService.DeleteAlternateTitleAsync(1, alt.AlternateTitleId);
+        Assert.True(deleted);
+        Assert.Empty(await _gameService.GetAlternateTitlesForGameAsync(1));
+    }
+
+    [Fact]
+    public async Task AddAlternateTitleAsync_ThrowsForDuplicateOrMissingGame()
+    {
+        _context.Games.Add(new GameDtoBuilder().WithId(1).WithTitle("Main Title").Build());
+        _context.AlternateTitles.Add(new AlternateTitle { GameId = 1, Title = "ALT" });
+        await _context.SaveChangesAsync();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => _gameService.AddAlternateTitleAsync(1, "alt", null));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => _gameService.AddAlternateTitleAsync(999, "new", null));
+    }
+
+    [Fact]
+    public async Task DeleteAlternateTitleAsync_ReturnsFalseWhenNotFound()
+    {
+        _context.Games.Add(new GameDtoBuilder().WithId(1).WithTitle("Main Title").Build());
+        await _context.SaveChangesAsync();
+
+        var deleted = await _gameService.DeleteAlternateTitleAsync(1, 999);
+
+        Assert.False(deleted);
+    }
+
+    [Fact]
+    public async Task GetExclusionReasonsAsync_ReturnsStoredReason()
+    {
+        _context.ExcludedGames.Add(new ExcludedGame { GameId = 1, Reason = "Testing reason" });
+        await _context.SaveChangesAsync();
+
+        var result = await _gameService.GetExclusionReasonsAsync();
+
+        Assert.Equal("Testing reason", result[1]);
+    }
+
+    [Fact]
+    public async Task GetGamesPageDataAsync_ReturnsCombinedSortedData()
+    {
+        var databaseName = Guid.NewGuid().ToString();
+        var services = new ServiceCollection();
+        services.AddDbContext<Ps2ChallengeDbContext>(options => options.UseInMemoryDatabase(databaseName));
+        var provider = services.BuildServiceProvider();
+
+        using (var seedScope = provider.CreateScope())
+        {
+            var db = seedScope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
+
+            db.Games.AddRange(
+                new GameDtoBuilder().WithId(1).WithTitle("Alpha").Build(),
+                new GameDtoBuilder().WithId(2).WithTitle(".hack//G.U.").Build(),
+                new GameDtoBuilder().WithId(3).WithTitle("Beta").Build());
+
+            db.ExcludedGames.Add(new ExcludedGame { GameId = 3, Reason = "Filtered" });
+            db.GamesOwned.Add(new GameOwned { GameId = 1, OwnPhysicalCopy = true, TypeOwned = "Physical" });
+
+            db.GameProgress.AddRange(
+                new GameProgressBuilder().WithProgressId(1).WithGameId(1).WithDateStarted(new DateOnly(2024, 1, 1)).WithDateFinished(new DateOnly(2024, 1, 2)).Build(),
+                new GameProgressBuilder().WithProgressId(2).WithGameId(2).WithDateStarted(new DateOnly(2024, 2, 1)).WithDateFinished(null).Build());
+
+            db.AlternateTitles.Add(new AlternateTitle { GameId = 2, Title = "hack GU", Notes = "Alt" });
+
+            await db.SaveChangesAsync();
+        }
+
+        var gameService = new GameService(provider.GetRequiredService<IServiceScopeFactory>());
+
+        var result = await gameService.GetGamesPageDataAsync();
+
+        Assert.Equal(3, result.Games.Count);
+        Assert.Equal(".hack//G.U.", result.Games[0].Title);
+        Assert.Equal("Alpha", result.Games[1].Title);
+        Assert.Equal("Beta", result.Games[2].Title);
+
+        Assert.Equal("Physical", result.OwnedTypes[1]);
+        Assert.Equal("Filtered", result.ExclusionReasons[3]);
+        Assert.Equal("Completed", result.CompletionStatus[1]);
+        Assert.Equal("In Progress", result.CompletionStatus[2]);
+        Assert.Single(result.AlternateTitles[2]);
     }
 }

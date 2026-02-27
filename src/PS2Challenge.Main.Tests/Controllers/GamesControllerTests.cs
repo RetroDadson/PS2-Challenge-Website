@@ -3,6 +3,7 @@ using Moq;
 using PS2Challenge.Api.Api.Controllers;
 using PS2Challenge.Api.Api.Models;
 using PS2Challenge.Backend.Models;
+using PS2Challenge.Backend.Models.Api;
 using PS2Challenge.Backend.Services;
 using System.Security.Claims;
 
@@ -931,6 +932,234 @@ public class GamesControllerTests
 
         // Assert
         Assert.IsType<BadRequestObjectResult>(result.Result);
+    }
+
+    // ============================================================================
+    // SERIAL NUMBER TESTS
+    // ============================================================================
+
+    [Fact]
+    public async Task AddSerialNumber_ReturnsBadRequest_WhenSerialNumberTooLong()
+    {
+        SetupAdminUser();
+        var request = new AddSerialNumberRequest
+        {
+            Title = "Test Game",
+            SerialNumber = new string('S', 51)
+        };
+
+        var result = await _controller.AddSerialNumber(request);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task AddSerialNumber_ReturnsBadRequest_WhenRegionTooLong()
+    {
+        SetupAdminUser();
+        var request = new AddSerialNumberRequest
+        {
+            Title = "Test Game",
+            SerialNumber = "SLUS-12345",
+            Region = new string('R', 51)
+        };
+
+        var result = await _controller.AddSerialNumber(request);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task AddSerialNumber_ReturnsOk_WhenValidRequest()
+    {
+        SetupAdminUser();
+        var request = new AddSerialNumberRequest
+        {
+            Title = "Test Game",
+            SerialNumber = "SLUS-12345",
+            Region = "NTSC-U",
+            Notes = "Original release"
+        };
+
+        var serial = new GameSerialNumber
+        {
+            SerialId = 7,
+            GameId = 42,
+            SerialNumber = request.SerialNumber,
+            Region = request.Region,
+            Notes = request.Notes
+        };
+
+        _mockGameService
+            .Setup(s => s.AddSerialNumberAsync(request.Title, request.SerialNumber, request.Region, request.Notes))
+            .ReturnsAsync(serial);
+        _mockGameService
+            .Setup(s => s.GetGameByIdAsync(42))
+            .ReturnsAsync(new GameDto { Id = 42, Title = "Test Game" });
+
+        var result = await _controller.AddSerialNumber(request);
+
+        var okResult = Assert.IsType<OkObjectResult>(result);
+        var response = Assert.IsType<AddSerialNumberResponse>(okResult.Value);
+        Assert.Equal("Test Game", response.GameTitle);
+        Assert.Equal("SLUS-12345", response.SerialNumber);
+    }
+
+    [Fact]
+    public async Task AddSerialNumber_ReturnsConflict_WithStructuredPayload_WhenConflictMessageMatchesFormat()
+    {
+        SetupAdminUser();
+        var request = new AddSerialNumberRequest
+        {
+            Title = "Test Game",
+            SerialNumber = "SLUS-99999"
+        };
+
+        _mockGameService
+            .Setup(s => s.AddSerialNumberAsync(request.Title, request.SerialNumber, request.Region, request.Notes))
+            .ThrowsAsync(new InvalidOperationException("Serial number 'SLUS-99999' already exists for game ID 99 ('Existing Game')"));
+
+        var result = await _controller.AddSerialNumber(request);
+
+        var conflict = Assert.IsType<ConflictObjectResult>(result);
+        var payload = Assert.IsType<SerialNumberConflictResponse>(conflict.Value);
+        Assert.Equal(99, payload.ExistingGameId);
+        Assert.Equal("Existing Game", payload.ExistingGameTitle);
+    }
+
+    [Fact]
+    public async Task AddSerialNumber_ReturnsNotFound_WhenGameDoesNotExist()
+    {
+        SetupAdminUser();
+        var request = new AddSerialNumberRequest
+        {
+            Title = "Missing Game",
+            SerialNumber = "SLUS-404"
+        };
+
+        _mockGameService
+            .Setup(s => s.AddSerialNumberAsync(request.Title, request.SerialNumber, request.Region, request.Notes))
+            .ThrowsAsync(new InvalidOperationException("Game not found"));
+
+        var result = await _controller.AddSerialNumber(request);
+
+        Assert.IsType<NotFoundObjectResult>(result);
+    }
+
+    // ============================================================================
+    // ALTERNATE TITLE TESTS
+    // ============================================================================
+
+    [Fact]
+    public async Task GetAlternateTitles_ReturnsNotFound_WhenGameDoesNotExist()
+    {
+        _mockGameService.Setup(s => s.GetGameByIdAsync(77)).ReturnsAsync((GameDto?)null);
+
+        var result = await _controller.GetAlternateTitles(77);
+
+        Assert.IsType<NotFoundObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task GetAlternateTitles_ReturnsOk_WhenGameExists()
+    {
+        _mockGameService.Setup(s => s.GetGameByIdAsync(1)).ReturnsAsync(new GameDto { Id = 1, Title = "Test Game" });
+        _mockGameService.Setup(s => s.GetAlternateTitlesForGameAsync(1)).ReturnsAsync(
+        [
+            new AlternateTitle { AlternateTitleId = 1, GameId = 1, Title = "Alt 1" },
+            new AlternateTitle { AlternateTitleId = 2, GameId = 1, Title = "Alt 2" }
+        ]);
+
+        var result = await _controller.GetAlternateTitles(1);
+
+        var okResult = Assert.IsType<OkObjectResult>(result);
+        var payload = Assert.IsAssignableFrom<IEnumerable<AlternateTitle>>(okResult.Value);
+        Assert.Equal(2, payload.Count());
+    }
+
+    [Fact]
+    public async Task AddAlternateTitle_ReturnsBadRequest_WhenTitleTooLong()
+    {
+        SetupAdminUser();
+        var request = new AddAlternateTitleRequest { Title = new string('A', 151) };
+
+        var result = await _controller.AddAlternateTitle(1, request);
+
+        Assert.IsType<BadRequestObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task AddAlternateTitle_ReturnsNotFound_WhenGameDoesNotExist()
+    {
+        SetupAdminUser();
+        var request = new AddAlternateTitleRequest { Title = "Alt Name", Notes = "Note" };
+        _mockGameService.Setup(s => s.GetGameByIdAsync(9)).ReturnsAsync((GameDto?)null);
+
+        var result = await _controller.AddAlternateTitle(9, request);
+
+        Assert.IsType<NotFoundObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task AddAlternateTitle_ReturnsConflict_WhenDuplicateTitle()
+    {
+        SetupAdminUser();
+        var request = new AddAlternateTitleRequest { Title = "Alt Name" };
+
+        _mockGameService.Setup(s => s.GetGameByIdAsync(1)).ReturnsAsync(new GameDto { Id = 1, Title = "Game" });
+        _mockGameService
+            .Setup(s => s.AddAlternateTitleAsync(1, request.Title, request.Notes))
+            .ThrowsAsync(new InvalidOperationException("Alternate title already exists for game"));
+
+        var result = await _controller.AddAlternateTitle(1, request);
+
+        Assert.IsType<ConflictObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task AddAlternateTitle_ReturnsOk_WhenValidRequest()
+    {
+        SetupAdminUser();
+        var request = new AddAlternateTitleRequest { Title = "Alt Name", Notes = "Regional" };
+
+        _mockGameService.Setup(s => s.GetGameByIdAsync(1)).ReturnsAsync(new GameDto { Id = 1, Title = "Game" });
+        _mockGameService
+            .Setup(s => s.AddAlternateTitleAsync(1, request.Title, request.Notes))
+            .ReturnsAsync(new AlternateTitle
+            {
+                AlternateTitleId = 10,
+                GameId = 1,
+                Title = request.Title,
+                Notes = request.Notes
+            });
+
+        var result = await _controller.AddAlternateTitle(1, request);
+
+        Assert.IsType<OkObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task DeleteAlternateTitle_ReturnsNotFound_WhenAlternateTitleMissing()
+    {
+        SetupAdminUser();
+        _mockGameService.Setup(s => s.GetGameByIdAsync(1)).ReturnsAsync(new GameDto { Id = 1, Title = "Game" });
+        _mockGameService.Setup(s => s.DeleteAlternateTitleAsync(1, 999)).ReturnsAsync(false);
+
+        var result = await _controller.DeleteAlternateTitle(1, 999);
+
+        Assert.IsType<NotFoundObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task DeleteAlternateTitle_ReturnsOk_WhenDeleted()
+    {
+        SetupAdminUser();
+        _mockGameService.Setup(s => s.GetGameByIdAsync(1)).ReturnsAsync(new GameDto { Id = 1, Title = "Game" });
+        _mockGameService.Setup(s => s.DeleteAlternateTitleAsync(1, 2)).ReturnsAsync(true);
+
+        var result = await _controller.DeleteAlternateTitle(1, 2);
+
+        Assert.IsType<OkObjectResult>(result);
     }
 
     // ============================================================================

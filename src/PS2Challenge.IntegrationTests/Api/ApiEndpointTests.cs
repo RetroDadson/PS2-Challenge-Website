@@ -11,11 +11,9 @@ public class GamesApiIntegrationTests : IClassFixture<CustomWebApplicationFactor
 {
     private readonly HttpClient _client;
     private readonly HttpClient _adminClient;
-    private readonly CustomWebApplicationFactory _factory;
 
     public GamesApiIntegrationTests(CustomWebApplicationFactory factory)
     {
-        _factory = factory;
         _client = factory.CreateClient();
         _adminClient = factory.CreateAuthenticatedClient("Admin");
     }
@@ -134,11 +132,9 @@ public class VotesApiIntegrationTests : IClassFixture<CustomWebApplicationFactor
 {
     private readonly HttpClient _client;
     private readonly HttpClient _adminClient;
-    private readonly CustomWebApplicationFactory _factory;
 
     public VotesApiIntegrationTests(CustomWebApplicationFactory factory)
     {
-        _factory = factory;
         _client = factory.CreateClient();
         _adminClient = factory.CreateAuthenticatedClient("Admin");
     }
@@ -150,7 +146,7 @@ public class VotesApiIntegrationTests : IClassFixture<CustomWebApplicationFactor
         var response = await _client.GetAsync("/api/votes/history");
 
         // Assert
-        response.EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
     [Fact]
@@ -160,7 +156,7 @@ public class VotesApiIntegrationTests : IClassFixture<CustomWebApplicationFactor
         var response = await _client.GetAsync("/api/votes/current");
 
         // Assert
-        response.EnsureSuccessStatusCode();
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
     [Fact]
@@ -205,6 +201,92 @@ public class VotesApiIntegrationTests : IClassFixture<CustomWebApplicationFactor
         var response = await _adminClient.PostAsJsonAsync("/api/votes/current", voteData);
 
         // Assert
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task SetCurrentVotes_WithUnknownTitle_ReturnsBadRequest()
+    {
+        var voteData = new List<object>
+        {
+            new { gameTitle = "Definitely Not A Real Game", voteCount = 10, gameNumber = 1 }
+        };
+
+        var response = await _adminClient.PostAsJsonAsync("/api/votes/current", voteData);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task UploadHistory_WithDuplicateTitlesInRound_ReturnsBadRequest()
+    {
+        var uploadData = new List<object>
+        {
+            new
+            {
+                voteRound = 10,
+                notes = "Duplicate titles",
+                votes = new[]
+                {
+                    new { gameTitle = "Grand Theft Auto: San Andreas", count = 10, position = 1 },
+                    new { gameTitle = "Grand Theft Auto: San Andreas", count = 8, position = 2 },
+                    new { gameTitle = "Final Fantasy X", count = 7, position = 3 }
+                }
+            }
+        };
+
+        var response = await _adminClient.PostAsJsonAsync("/api/votes/upload", uploadData);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task UploadHistory_WithInvalidPosition_ReturnsBadRequest()
+    {
+        var uploadData = new List<object>
+        {
+            new
+            {
+                voteRound = 11,
+                votes = new[]
+                {
+                    new { gameTitle = "Grand Theft Auto: San Andreas", count = 10, position = 4 },
+                    new { gameTitle = "Final Fantasy X", count = 8, position = 2 },
+                    new { gameTitle = "Kingdom Hearts", count = 7, position = 3 }
+                }
+            }
+        };
+
+        var response = await _adminClient.PostAsJsonAsync("/api/votes/upload", uploadData);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task UpdateVoteByGameNumber_WithInvalidGameNumber_ReturnsBadRequest()
+    {
+        var request = new { gameNumber = 0, voteCount = 5 };
+
+        var response = await _adminClient.PutAsJsonAsync("/api/votes/current/by-game-number", request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task UpdateVoteByGameNumber_WithNegativeVoteCount_ReturnsBadRequest()
+    {
+        var request = new { gameNumber = 1, voteCount = -1 };
+
+        var response = await _adminClient.PutAsJsonAsync("/api/votes/current/by-game-number", request);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task FillCurrentVotesWithRandom_WithZeroCount_ReturnsBadRequest()
+    {
+        var response = await _adminClient.PostAsJsonAsync("/api/votes/current/fill-random", new { count = 0 });
+
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 }
@@ -258,6 +340,18 @@ public class AuthApiIntegrationTests : IClassFixture<CustomWebApplicationFactory
         Assert.NotNull(response.Headers.Location);
         Assert.Equal("/", response.Headers.Location.ToString());
     }
+
+    [Fact]
+    public async Task Logout_WithAbsoluteReturnUrl_RedirectsToPathAndQuery()
+    {
+        var encoded = Uri.EscapeDataString("https://example.com/votes/history?round=3");
+
+        var response = await _client.GetAsync($"/api/auth/logout?returnUrl={encoded}");
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.NotNull(response.Headers.Location);
+        Assert.Equal("/votes/history?round=3", response.Headers.Location!.ToString());
+    }
 }
 
 /// <summary>
@@ -267,11 +361,13 @@ public class AdminApiIntegrationTests : IClassFixture<CustomWebApplicationFactor
 {
     private readonly HttpClient _client;
     private readonly HttpClient _adminClient;
+    private readonly HttpClient _userClient;
 
     public AdminApiIntegrationTests(CustomWebApplicationFactory factory)
     {
         _client = factory.CreateClient();
         _adminClient = factory.CreateAuthenticatedClient("Admin");
+        _userClient = factory.CreateAuthenticatedClient("User");
     }
 
     [Fact]
@@ -316,5 +412,47 @@ public class AdminApiIntegrationTests : IClassFixture<CustomWebApplicationFactor
         response.EnsureSuccessStatusCode();
         var roles = await response.Content.ReadFromJsonAsync<List<Role>>();
         Assert.NotNull(roles);
+    }
+
+    [Fact]
+    public async Task GetAllUsers_WithUserAuth_ReturnsForbidden()
+    {
+        var response = await _userClient.GetAsync("/api/admin/users");
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task UpdateUserRole_WithoutAuth_ReturnsUnauthorized()
+    {
+        var response = await _client.PutAsJsonAsync("/api/admin/users/2/role", new { roleId = 1 });
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task UpdateUserRole_WithInvalidRole_ReturnsBadRequest()
+    {
+        var response = await _adminClient.PutAsJsonAsync("/api/admin/users/2/role", new { roleId = 999 });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task UpdateUserRole_WithUnknownUser_ReturnsNotFound()
+    {
+        var response = await _adminClient.PutAsJsonAsync("/api/admin/users/9999/role", new { roleId = 1 });
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task UpdateUserRole_WithValidData_ReturnsOk()
+    {
+        var response = await _adminClient.PutAsJsonAsync("/api/admin/users/2/role", new { roleId = 1 });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.Contains("updated", body, StringComparison.OrdinalIgnoreCase);
     }
 }
