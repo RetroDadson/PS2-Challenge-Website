@@ -35,6 +35,7 @@ builder.WebHost.ConfigureKestrel(options =>
 
 // Load and validate environment configuration (skip validation in testing)
 EnvironmentConfig envConfig = EnvironmentConfig.Instance;
+envConfig.Initialize(builder.Configuration);
 
 if (!isTesting)
 {
