@@ -8,6 +8,8 @@ namespace PS2Challenge.Backend.Helpers;
 /// </summary>
 public static class TitleMatchingHelper
 {
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromMilliseconds(250);
+
     /// <summary>
     /// Normalizes a title by removing special characters and converting to lowercase.
     /// This creates a normalized version suitable for fuzzy matching.
@@ -24,10 +26,10 @@ public static class TitleMatchingHelper
 
         // Remove common special characters, but keep spaces
         // This handles cases like "Grand Theft Auto: San Andreas" -> "grand theft auto san andreas"
-        normalized = Regex.Replace(normalized, @"[^\w\s]", " ");
+        normalized = Regex.Replace(normalized, @"[^\w\s]", " ", RegexOptions.None, RegexTimeout);
 
         // Replace multiple spaces with single space
-        normalized = Regex.Replace(normalized, @"\s+", " ");
+        normalized = Regex.Replace(normalized, @"\s+", " ", RegexOptions.None, RegexTimeout);
 
         // Trim
         return normalized.Trim();

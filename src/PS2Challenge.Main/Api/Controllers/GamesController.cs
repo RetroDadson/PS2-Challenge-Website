@@ -778,7 +778,9 @@ public class GamesController : ControllerBase
                 // Message format: "Serial number 'XXX' already exists for game ID Y ('Title')"
                 var match = System.Text.RegularExpressions.Regex.Match(
                     ex.Message,
-                    @"game ID (\d+) \('([^']+)'\)");
+                    @"game ID (\d+) \('([^']+)'\)",
+                    System.Text.RegularExpressions.RegexOptions.None,
+                    TimeSpan.FromMilliseconds(250));
 
                 if (match.Success && int.TryParse(match.Groups[1].Value, out var existingGameId))
                 {

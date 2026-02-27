@@ -10,8 +10,8 @@ COPY ["src/PS2Challenge.Backend/PS2Challenge.Backend.csproj", "src/PS2Challenge.
 # Restore dependencies
 RUN dotnet restore "src/PS2Challenge.Main/PS2Challenge.Main.csproj"
 
-# Copy all source files
-COPY . .
+# Copy source files
+COPY src/ ./src/
 
 # Build and publish the application
 WORKDIR "/src/src/PS2Challenge.Main"

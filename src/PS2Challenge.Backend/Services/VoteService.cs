@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using PS2Challenge.Backend.Data;
 using PS2Challenge.Backend.Models;
+using System.Security.Cryptography;
 
 namespace PS2Challenge.Backend.Services;
 
@@ -410,9 +411,14 @@ public class VoteService
         }
 
         // Randomly select games
-        var random = new Random();
-        var selectedGameIds = eligibleGameIds
-            .OrderBy(x => random.Next())
+        var shuffledGameIds = eligibleGameIds.ToList();
+        for (var i = shuffledGameIds.Count - 1; i > 0; i--)
+        {
+            var j = RandomNumberGenerator.GetInt32(i + 1);
+            (shuffledGameIds[i], shuffledGameIds[j]) = (shuffledGameIds[j], shuffledGameIds[i]);
+        }
+
+        var selectedGameIds = shuffledGameIds
             .Take(gamesToAdd)
             .ToList();
 
