@@ -115,7 +115,7 @@ jobs:
           fi
 
       - name: Publish ${{ matrix.suite }} test results
-        uses: dorny/test-reporter@v1
+        uses: dorny/test-reporter@d3cb5605561a46347256b466ef836b85076ad522 # v2.5.0
         if: always()
         with:
           name: ${{ matrix.suite }} tests
@@ -139,7 +139,7 @@ jobs:
           name: .net-app
 
       - name: Login to Azure
-        uses: azure/login@v2
+        uses: azure/login@1384c340ab2dda50fed2bee3041d1d87018aa5e8 # v2
         with:
           client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_30B7FC53F3174B04A2793DE2BC7D0F35 }}
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_96A01072E1974D40A7C1E976C9CEB756 }}
@@ -147,7 +147,7 @@ jobs:
 
       - name: Deploy to Azure Web App
         id: deploy-to-webapp
-        uses: azure/webapps-deploy@v3
+        uses: azure/webapps-deploy@2e64e04aaaeeec4396edcb982544dbd30f8e9ddf # v3
         with:
           app-name: 'retrodadsonchallenge'
           slot-name: 'Production'
