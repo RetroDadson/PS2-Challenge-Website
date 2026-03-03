@@ -566,7 +566,7 @@ h1:has(> [style*="background"]) {
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
-    z-index: 10000 !important;
+    z-index: 50000 !important;
     padding: 1rem !important;
     overflow-y: auto !important;
 }
@@ -581,6 +581,7 @@ h1:has(> [style*="background"]) {
     overflow-y: auto !important;
     box-shadow: 0 10px 40px rgba(233, 30, 99, 0.5) !important;
     position: relative !important;
+    z-index: 50001 !important;
     margin: auto !important;
     border: 1px solid var(--border-color) !important;
 }
