@@ -110,10 +110,37 @@
 
 .games-table {
     width: 100%;
-    table-layout: fixed;
+    table-layout: auto;
     border-collapse: separate;
     border-spacing: 0;
-    min-width: 1400px;
+    min-width: 1250px;
+}
+
+.games-table thead th:nth-child(1),
+.games-table tbody td:nth-child(1),
+.games-table thead th:nth-child(2),
+.games-table tbody td:nth-child(2),
+.games-table thead th:nth-child(5),
+.games-table tbody td:nth-child(5),
+.games-table thead th:nth-child(6),
+.games-table tbody td:nth-child(6),
+.games-table thead th:nth-child(7),
+.games-table tbody td:nth-child(7),
+.games-table thead th:nth-child(8),
+.games-table tbody td:nth-child(8),
+.games-table thead th:nth-child(11),
+.games-table tbody td:nth-child(11) {
+    white-space: nowrap;
+}
+
+.games-table thead th:nth-child(10),
+.games-table tbody td:nth-child(10) {
+    min-width: 260px;
+}
+
+.games-table thead th:nth-child(9),
+.games-table tbody td:nth-child(9) {
+    min-width: 180px;
 }
 
 .games-table thead {
@@ -310,7 +337,7 @@
 
     .games-table {
         font-size: 0.85rem;
-        min-width: 600px;
+        min-width: 1100px;
     }
 
     .games-table thead th,

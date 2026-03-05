@@ -198,10 +198,26 @@
 
 .games-table {
     width: 100%;
-    table-layout: fixed;
+    table-layout: auto;
     border-collapse: separate;
     border-spacing: 0;
-    min-width: 1600px;
+    min-width: 1350px;
+}
+
+.games-table thead th:nth-last-child(-n+5),
+.games-table tbody td:nth-last-child(-n+5) {
+    white-space: nowrap;
+}
+
+.games-table thead th:nth-last-child(4),
+.games-table tbody td:nth-last-child(4),
+.games-table thead th:nth-last-child(3),
+.games-table tbody td:nth-last-child(3),
+.games-table thead th:nth-last-child(2),
+.games-table tbody td:nth-last-child(2),
+.games-table thead th:nth-last-child(1),
+.games-table tbody td:nth-last-child(1) {
+    min-width: 110px;
 }
 
 .games-table thead {
@@ -412,7 +428,7 @@
 
     .games-table {
         font-size: 0.85rem;
-        min-width: 600px;
+        min-width: 1200px;
     }
 
     .games-table thead th,
