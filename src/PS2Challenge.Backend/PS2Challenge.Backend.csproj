@@ -20,6 +20,7 @@
 
   <!-- Exclude IBM.Data.Db2 transitive dependency since we only use PostgreSQL -->
   <ItemGroup>
+    <PackageReference Include="FluentMigrator.Runner.Postgres" Version="8.0.1" />
     <PackageReference Include="Net.IBM.Data.Db2" Version="9.0.0.300">
       <ExcludeAssets>all</ExcludeAssets>
     </PackageReference>
