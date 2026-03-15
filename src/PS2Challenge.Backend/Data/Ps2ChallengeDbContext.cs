@@ -176,6 +176,8 @@ public class Ps2ChallengeDbContext : DbContext
             entity.Property(e => e.GameId).HasColumnName(GameIdColumn);
             entity.Property(e => e.VoteCount).HasColumnName("vote_count");
             entity.Property(e => e.GameNumber).HasColumnName("game_number");
+            entity.HasIndex(e => e.GameId).IsUnique().HasDatabaseName("idx_current_vote_game_id_unique");
+            entity.HasIndex(e => e.GameNumber).IsUnique().HasDatabaseName("idx_current_vote_game_number_unique");
         });
     }
 }

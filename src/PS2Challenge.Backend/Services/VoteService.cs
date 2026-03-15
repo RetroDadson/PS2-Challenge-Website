@@ -1,8 +1,10 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using PS2Challenge.Backend.Data;
 using PS2Challenge.Backend.Models;
 using System.Security.Cryptography;
+using System.Data;
 
 namespace PS2Challenge.Backend.Services;
 
@@ -25,6 +27,7 @@ public class VoteService
     {
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
+        await using var transaction = await BeginSerializableTransactionAsync(db);
 
         // Get all current votes
         var currentVotes = await db.CurrentVotes.ToListAsync();
@@ -67,6 +70,11 @@ public class VoteService
         db.CurrentVotes.RemoveRange(currentVotes);
 
         await db.SaveChangesAsync();
+
+        if (transaction != null)
+        {
+            await transaction.CommitAsync();
+        }
 
         return (nextRound, historyEntries.Count);
     }
@@ -141,27 +149,24 @@ public class VoteService
             throw new InvalidOperationException($"Some game titles were not found: {string.Join(", ", missing)}");
         }
 
-        var gameIds = titleToId.Values.Distinct().ToList();
+        var resolvedVotes = ResolveValidVotes(votes, titleToId);
+        ValidateResolvedVotes(resolvedVotes);
 
-        // Load existing current votes for the relevant game ids
+        // Load existing current votes so slot validation accounts for unchanged rows.
         var existingDict = await db.CurrentVotes
-            .Where(cv => gameIds.Contains(cv.GameId))
             .ToDictionaryAsync(cv => cv.GameId, cv => cv);
+
+        ValidateProjectedGameNumbers(existingDict, resolvedVotes);
 
         var insertedCount = 0;
         var updatedCount = 0;
         var toInsert = new List<CurrentVote>();
 
-        foreach (var v in votes)
+        foreach (var resolvedVote in resolvedVotes)
         {
-            if (!TryResolveGameId(v, titleToId, out var gameId))
-            {
-                continue;
-            }
-
             ApplyCurrentVote(
-                v,
-                gameId,
+                resolvedVote.Vote,
+                resolvedVote.GameId,
                 existingDict,
                 toInsert,
                 ref insertedCount,
@@ -246,6 +251,62 @@ public class VoteService
             && titleToId.TryGetValue(rawTitle, out gameId);
     }
 
+    private static List<ResolvedCurrentVote> ResolveValidVotes(List<CurrentVoteDto> votes, Dictionary<string, int> titleToId)
+    {
+        var resolvedVotes = new List<ResolvedCurrentVote>();
+
+        foreach (var vote in votes)
+        {
+            if (!TryResolveGameId(vote, titleToId, out var gameId))
+            {
+                continue;
+            }
+
+            resolvedVotes.Add(new ResolvedCurrentVote(vote, gameId));
+        }
+
+        return resolvedVotes;
+    }
+
+    private static void ValidateResolvedVotes(List<ResolvedCurrentVote> resolvedVotes)
+    {
+        var duplicateTitles = resolvedVotes
+            .GroupBy(v => v.GameId)
+            .Where(group => group.Count() > 1)
+            .Select(group => group.First().Vote.GameTitle?.Trim() ?? string.Empty)
+            .Where(title => !string.IsNullOrWhiteSpace(title))
+            .ToList();
+
+        if (duplicateTitles.Any())
+        {
+            throw new ArgumentException($"Duplicate game titles are not allowed: {string.Join(", ", duplicateTitles)}");
+        }
+    }
+
+    private static void ValidateProjectedGameNumbers(
+        Dictionary<int, CurrentVote> existingDict,
+        List<ResolvedCurrentVote> resolvedVotes)
+    {
+        var projectedGameNumbers = existingDict.ToDictionary(entry => entry.Key, entry => entry.Value.GameNumber);
+
+        foreach (var resolvedVote in resolvedVotes)
+        {
+            projectedGameNumbers[resolvedVote.GameId] = resolvedVote.Vote.GameNumber;
+        }
+
+        var duplicateGameNumbers = projectedGameNumbers
+            .GroupBy(entry => entry.Value)
+            .Where(group => group.Count() > 1)
+            .Select(group => group.Key)
+            .OrderBy(gameNumber => gameNumber)
+            .ToList();
+
+        if (duplicateGameNumbers.Any())
+        {
+            throw new ArgumentException($"Current votes must use unique game numbers. Duplicate positions: {string.Join(", ", duplicateGameNumbers)}");
+        }
+    }
+
     private static void ApplyCurrentVote(
         CurrentVoteDto vote,
         int gameId,
@@ -275,6 +336,18 @@ public class VoteService
         });
         insertedCount++;
     }
+
+    private static async Task<IDbContextTransaction?> BeginSerializableTransactionAsync(Ps2ChallengeDbContext db)
+    {
+        if (!db.Database.IsRelational())
+        {
+            return null;
+        }
+
+        return await db.Database.BeginTransactionAsync(IsolationLevel.Serializable);
+    }
+
+    private sealed record ResolvedCurrentVote(CurrentVoteDto Vote, int GameId);
 
     /// <summary>
     /// Gets vote history grouped by round
