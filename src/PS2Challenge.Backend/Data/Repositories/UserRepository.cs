@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using PS2Challenge.Backend.Models;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace PS2Challenge.Backend.Data.Repositories;
 
@@ -125,6 +127,8 @@ public class UserRepository
             throw new InvalidOperationException("Default 'User' role not found in database");
         }
 
+        var rawApiKey = GenerateSecureApiKey();
+
         var user = new ApplicationUser
         {
             TwitchId = twitchId,
@@ -132,7 +136,7 @@ public class UserRepository
             RoleId = userRole.Id,
             CreatedAt = DateTime.UtcNow,
             LastLoginAt = DateTime.UtcNow,
-            ApiKey = GenerateSecureApiKey()
+            ApiKey = HashApiKey(rawApiKey)
         };
 
         dbContext.Users.Add(user);
@@ -171,10 +175,11 @@ public class UserRepository
             throw new InvalidOperationException($"User with ID {userId} not found");
         }
 
-        user.ApiKey = GenerateSecureApiKey();
+        var rawApiKey = GenerateSecureApiKey();
+        user.ApiKey = HashApiKey(rawApiKey);
         await dbContext.SaveChangesAsync();
 
-        return user.ApiKey;
+        return rawApiKey;
     }
 
     /// <summary>
@@ -185,9 +190,11 @@ public class UserRepository
         using var scope = _scopeFactory.CreateScope();
         var dbContext = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
 
+        var hashedApiKey = HashApiKey(apiKey);
+
         return await dbContext.Users
             .Include(u => u.Role)
-            .FirstOrDefaultAsync(u => u.ApiKey == apiKey);
+            .FirstOrDefaultAsync(u => u.ApiKey == hashedApiKey);
     }
 
     /// <summary>
@@ -196,8 +203,19 @@ public class UserRepository
     private static string GenerateSecureApiKey()
     {
         var bytes = new byte[32]; // 32 bytes = 64 hex characters
-        using var rng = System.Security.Cryptography.RandomNumberGenerator.Create();
-        rng.GetBytes(bytes);
+        RandomNumberGenerator.Fill(bytes);
         return Convert.ToHexString(bytes).ToLowerInvariant();
+    }
+
+    private static string HashApiKey(string apiKey)
+    {
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            throw new ArgumentException("API key is required", nameof(apiKey));
+        }
+
+        var bytes = Encoding.UTF8.GetBytes(apiKey.Trim());
+        var hash = SHA256.HashData(bytes);
+        return Convert.ToHexString(hash).ToLowerInvariant();
     }
 }
