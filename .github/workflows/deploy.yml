@@ -1,0 +1,41 @@
+name: CI Deploy
+
+on:
+  workflow_run:
+    workflows:
+      - CI Build and Test
+    types:
+      - completed
+
+jobs:
+  deploy:
+    if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Download publish artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: .net-app
+          path: ./publish
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Login to Azure
+        uses: azure/login@1384c340ab2dda50fed2bee3041d1d87018aa5e8 # v2
+        with:
+          client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_30B7FC53F3174B04A2793DE2BC7D0F35 }}
+          tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_96A01072E1974D40A7C1E976C9CEB756 }}
+          subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_EF4C4F434B07428E812445CDFC335E13 }}
+
+      - name: Deploy to Azure Web App
+        id: deploy-to-webapp
+        uses: azure/webapps-deploy@2e64e04aaaeeec4396edcb982544dbd30f8e9ddf # v3
+        with:
+          app-name: 'retrodadsonchallenge'
+          slot-name: 'Production'
+          package: ./publish
