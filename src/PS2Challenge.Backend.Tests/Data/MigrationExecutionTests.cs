@@ -2,6 +2,8 @@ using FluentMigrator.Runner;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using PS2Challenge.Backend.Data;
+using System.Security.Cryptography;
+using System.Text;
 using Testcontainers.PostgreSql;
 
 namespace PS2Challenge.Backend.Tests.Data;
@@ -116,7 +118,7 @@ public class MigrationExecutionTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task PostgresSpecificMigrations_CreateConstraints_AndGenerateApiKeys()
+    public async Task PostgresSpecificMigrations_CreateConstraints_HashApiKeys_AndEnforceCurrentVoteUniqueness()
     {
         await RunInIsolatedDatabaseAsync(async connectionString =>
         {
@@ -136,11 +138,25 @@ public class MigrationExecutionTests : IAsyncLifetime
 
             MigrateUp(connectionString, 9);
 
+            string generatedApiKey;
+
+            await using (var postApiKeyMigrationConnection = new NpgsqlConnection(connectionString))
+            {
+                await postApiKeyMigrationConnection.OpenAsync();
+                generatedApiKey = await ExecuteScalarAsync<string>(
+                    postApiKeyMigrationConnection,
+                    "SELECT api_key FROM users WHERE twitch_id = 'tw-api-1';");
+            }
+
+            MigrateUp(connectionString, 13);
+
             await using var migratedConnection = new NpgsqlConnection(connectionString);
             await migratedConnection.OpenAsync();
 
             Assert.True(await ColumnExistsAsync(migratedConnection, "users", "api_key"));
             Assert.True(await IndexExistsAsync(migratedConnection, "idx_users_api_key"));
+            Assert.True(await IndexExistsAsync(migratedConnection, "idx_current_vote_game_id_unique"));
+            Assert.True(await IndexExistsAsync(migratedConnection, "idx_current_vote_game_number_unique"));
 
             var apiKey = await ExecuteScalarAsync<string>(
                 migratedConnection,
@@ -148,7 +164,16 @@ public class MigrationExecutionTests : IAsyncLifetime
 
             Assert.False(string.IsNullOrWhiteSpace(apiKey));
             Assert.Equal(64, apiKey.Length);
+            Assert.NotEqual(generatedApiKey, apiKey);
+            Assert.Equal(HashApiKey(generatedApiKey), apiKey);
         });
+    }
+
+    private static string HashApiKey(string apiKey)
+    {
+        var bytes = Encoding.UTF8.GetBytes(apiKey);
+        var hash = SHA256.HashData(bytes);
+        return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
     [Fact]

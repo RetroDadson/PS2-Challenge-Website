@@ -116,6 +116,44 @@ public class VoteServiceTests
     }
 
     [Fact]
+    public async Task SetCurrentVotesAsync_ThrowsWhenDuplicateGameTitlesProvided()
+    {
+        _context.Games.Add(new GameDto { Id = 1, Title = "Game One", Developer = "D", Publisher = "P", RegionFirstReleasedIn = "NA" });
+        await _context.SaveChangesAsync();
+
+        var payload = new List<CurrentVoteDto>
+        {
+            new() { GameTitle = "Game One", VoteCount = 7, GameNumber = 1 },
+            new() { GameTitle = "game one", VoteCount = 5, GameNumber = 2 }
+        };
+
+        var exception = await Assert.ThrowsAsync<ArgumentException>(() => _voteService.SetCurrentVotesAsync(payload));
+
+        Assert.Contains("Duplicate game titles", exception.Message);
+    }
+
+    [Fact]
+    public async Task SetCurrentVotesAsync_ThrowsWhenProjectedGameNumbersCollide()
+    {
+        _context.Games.AddRange(
+            new GameDto { Id = 1, Title = "Game One", Developer = "D", Publisher = "P", RegionFirstReleasedIn = "NA" },
+            new GameDto { Id = 2, Title = "Game Two", Developer = "D", Publisher = "P", RegionFirstReleasedIn = "NA" });
+        _context.CurrentVotes.AddRange(
+            new CurrentVote { GameId = 1, VoteCount = 5, GameNumber = 1 },
+            new CurrentVote { GameId = 2, VoteCount = 3, GameNumber = 2 });
+        await _context.SaveChangesAsync();
+
+        var payload = new List<CurrentVoteDto>
+        {
+            new() { GameTitle = "Game One", VoteCount = 7, GameNumber = 2 }
+        };
+
+        var exception = await Assert.ThrowsAsync<ArgumentException>(() => _voteService.SetCurrentVotesAsync(payload));
+
+        Assert.Contains("unique game numbers", exception.Message);
+    }
+
+    [Fact]
     public async Task RemoveCurrentVoteAsync_RemovesVote_ByCaseInsensitiveTitle()
     {
         _context.Games.Add(new GameDto { Id = 1, Title = "God of War", Developer = "D", Publisher = "P", RegionFirstReleasedIn = "NA" });

@@ -6,6 +6,7 @@ using PS2Challenge.Backend.Models;
 using PS2Challenge.Backend.Models.Api;
 using PS2Challenge.Backend.Services;
 using System.Security.Claims;
+using System.Text.Json;
 
 namespace PS2Challenge.Main.Tests.Controllers;
 
@@ -107,6 +108,9 @@ public class GamesControllerTests
         // Assert
         var statusResult = Assert.IsType<ObjectResult>(result);
         Assert.Equal(500, statusResult.StatusCode);
+        var json = JsonSerializer.Serialize(statusResult.Value);
+        Assert.DoesNotContain("Database error", json);
+        Assert.Contains("Internal server error", json);
     }
 
     [Fact]
@@ -486,7 +490,7 @@ public class GamesControllerTests
         var result = await _controller.DeleteGame(1);
 
         // Assert
-        var okResult = Assert.IsType<OkObjectResult>(result);
+        Assert.IsType<OkObjectResult>(result);
     }
 
     [Fact]

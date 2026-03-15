@@ -3,6 +3,7 @@ using Moq;
 using PS2Challenge.Api.Api.Controllers;
 using PS2Challenge.Backend.Data.Repositories;
 using PS2Challenge.Backend.Models;
+using System.Text.Json;
 using System.Security.Claims;
 
 namespace PS2Challenge.Main.Tests.Controllers;
@@ -123,6 +124,42 @@ public class AdminControllerTests
         _userRepository.Verify(r => r.UpdateAsync(It.Is<ApplicationUser>(u => u.Id == 5 && u.RoleId == 1)), Times.Once);
     }
 
+    [Fact]
+    public async Task UpdateUserRole_ReturnsBadRequest_WhenCookieAuthenticatedAdminTriesToSelfDemoteWithoutUserIdClaim()
+    {
+        _userRepository.Setup(r => r.GetByIdAsync(1)).ReturnsAsync(new ApplicationUser
+        {
+            Id = 1,
+            TwitchId = "tw-admin",
+            TwitchUsername = "admin-user",
+            RoleId = 1,
+            Role = new Role { Id = 1, Name = "Admin" }
+        });
+        _userRepository.Setup(r => r.GetRoleByIdAsync(2)).ReturnsAsync(new Role { Id = 2, Name = "User" });
+        _userRepository.Setup(r => r.GetRoleByNameAsync("Admin")).ReturnsAsync(new Role { Id = 1, Name = "Admin" });
+        SetupCookieAdminUser("tw-admin", "admin-user");
+
+        var result = await _controller.UpdateUserRole(1, new AdminController.UpdateRoleRequest { RoleId = 2 });
+
+        Assert.IsType<BadRequestObjectResult>(result);
+    }
+
+    [Fact]
+    public async Task GetAllUsers_ReturnsGeneric500Payload_WhenRepositoryThrows()
+    {
+        _userRepository.Setup(r => r.GetAllUsersAsync()).ThrowsAsync(new InvalidOperationException("Sensitive failure details"));
+
+        var result = await _controller.GetAllUsers();
+
+        var objectResult = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(500, objectResult.StatusCode);
+
+        var json = JsonSerializer.Serialize(objectResult.Value);
+        Assert.Contains("Internal server error", json);
+        Assert.DoesNotContain("Sensitive failure details", json);
+        Assert.DoesNotContain("stackTrace", json, StringComparison.OrdinalIgnoreCase);
+    }
+
     private void SetupAdminUser(string userId, string username)
     {
         var claims = new List<Claim>
@@ -137,6 +174,24 @@ public class AdminControllerTests
             HttpContext = new DefaultHttpContext
             {
                 User = new ClaimsPrincipal(new ClaimsIdentity(claims, "Test"))
+            }
+        };
+    }
+
+    private void SetupCookieAdminUser(string twitchId, string username)
+    {
+        var claims = new List<Claim>
+        {
+            new(ClaimTypes.NameIdentifier, twitchId),
+            new(ClaimTypes.Name, username),
+            new(ClaimTypes.Role, "Admin")
+        };
+
+        _controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext
+            {
+                User = new ClaimsPrincipal(new ClaimsIdentity(claims, "TestCookie"))
             }
         };
     }

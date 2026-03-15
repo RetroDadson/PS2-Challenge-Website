@@ -2,6 +2,8 @@ using PS2Challenge.Backend.Data;
 using PS2Challenge.Backend.Data.Repositories;
 using PS2Challenge.Backend.Models;
 using PS2Challenge.Backend.Tests.Helpers;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace PS2Challenge.Backend.Tests.Repositories;
 
@@ -283,5 +285,49 @@ public sealed class UserRepositoryTests : IDisposable
         Assert.NotNull(result);
         Assert.NotNull(result.Role);
         Assert.Equal("Admin", result.Role.Name);
+    }
+
+    [Fact]
+    public async Task GenerateApiKeyAsync_ReturnsRawKey_AndStoresHash()
+    {
+        var user = new ApplicationUserBuilder().Build();
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        var rawApiKey = await _userRepository.GenerateApiKeyAsync(user.Id);
+
+        Assert.False(string.IsNullOrWhiteSpace(rawApiKey));
+        Assert.Equal(64, rawApiKey.Length);
+
+        var updatedUser = await _context.Users.FindAsync(user.Id);
+        Assert.NotNull(updatedUser);
+        Assert.NotEqual(rawApiKey, updatedUser!.ApiKey);
+        Assert.Equal(HashApiKey(rawApiKey), updatedUser.ApiKey);
+    }
+
+    [Fact]
+    public async Task GetByApiKeyAsync_ResolvesUser_FromRawKeyAgainstStoredHash()
+    {
+        var rawApiKey = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+        var role = new Role { Id = 1, Name = "Admin" };
+        _context.Roles.Add(role);
+        var user = new ApplicationUserBuilder()
+            .WithRole(role)
+            .Build();
+        user.ApiKey = HashApiKey(rawApiKey);
+        _context.Users.Add(user);
+        await _context.SaveChangesAsync();
+
+        var result = await _userRepository.GetByApiKeyAsync(rawApiKey);
+
+        Assert.NotNull(result);
+        Assert.Equal("Admin", result!.Role?.Name);
+    }
+
+    private static string HashApiKey(string apiKey)
+    {
+        var bytes = Encoding.UTF8.GetBytes(apiKey);
+        var hash = SHA256.HashData(bytes);
+        return Convert.ToHexString(hash).ToLowerInvariant();
     }
 }
