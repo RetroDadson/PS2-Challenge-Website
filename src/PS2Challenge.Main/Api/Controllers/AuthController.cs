@@ -14,6 +14,8 @@ namespace PS2Challenge.Api.Api.Controllers;
 [Route("api/[controller]")]
 public class AuthController : ControllerBase
 {
+    private const string InternalServerErrorMessage = "Internal server error";
+
     private readonly UserRepository _userRepository;
 
     public AuthController(UserRepository userRepository)
@@ -163,9 +165,9 @@ public class AuthController : ControllerBase
 
             return Ok(profile);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            return StatusCode(500, new { message = "Error retrieving user profile", error = ex.Message });
+            return StatusCode(StatusCodes.Status500InternalServerError, new { message = InternalServerErrorMessage });
         }
     }
 }

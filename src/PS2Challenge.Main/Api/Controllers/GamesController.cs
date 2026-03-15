@@ -28,6 +28,12 @@ public class GamesController : ControllerBase
         _logger = logger;
     }
 
+    private ObjectResult InternalServerError(Exception exception, string message, params object[] args)
+    {
+        _logger.LogError(exception, message, args);
+        return StatusCode(StatusCodes.Status500InternalServerError, new { message = InternalServerErrorMessage });
+    }
+
     // ============================================================================
     // PUBLIC/ANONYMOUS ENDPOINTS
     // ============================================================================
@@ -76,8 +82,7 @@ public class GamesController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting ownership types");
-            return StatusCode(500, new { message = InternalServerErrorMessage, error = ex.Message });
+            return InternalServerError(ex, "Error getting ownership types");
         }
     }
 
@@ -122,8 +127,7 @@ public class GamesController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting game by ID {GameId}", id);
-            return StatusCode(500, new { message = InternalServerErrorMessage, error = ex.Message });
+            return InternalServerError(ex, "Error getting game by ID {GameId}", id);
         }
     }
 
@@ -245,8 +249,7 @@ public class GamesController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error updating game {GameId}", id);
-            return StatusCode(500, new { message = InternalServerErrorMessage, error = ex.Message });
+            return InternalServerError(ex, "Error updating game {GameId}", id);
         }
     }
 
@@ -295,8 +298,7 @@ public class GamesController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error deleting game {GameId}", id);
-            return StatusCode(500, new { message = InternalServerErrorMessage, error = ex.Message });
+            return InternalServerError(ex, "Error deleting game {GameId}", id);
         }
     }
 
@@ -435,8 +437,7 @@ public class GamesController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error updating exclusion for game {GameId}", id);
-            return StatusCode(500, new { message = InternalServerErrorMessage, error = ex.Message });
+            return InternalServerError(ex, "Error updating exclusion for game {GameId}", id);
         }
     }
 
@@ -576,8 +577,7 @@ public class GamesController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error updating ownership for game {GameId}", id);
-            return StatusCode(500, new { message = InternalServerErrorMessage, error = ex.Message });
+            return InternalServerError(ex, "Error updating ownership for game {GameId}", id);
         }
     }
 
@@ -755,8 +755,7 @@ public class GamesController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error adding serial number for game '{GameTitle}'", request.Title);
-            return StatusCode(500, new { message = InternalServerErrorMessage, error = ex.Message });
+            return InternalServerError(ex, "Error adding serial number for game '{GameTitle}'", request.Title);
         }
     }
 
@@ -791,8 +790,7 @@ public class GamesController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting alternate titles for game {GameId}", id);
-            return StatusCode(500, new { message = InternalServerErrorMessage, error = ex.Message });
+            return InternalServerError(ex, "Error getting alternate titles for game {GameId}", id);
         }
     }
 
@@ -893,13 +891,11 @@ public class GamesController : ControllerBase
             }
 
             // Otherwise it's a different error (shouldn't happen as we check game existence above)
-            _logger.LogError(ex, "Error adding alternate title for game {GameId}", id);
-            return StatusCode(500, new { message = InternalServerErrorMessage, error = ex.Message });
+            return InternalServerError(ex, "Error adding alternate title for game {GameId}", id);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error adding alternate title for game {GameId}", id);
-            return StatusCode(500, new { message = InternalServerErrorMessage, error = ex.Message });
+            return InternalServerError(ex, "Error adding alternate title for game {GameId}", id);
         }
     }
 
@@ -946,8 +942,7 @@ public class GamesController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error deleting alternate title {AlternateTitleId} for game {GameId}", alternateTitleId, id);
-            return StatusCode(500, new { message = InternalServerErrorMessage, error = ex.Message });
+            return InternalServerError(ex, "Error deleting alternate title {AlternateTitleId} for game {GameId}", alternateTitleId, id);
         }
     }
 

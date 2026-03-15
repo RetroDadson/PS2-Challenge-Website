@@ -272,6 +272,7 @@ internal static class ProgramStartup
             return;
         }
 
+        identity.AddClaim(new Claim("UserId", user.Id.ToString(CultureInfo.InvariantCulture)));
         identity.AddClaim(new Claim(ClaimTypes.Role, user.Role?.Name ?? "User"));
 
         var profileImageUrl = TryGetProfileImageUrl(context.User);
