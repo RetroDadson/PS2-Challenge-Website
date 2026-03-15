@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PS2Challenge.Backend.Data.Repositories;
+using PS2Challenge.Backend.Models;
 using System.Security.Claims;
 
 namespace PS2Challenge.Api.Api.Controllers;
@@ -13,6 +14,8 @@ namespace PS2Challenge.Api.Api.Controllers;
 [Authorize(Policy = "AdminCookieOrApiKey")]
 public class AdminController : ControllerBase
 {
+    private const string InternalServerErrorMessage = "Internal server error";
+
     private readonly UserRepository _userRepository;
     private readonly ILogger<AdminController> _logger;
 
@@ -60,8 +63,7 @@ public class AdminController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error in GetAllUsers");
-            return StatusCode(500, new { message = "Internal server error", error = ex.Message, stackTrace = ex.StackTrace });
+            return InternalServerError(ex, "Error in GetAllUsers");
         }
     }
 
@@ -98,8 +100,7 @@ public class AdminController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error in GetAllRoles");
-            return StatusCode(500, new { message = "Internal server error", error = ex.Message });
+            return InternalServerError(ex, "Error in GetAllRoles");
         }
     }
 
@@ -129,6 +130,7 @@ public class AdminController : ControllerBase
     public async Task<IActionResult> UpdateUserRole(int userId, [FromBody] UpdateRoleRequest request)
     {
         var currentUserId = User.FindFirst("UserId")?.Value;
+        var currentTwitchId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         var adminUsername = User.FindFirst(ClaimTypes.Name)?.Value;
 
         var user = await _userRepository.GetByIdAsync(userId);
@@ -155,7 +157,7 @@ public class AdminController : ControllerBase
             return StatusCode(500, new { message = "Configuration error: Admin role is missing" });
         }
 
-        if (currentUserId == userId.ToString() &&
+        if (IsSelfRoleChangeAttempt(currentUserId, currentTwitchId, userId, user) &&
             user.RoleId == adminRole.Id &&
             request.RoleId != adminRole.Id)
         {
@@ -190,5 +192,22 @@ public class AdminController : ControllerBase
         /// The ID of the role to assign to the user
         /// </summary>
         public int RoleId { get; set; }
+    }
+
+    private ObjectResult InternalServerError(Exception exception, string message)
+    {
+        _logger.LogError(exception, "{Message}", message);
+        return StatusCode(StatusCodes.Status500InternalServerError, new { message = InternalServerErrorMessage });
+    }
+
+    private static bool IsSelfRoleChangeAttempt(string? currentUserId, string? currentTwitchId, int targetUserId, ApplicationUser targetUser)
+    {
+        if (currentUserId == targetUserId.ToString())
+        {
+            return true;
+        }
+
+        return !string.IsNullOrWhiteSpace(currentTwitchId)
+            && string.Equals(currentTwitchId, targetUser.TwitchId, StringComparison.Ordinal);
     }
 }

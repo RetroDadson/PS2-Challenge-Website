@@ -18,6 +18,7 @@ namespace PS2Challenge.Api.Api.Controllers;
 [Route("api/[controller]")]
 public class VotesController : ControllerBase
 {
+    private const string InternalServerErrorMessage = "Internal server error";
     private const string VotesUpdatedEvent = "VotesUpdated";
 
     private readonly IServiceScopeFactory _scopeFactory;
@@ -47,9 +48,9 @@ public class VotesController : ControllerBase
             var result = await _voteService.GetVoteHistoryAsync();
             return Ok(result);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            return StatusCode(500, new { message = $"Error retrieving vote history: {ex.Message}" });
+            return StatusCode(StatusCodes.Status500InternalServerError, new { message = InternalServerErrorMessage });
         }
     }
 
@@ -184,9 +185,9 @@ public class VotesController : ControllerBase
             var result = await _voteService.GetCurrentVotesAsync();
             return Ok(result);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            return StatusCode(500, new { message = $"Error retrieving current votes: {ex.Message}" });
+            return StatusCode(StatusCodes.Status500InternalServerError, new { message = InternalServerErrorMessage });
         }
     }
 
@@ -242,9 +243,9 @@ public class VotesController : ControllerBase
         {
             return BadRequest(new { message = ex.Message });
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            return StatusCode(500, new { message = $"Error setting current votes: {ex.Message}" });
+            return StatusCode(StatusCodes.Status500InternalServerError, new { message = InternalServerErrorMessage });
         }
     }
 
@@ -291,9 +292,9 @@ public class VotesController : ControllerBase
         {
             return BadRequest(new { message = ex.Message });
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            return StatusCode(500, new { message = $"Error removing vote: {ex.Message}" });
+            return StatusCode(StatusCodes.Status500InternalServerError, new { message = InternalServerErrorMessage });
         }
     }
 
@@ -339,9 +340,9 @@ public class VotesController : ControllerBase
         {
             return BadRequest(new { message = ex.Message });
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            return StatusCode(500, new { message = $"Error archiving votes: {ex.Message}" });
+            return StatusCode(StatusCodes.Status500InternalServerError, new { message = InternalServerErrorMessage });
         }
     }
 
@@ -427,9 +428,9 @@ public class VotesController : ControllerBase
                 voteCount = currentVote.VoteCount
             });
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            return StatusCode(500, new { message = $"Error updating vote count: {ex.Message}" });
+            return StatusCode(StatusCodes.Status500InternalServerError, new { message = InternalServerErrorMessage });
         }
     }
 
@@ -601,9 +602,9 @@ public class VotesController : ControllerBase
                 addedGames = response
             });
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            return StatusCode(500, new { message = $"Error filling current votes: {ex.Message}" });
+            return StatusCode(StatusCodes.Status500InternalServerError, new { message = InternalServerErrorMessage });
         }
     }
 
