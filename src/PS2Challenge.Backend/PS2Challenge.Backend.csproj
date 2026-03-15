@@ -7,7 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="FluentMigrator.Runner" Version="7.2.0" />
+    <PackageReference Include="FluentMigrator.Runner" Version="8.0.1" />
     <PackageReference Include="Npgsql" Version="10.0.1" />
   </ItemGroup>
 
