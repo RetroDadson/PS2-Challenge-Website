@@ -1,4 +1,6 @@
 using FluentMigrator;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace PS2Challenge.Backend.Data.Migrations;
 
@@ -13,13 +15,49 @@ public class HashApiKeysAndEnforceCurrentVoteUniqueness : Migration
 
     public override void Up()
     {
-        Execute.Sql("CREATE EXTENSION IF NOT EXISTS pgcrypto;");
+        Execute.WithConnection((connection, transaction) =>
+        {
+            using var selectCommand = connection.CreateCommand();
+            selectCommand.Transaction = transaction;
+            selectCommand.CommandText = $@"
+                SELECT id, {ApiKeyColumn}
+                FROM {UsersTable}
+                WHERE {ApiKeyColumn} IS NOT NULL;
+            ";
 
-        Execute.Sql($@"
-            UPDATE {UsersTable}
-            SET {ApiKeyColumn} = encode(digest({ApiKeyColumn}::text, 'sha256'::text), 'hex')
-            WHERE {ApiKeyColumn} IS NOT NULL;
-        ");
+            var apiKeysToUpdate = new List<(int UserId, string ApiKey)>();
+
+            using (var reader = selectCommand.ExecuteReader())
+            {
+                while (reader.Read())
+                {
+                    apiKeysToUpdate.Add((reader.GetInt32(0), reader.GetString(1)));
+                }
+            }
+
+            foreach (var (userId, apiKey) in apiKeysToUpdate)
+            {
+                using var updateCommand = connection.CreateCommand();
+                updateCommand.Transaction = transaction;
+                updateCommand.CommandText = $@"
+                    UPDATE {UsersTable}
+                    SET {ApiKeyColumn} = @apiKey
+                    WHERE id = @userId;
+                ";
+
+                var apiKeyParameter = updateCommand.CreateParameter();
+                apiKeyParameter.ParameterName = "apiKey";
+                apiKeyParameter.Value = HashApiKey(apiKey);
+                updateCommand.Parameters.Add(apiKeyParameter);
+
+                var userIdParameter = updateCommand.CreateParameter();
+                userIdParameter.ParameterName = "userId";
+                userIdParameter.Value = userId;
+                updateCommand.Parameters.Add(userIdParameter);
+
+                updateCommand.ExecuteNonQuery();
+            }
+        });
 
         Create.Index(CurrentVoteGameIdIndex)
             .OnTable(CurrentVoteTable)
@@ -36,5 +74,12 @@ public class HashApiKeysAndEnforceCurrentVoteUniqueness : Migration
     {
         Delete.Index(CurrentVoteGameNumberIndex).OnTable(CurrentVoteTable);
         Delete.Index(CurrentVoteGameIdIndex).OnTable(CurrentVoteTable);
+    }
+
+    private static string HashApiKey(string apiKey)
+    {
+        var bytes = Encoding.UTF8.GetBytes(apiKey.Trim());
+        var hash = SHA256.HashData(bytes);
+        return Convert.ToHexString(hash).ToLowerInvariant();
     }
 }

@@ -143,10 +143,6 @@ public class MigrationExecutionTests : IAsyncLifetime
             await using (var postApiKeyMigrationConnection = new NpgsqlConnection(connectionString))
             {
                 await postApiKeyMigrationConnection.OpenAsync();
-                await ExecuteNonQueryAsync(
-                    postApiKeyMigrationConnection,
-                    "DROP EXTENSION IF EXISTS pgcrypto;");
-
                 generatedApiKey = await ExecuteScalarAsync<string>(
                     postApiKeyMigrationConnection,
                     "SELECT api_key FROM users WHERE twitch_id = 'tw-api-1';");
@@ -161,7 +157,6 @@ public class MigrationExecutionTests : IAsyncLifetime
             Assert.True(await IndexExistsAsync(migratedConnection, "idx_users_api_key"));
             Assert.True(await IndexExistsAsync(migratedConnection, "idx_current_vote_game_id_unique"));
             Assert.True(await IndexExistsAsync(migratedConnection, "idx_current_vote_game_number_unique"));
-            Assert.True(await ExtensionExistsAsync(migratedConnection, "pgcrypto"));
 
             var apiKey = await ExecuteScalarAsync<string>(
                 migratedConnection,
@@ -176,15 +171,9 @@ public class MigrationExecutionTests : IAsyncLifetime
 
     private static string HashApiKey(string apiKey)
     {
-        var bytes = Encoding.UTF8.GetBytes(apiKey);
+        var bytes = Encoding.UTF8.GetBytes(apiKey.Trim());
         var hash = SHA256.HashData(bytes);
         return Convert.ToHexString(hash).ToLowerInvariant();
-    }
-
-    private static async Task<bool> ExtensionExistsAsync(NpgsqlConnection connection, string extensionName)
-    {
-        const string sql = "SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = @extensionName);";
-        return await ExecuteScalarAsync<bool>(connection, sql, new NpgsqlParameter("extensionName", extensionName));
     }
 
     [Fact]
