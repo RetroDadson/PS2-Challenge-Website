@@ -1,4 +1,5 @@
 using FluentMigrator;
+using System.Security.Cryptography;
 
 namespace PS2Challenge.Backend.Data.Migrations;
 
@@ -11,19 +12,53 @@ public class AddApiKeyToUsers : Migration
 
     public override void Up()
     {
-        // Enable pgcrypto extension if not already enabled
-        Execute.Sql("CREATE EXTENSION IF NOT EXISTS pgcrypto;");
-
         // Add api_key column to users table
         Alter.Table(UsersTable)
             .AddColumn(ApiKeyColumn).AsString(64).Nullable().Unique();
 
-        // Generate unique API keys for existing users
-        Execute.Sql($@"
-            UPDATE {UsersTable}
-            SET {ApiKeyColumn} = encode(gen_random_bytes(32), 'hex')
-            WHERE {ApiKeyColumn} IS NULL;
-        ");
+        Execute.WithConnection((connection, transaction) =>
+        {
+            using var selectCommand = connection.CreateCommand();
+            selectCommand.Transaction = transaction;
+            selectCommand.CommandText = $@"
+                SELECT id
+                FROM {UsersTable}
+                WHERE {ApiKeyColumn} IS NULL;
+            ";
+
+            var userIds = new List<int>();
+
+            using (var reader = selectCommand.ExecuteReader())
+            {
+                while (reader.Read())
+                {
+                    userIds.Add(reader.GetInt32(0));
+                }
+            }
+
+            foreach (var userId in userIds)
+            {
+                using var updateCommand = connection.CreateCommand();
+                updateCommand.Transaction = transaction;
+                updateCommand.CommandText = $@"
+                    UPDATE {UsersTable}
+                    SET {ApiKeyColumn} = @apiKey
+                    WHERE id = @userId;
+                ";
+
+                var apiKeyParameter = updateCommand.CreateParameter();
+                apiKeyParameter.ParameterName = "apiKey";
+                apiKeyParameter.Value = GenerateSecureApiKey();
+                updateCommand.Parameters.Add(apiKeyParameter);
+
+                var userIdParameter = updateCommand.CreateParameter();
+                userIdParameter.ParameterName = "userId";
+                userIdParameter.Value = userId;
+                updateCommand.Parameters.Add(userIdParameter);
+
+                updateCommand.ExecuteNonQuery();
+            }
+        });
 
         // Make the column NOT NULL after populating existing records
         Alter.Column(ApiKeyColumn).OnTable(UsersTable).AsString(64).NotNullable();
@@ -42,7 +77,12 @@ public class AddApiKeyToUsers : Migration
 
         // Remove the api_key column
         Delete.Column(ApiKeyColumn).FromTable(UsersTable);
+    }
 
-        // Note: We don't drop the pgcrypto extension as other migrations or features might use it
+    private static string GenerateSecureApiKey()
+    {
+        var bytes = new byte[32];
+        RandomNumberGenerator.Fill(bytes);
+        return Convert.ToHexString(bytes).ToLowerInvariant();
     }
 }
