@@ -13,9 +13,11 @@ public class HashApiKeysAndEnforceCurrentVoteUniqueness : Migration
 
     public override void Up()
     {
+        Execute.Sql("CREATE EXTENSION IF NOT EXISTS pgcrypto;");
+
         Execute.Sql($@"
             UPDATE {UsersTable}
-            SET {ApiKeyColumn} = encode(digest({ApiKeyColumn}, 'sha256'), 'hex')
+            SET {ApiKeyColumn} = encode(digest({ApiKeyColumn}::text, 'sha256'::text), 'hex')
             WHERE {ApiKeyColumn} IS NOT NULL;
         ");
 
