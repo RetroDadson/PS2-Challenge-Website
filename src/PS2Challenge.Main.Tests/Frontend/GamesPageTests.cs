@@ -388,4 +388,72 @@ public class GamesPageTests : BunitContext
 
         Assert.Contains("Showing 1 of 2 games", cut.Markup);
     }
+
+    [Fact]
+    public async Task GamesPage_SearchByAlternateTitle_FiltersResultsCount()
+    {
+        var games = new List<GameDto>
+        {
+            new GameDto { Id = 1, Title = "Ratchet and Clank 2", Developer = "Insomniac", Publisher = "Sony", RegionFirstReleasedIn = "NA", IsOwned = true, IsExcluded = false },
+            new GameDto { Id = 2, Title = "Dark Cloud", Developer = "Level-5", Publisher = "Sony", RegionFirstReleasedIn = "JP", IsOwned = true, IsExcluded = false }
+        };
+
+        var alternateTitles = new Dictionary<int, List<AlternateTitle>>
+        {
+            [1] = new List<AlternateTitle> { new() { GameId = 1, Title = "Going Commando" } }
+        };
+
+        SetupGameServiceMock(games, alternateTitles: alternateTitles);
+
+        var cut = Render<Games>();
+        await Task.Delay(100);
+
+        var searchInput = cut.Find("input[placeholder*='Search games']");
+        await searchInput.InputAsync("Commando");
+
+        Assert.Contains("Showing 1 of 2 games", cut.Markup);
+    }
+
+    [Fact]
+    public async Task GamesPage_ShowOwnedOnly_FilterReducesVisibleResults()
+    {
+        var games = new List<GameDto>
+        {
+            new GameDto { Id = 1, Title = "Owned Game", Developer = "Dev", Publisher = "Pub", RegionFirstReleasedIn = "NA", IsOwned = true, IsExcluded = false },
+            new GameDto { Id = 2, Title = "Not Owned Game", Developer = "Dev", Publisher = "Pub", RegionFirstReleasedIn = "NA", IsOwned = false, IsExcluded = false }
+        };
+
+        SetupGameServiceMock(games);
+
+        var cut = Render<Games>();
+        await Task.Delay(100);
+        Assert.Contains("Showing 2 of 2 games", cut.Markup);
+
+        await cut.InvokeAsync(() => cut.Find("#showOwnedOnly").Change(true));
+
+        await cut.WaitForAssertionAsync(() => Assert.Contains("Showing 1 of 2 games", cut.Markup));
+    }
+
+    [Fact]
+    public async Task GamesPage_SortByDeveloper_ChangesDisplayedOrder()
+    {
+        var games = new List<GameDto>
+        {
+            new GameDto { Id = 1, Title = "Game A", Developer = "ZZZ Studio", Publisher = "Pub", RegionFirstReleasedIn = "NA", IsOwned = true, IsExcluded = false },
+            new GameDto { Id = 2, Title = "Game B", Developer = "AAA Studio", Publisher = "Pub", RegionFirstReleasedIn = "NA", IsOwned = true, IsExcluded = false }
+        };
+
+        SetupGameServiceMock(games);
+
+        var cut = Render<Games>();
+        await Task.Delay(100);
+
+        await cut.InvokeAsync(() => cut.FindAll("th").First(x => x.TextContent.Contains("Developer")).Click());
+
+        await cut.WaitForAssertionAsync(() =>
+        {
+            var firstRow = cut.Find("tbody tr");
+            Assert.Contains("Game B", firstRow.TextContent);
+        });
+    }
 }

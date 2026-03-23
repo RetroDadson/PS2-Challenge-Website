@@ -7,6 +7,7 @@ using PS2Challenge.Backend.Data;
 using PS2Challenge.Backend.Models;
 using PS2Challenge.Backend.Services;
 using PS2Challenge.Main.Api.Hubs;
+using System.Text.Json.Serialization;
 using System.Security.Cryptography;
 
 namespace PS2Challenge.Api.Api.Controllers;
@@ -684,11 +685,13 @@ public class UpdateVoteByGameNumberRequest
     /// <summary>
     /// Game position number (1, 2, or 3)
     /// </summary>
+    [JsonRequired]
     public int GameNumber { get; set; }
 
     /// <summary>
     /// New vote count (must be non-negative)
     /// </summary>
+    [JsonRequired]
     public int VoteCount { get; set; }
 }
 
@@ -700,5 +703,6 @@ public class FillRandomVotesRequest
     /// <summary>
     /// Number of random games to add (will be limited by available slots and eligible games)
     /// </summary>
+    [JsonRequired]
     public int Count { get; set; }
 }

@@ -1,4 +1,5 @@
 @page "/user"
+@using System.Globalization
 @using Microsoft.AspNetCore.Components.Authorization
 @using PS2Challenge.Api.Api.Models
 @using PS2Challenge.Backend.Data.Repositories
@@ -74,17 +75,17 @@
                     <div class="api-key-display">
                         @if (showApiKey)
                         {
-                            <input type="text" 
-                                   readonly 
-                                   value="@apiKey" 
+                            <input type="text"
+                                   readonly
+                                   value="@apiKey"
                                    class="api-key-input"
                                    id="apiKeyInput" />
                         }
                         else
                         {
-                            <input type="password" 
-                                   readonly 
-                                   value="@apiKey" 
+                            <input type="password"
+                                   readonly
+                                   value="@apiKey"
                                    class="api-key-input"
                                    id="apiKeyInput" />
                         }
@@ -176,10 +177,18 @@
                 profileImageUrl = user.FindFirst("ProfileImageUrl")?.Value;
                 twitchId = user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
 
-                if (DateTime.TryParse(user.FindFirst("CreatedAt")?.Value, out var created))
+                if (DateTime.TryParse(
+                    user.FindFirst("CreatedAt")?.Value,
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+                    out var created))
                     createdAt = created;
 
-                if (DateTime.TryParse(user.FindFirst("LastLoginAt")?.Value, out var lastLogin))
+                if (DateTime.TryParse(
+                    user.FindFirst("LastLoginAt")?.Value,
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+                    out var lastLogin))
                     lastLoginAt = lastLogin;
 
                 // Fetch full user data including API key from repository
@@ -224,7 +233,7 @@
                 await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", apiKey);
                 copied = true;
                 errorMessage = null;
-                
+
                 // Reset copied state after 2 seconds
                 await Task.Delay(2000);
                 copied = false;
@@ -268,7 +277,7 @@
         }
     }
 
-    private string GetRoleClass(string? role)
+    private static string GetRoleClass(string? role)
     {
         return role?.ToLower() switch
         {

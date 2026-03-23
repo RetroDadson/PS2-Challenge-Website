@@ -14,7 +14,7 @@
                 <h2>@(IsEditMode ? "Edit Game Progress" : "Add New Game Progress")</h2>
                 <button class="modal-close" @onclick="Close">&times;</button>
             </div>
-            
+
             <div class="modal-body">
                 <div class="form-container">
                     <div class="form-field">
@@ -185,26 +185,19 @@
     {
         if (string.IsNullOrWhiteSpace(internalGameTitle)) return;
 
-        // Clamp values
-        if (internalCompletionMinutes < 0) internalCompletionMinutes = 0;
-        if (internalCompletionMinutes > 59) internalCompletionMinutes = 59;
-        if (internalCompletionSeconds < 0) internalCompletionSeconds = 0;
-        if (internalCompletionSeconds > 59) internalCompletionSeconds = 59;
-        if (internalCompletionHours < 0) internalCompletionHours = 0;
+        ClampCompletionParts();
 
         var started = internalDateStarted ?? DateTime.Now.Date;
         DateOnly startedDateOnly = DateOnly.FromDateTime(started);
 
-        DateOnly? finishedDateOnly = null;
-        if (internalDateFinished.HasValue)
-        {
-            finishedDateOnly = DateOnly.FromDateTime(internalDateFinished.Value);
-        }
+        DateOnly? finishedDateOnly = internalDateFinished.HasValue
+            ? DateOnly.FromDateTime(internalDateFinished.Value)
+            : null;
 
         TimeSpan? completionTime = null;
         if (internalCompletionHours > 0 || internalCompletionMinutes > 0 || internalCompletionSeconds > 0)
         {
-            completionTime = TimeSpan.FromHours(internalCompletionHours) 
+            completionTime = TimeSpan.FromHours(internalCompletionHours)
                 + TimeSpan.FromMinutes(internalCompletionMinutes)
                 + TimeSpan.FromSeconds(internalCompletionSeconds);
         }
@@ -214,69 +207,17 @@
             using var scope = ScopeFactory.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
 
+            var game = await FindGameByTitleAsync(db);
+            if (game == null)
+            {
+                Console.WriteLine($"Game '{internalGameTitle}' not found");
+                return;
+            }
+
             if (IsEditMode && ProgressId.HasValue)
-            {
-                var existingProgress = await db.GameProgress
-                    .FirstOrDefaultAsync(gp => gp.ProgressId == ProgressId.Value);
-                
-                if (existingProgress != null)
-                {
-                    // Find the game by title in case it was changed
-                    var game = await db.Games
-                        .AsNoTracking()
-                        .FirstOrDefaultAsync(g => g.Title.ToLower() == internalGameTitle.Trim().ToLower());
-
-                    if (game == null)
-                    {
-                        Console.WriteLine($"Game '{internalGameTitle}' not found");
-                        return;
-                    }
-
-                    existingProgress.GameId = game.Id;
-                    existingProgress.DateStarted = startedDateOnly;
-                    existingProgress.DateFinished = finishedDateOnly;
-                    existingProgress.Platform = string.IsNullOrWhiteSpace(internalPlatform) ? "Physical" : internalPlatform;
-                    existingProgress.BeatenCriteria = string.IsNullOrWhiteSpace(internalBeatenCriteria) ? null : internalBeatenCriteria.Trim();
-                    existingProgress.Review = string.IsNullOrWhiteSpace(internalReview) ? null : internalReview.Trim();
-                    existingProgress.CompletionTime = completionTime;
-
-                    await db.SaveChangesAsync();
-                    Console.WriteLine($"Updated game progress for '{internalGameTitle}'");
-                    
-                    // Notify SignalR clients that game progress was updated
-                    await HubContext.Clients.All.SendAsync("GamesUpdated");
-                }
-            }
+                await UpdateExistingProgressAsync(db, game.Id, startedDateOnly, finishedDateOnly, completionTime);
             else
-            {
-                var game = await db.Games
-                    .AsNoTracking()
-                    .FirstOrDefaultAsync(g => g.Title.ToLower() == internalGameTitle.Trim().ToLower());
-
-                if (game == null)
-                {
-                    Console.WriteLine($"Game '{internalGameTitle}' not found");
-                    return;
-                }
-
-                var newProgress = new GameProgress
-                {
-                    GameId = game.Id,
-                    DateStarted = startedDateOnly,
-                    DateFinished = finishedDateOnly,
-                    Platform = string.IsNullOrWhiteSpace(internalPlatform) ? "Physical" : internalPlatform,
-                    BeatenCriteria = string.IsNullOrWhiteSpace(internalBeatenCriteria) ? null : internalBeatenCriteria.Trim(),
-                    Review = string.IsNullOrWhiteSpace(internalReview) ? null : internalReview.Trim(),
-                    CompletionTime = completionTime
-                };
-
-                db.GameProgress.Add(newProgress);
-                await db.SaveChangesAsync();
-                Console.WriteLine($"Added new game progress for '{internalGameTitle}'");
-                
-                // Notify SignalR clients that game progress was updated
-                await HubContext.Clients.All.SendAsync("GamesUpdated");
-            }
+                await CreateNewProgressAsync(db, game.Id, startedDateOnly, finishedDateOnly, completionTime);
 
             await OnSave.InvokeAsync();
         }
@@ -284,5 +225,72 @@
         {
             Console.WriteLine($"Error saving game progress: {ex.Message}");
         }
+    }
+
+    private void ClampCompletionParts()
+    {
+        if (internalCompletionMinutes < 0) internalCompletionMinutes = 0;
+        if (internalCompletionMinutes > 59) internalCompletionMinutes = 59;
+        if (internalCompletionSeconds < 0) internalCompletionSeconds = 0;
+        if (internalCompletionSeconds > 59) internalCompletionSeconds = 59;
+        if (internalCompletionHours < 0) internalCompletionHours = 0;
+    }
+
+    private async Task<GameDto?> FindGameByTitleAsync(Ps2ChallengeDbContext db)
+    {
+        var normalizedTitle = internalGameTitle.Trim();
+        return await db.Games
+            .AsNoTracking()
+            .FirstOrDefaultAsync(g => g.Title.Equals(normalizedTitle, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private async Task UpdateExistingProgressAsync(
+        Ps2ChallengeDbContext db,
+        int gameId,
+        DateOnly startedDateOnly,
+        DateOnly? finishedDateOnly,
+        TimeSpan? completionTime)
+    {
+        var existingProgress = await db.GameProgress
+            .FirstOrDefaultAsync(gp => gp.ProgressId == ProgressId!.Value);
+
+        if (existingProgress == null)
+            return;
+
+        existingProgress.GameId = gameId;
+        existingProgress.DateStarted = startedDateOnly;
+        existingProgress.DateFinished = finishedDateOnly;
+        existingProgress.Platform = string.IsNullOrWhiteSpace(internalPlatform) ? "Physical" : internalPlatform;
+        existingProgress.BeatenCriteria = string.IsNullOrWhiteSpace(internalBeatenCriteria) ? null : internalBeatenCriteria.Trim();
+        existingProgress.Review = string.IsNullOrWhiteSpace(internalReview) ? null : internalReview.Trim();
+        existingProgress.CompletionTime = completionTime;
+
+        await db.SaveChangesAsync();
+        Console.WriteLine($"Updated game progress for '{internalGameTitle}'");
+        await HubContext.Clients.All.SendAsync("GamesUpdated");
+    }
+
+    private async Task CreateNewProgressAsync(
+        Ps2ChallengeDbContext db,
+        int gameId,
+        DateOnly startedDateOnly,
+        DateOnly? finishedDateOnly,
+        TimeSpan? completionTime)
+    {
+        var newProgress = new GameProgress
+        {
+            GameId = gameId,
+            DateStarted = startedDateOnly,
+            DateFinished = finishedDateOnly,
+            Platform = string.IsNullOrWhiteSpace(internalPlatform) ? "Physical" : internalPlatform,
+            BeatenCriteria = string.IsNullOrWhiteSpace(internalBeatenCriteria) ? null : internalBeatenCriteria.Trim(),
+            Review = string.IsNullOrWhiteSpace(internalReview) ? null : internalReview.Trim(),
+            CompletionTime = completionTime
+        };
+
+        db.GameProgress.Add(newProgress);
+        await db.SaveChangesAsync();
+        Console.WriteLine($"Added new game progress for '{internalGameTitle}'");
+        await HubContext.Clients.All.SendAsync("GamesUpdated");
     }
 }

@@ -17,8 +17,8 @@
 
 <PageTitle>Vote History - Dadson's PS2 Tracker</PageTitle>
 
-<VoteArchiveModal IsVisible="showArchiveDialog" 
-                  OnClose="CloseArchiveDialog" 
+<VoteArchiveModal IsVisible="showArchiveDialog"
+                  OnClose="CloseArchiveDialog"
                   OnArchived="HandleArchived"
                   CurrentVotes="currentVotes" />
 
@@ -81,8 +81,8 @@
                                                 @if (!string.IsNullOrEmpty(coverUrl))
                                                 {
                                                     <div class="cover-wrapper">
-                                                        <img src="@coverUrl" 
-                                                             alt="@title cover" 
+                                                        <img src="@coverUrl"
+                                                             alt="@title cover"
                                                              class="game-cover"
                                                              loading="lazy"
                                                              onerror="this.style.display='none'" />
@@ -177,14 +177,14 @@
 
                     <input type="number" min="0" @bind="newCurrentCount" class="search-input" style="width:120px;padding:.5rem" />
                     <button class="cta-button" @onclick="AddCurrent">Add</button>
-                    
+
                     @if (currentVotes != null && currentVotes.Any())
                     {
                         <button class="cta-button" @onclick="ShowArchiveDialog" style="margin-left:1rem;background:linear-gradient(135deg,#ff9800 0%,#f57c00 100%);">
                             Archive to History
                         </button>
                     }
-                    
+
                     @if (currentVotes == null || currentVotes.Count < 3)
                     {
                         <button class="cta-button" @onclick="FillRandomGames" style="margin-left:1rem;background:linear-gradient(135deg,#9c27b0 0%,#7b1fa2 100%);">
@@ -296,7 +296,7 @@
 
     // archive dialog
     private bool showArchiveDialog = false;
-    
+
     // debouncing for auto-save
     private System.Threading.Timer? _debounceTimer;
     private readonly int _debounceMilliseconds = 800;
@@ -502,7 +502,7 @@
         });
         newCurrentTitle = string.Empty;
         newCurrentCount = 0;
-        
+
         // Auto-save the new entry
         await SaveCurrentVotesAsync();
     }
@@ -518,7 +518,7 @@
         if (item != null)
         {
             item.VoteCount = val;
-            
+
             // Debounce auto-save on input change
             DebounceAutoSave();
         }
@@ -528,7 +528,7 @@
     {
         // Cancel existing timer if any
         _debounceTimer?.Dispose();
-        
+
         // Create new timer that will trigger save after delay
         _debounceTimer = new System.Threading.Timer(async _ =>
         {
@@ -547,12 +547,12 @@
         try
         {
             var removed = await VoteService.RemoveCurrentVoteAsync(title);
-            
+
             if (removed)
             {
                 // Notify SignalR clients that votes were updated
                 await HubContext.Clients.All.SendAsync("VotesUpdated");
-                
+
                 Console.WriteLine($"Successfully removed vote for '{title}'");
             }
             else
@@ -678,8 +678,6 @@
         }
     }
 
-    private string GetSortIcon(string column) => sortColumn == column ? (sortAscending ? "▲" : "▼") : string.Empty;
-
     private async Task ToggleShowOnlyRoundsWithVotes(ChangeEventArgs e)
     {
         showOnlyRoundsWithVotes = e.Value is bool b && b;
@@ -700,21 +698,17 @@
     private async Task HandleArchived()
     {
         showArchiveDialog = false;
-        
+
         // Reload both current votes and history
         await LoadCurrentVotes();
         await LoadVoteHistory();
     }
 
-    public void Dispose()
-    {
-        _debounceTimer?.Dispose();
-    }
-
     public async ValueTask DisposeAsync()
     {
-        _debounceTimer?.Dispose();
-        
+        if (_debounceTimer != null)
+            await _debounceTimer.DisposeAsync();
+
         if (votesHubConnection != null)
         {
             try
@@ -740,22 +734,13 @@
         }
     }
 
-	// small user DTO for role check
-	private class UserInfo
-	{
-		public bool IsAuthenticated { get; set; }
-		public string? Username { get; set; }
-		public string? Role { get; set; }
-		public string? ProfileImageUrl { get; set; }
-	}
-
-	// Minimal shape used only to read titles from /api/games
-	private class GameTitleDto
-	{
-		public string? Title { get; set; }
-	}
-
-	private record PieSlice(string Path, string Color, string Label, int Value, double Percent);
+    private sealed record PieSlice(string Path, string Color, string Label, int Value, double Percent);
+    private string GetSortIcon(string column)
+    {
+        if (sortColumn != column)
+            return string.Empty;
+        return sortAscending ? "▲" : "▼";
+    }
 
 	private IEnumerable<PieSlice> PieSlices
 	{
@@ -783,10 +768,10 @@
 			{
 				var value = Math.Max(0, it.VoteCount);
 				if (value == 0) { idx++; continue; }
-				
+
 				var angle = (value / (double)total) * 360.0;
 				var endAngle = startAngle + angle;
-				
+
 				// Special case: if this is the only item with votes, draw a full circle
 				string path;
 				if (itemsWithVotes.Count == 1 && value == total)
@@ -797,7 +782,7 @@
 				{
 					path = SectorPath(startAngle, endAngle, 70);
 				}
-				
+
 				var color = colors[idx % colors.Length];
 				var percent = (value / (double)total) * 100.0;
 				slices.Add(new PieSlice(path, color, it.GameTitle, value, percent));
