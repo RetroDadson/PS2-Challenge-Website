@@ -22,7 +22,7 @@
                     This will move all current votes to the vote history with the next available round number.
                     The current votes will be cleared after archiving.
                 </p>
-                
+
                 @if (hasTies)
                 {
                     <div style="background:var(--background-secondary);padding:1rem;border-radius:4px;margin-bottom:1rem;">
@@ -30,7 +30,7 @@
                         <p style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:1rem;">
                             Multiple games have the same vote count. You can manually specify positions (1st, 2nd, 3rd) or leave them as ties.
                         </p>
-                        
+
                         @foreach (var vote in sortedCurrentVotes)
                         {
                             <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem;">
@@ -46,12 +46,12 @@
                         }
                     </div>
                 }
-                
+
                 <div class="form-field">
                     <label>Notes (optional)</label>
-                    <textarea @bind="internalNotes" 
-                              class="search-input" 
-                              rows="3" 
+                    <textarea @bind="internalNotes"
+                              class="search-input"
+                              rows="3"
                               placeholder="Add any notes about this voting round..."></textarea>
                 </div>
             </div>
@@ -83,7 +83,7 @@
     private bool hasTies = false;
     private List<CurrentVoteWithPosition> sortedCurrentVotes = new();
 
-    private class CurrentVoteWithPosition
+    private sealed class CurrentVoteWithPosition
     {
         public string GameTitle { get; set; } = string.Empty;
         public int VoteCount { get; set; }
@@ -104,30 +104,30 @@
     {
         hasTies = false;
         sortedCurrentVotes = new List<CurrentVoteWithPosition>();
-        
+
         if (CurrentVotes == null || !CurrentVotes.Any())
             return;
 
         var sorted = CurrentVotes.OrderByDescending(v => v.VoteCount).ToList();
-        
+
         // Check if there are any tied vote counts
         var voteCounts = sorted.Select(v => v.VoteCount).ToList();
         hasTies = voteCounts.Count != voteCounts.Distinct().Count();
-        
+
         if (hasTies)
         {
             // Get game IDs from the database
             using var scope = ScopeFactory.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
-            
+
             var titles = sorted.Select(v => v.GameTitle).ToList();
             var games = await db.Games
                 .AsNoTracking()
                 .Where(g => titles.Contains(g.Title))
                 .ToListAsync();
-            
+
             var titleToId = games.ToDictionary(g => g.Title, g => g.Id, StringComparer.OrdinalIgnoreCase);
-            
+
             sortedCurrentVotes = sorted.Select(v => new CurrentVoteWithPosition
             {
                 GameTitle = v.GameTitle,
@@ -159,7 +159,7 @@
         try
         {
             var notes = string.IsNullOrWhiteSpace(internalNotes) ? null : internalNotes.Trim();
-            
+
             // Build manual positions dictionary if specified
             Dictionary<int, int>? manualPositions = null;
             if (hasTies && sortedCurrentVotes.Any(v => !string.IsNullOrEmpty(v.ManualPosition)))
@@ -173,13 +173,13 @@
                     }
                 }
             }
-            
+
             var (roundNumber, archivedCount) = await VoteService.ArchiveCurrentVotesAsync(notes, manualPositions);
             Console.WriteLine($"Successfully archived {archivedCount} votes to round {roundNumber}");
-            
+
             // Notify SignalR clients that votes were updated
             await HubContext.Clients.All.SendAsync("VotesUpdated");
-            
+
             await OnArchived.InvokeAsync();
         }
         catch (Exception ex)

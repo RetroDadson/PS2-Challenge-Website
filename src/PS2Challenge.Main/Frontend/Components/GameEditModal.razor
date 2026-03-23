@@ -20,7 +20,7 @@
                 <h2>@(IsEditMode ? $"Edit Game: {Game?.Title}" : "Add New Game")</h2>
                 <button class="modal-close" @onclick="Close">&times;</button>
             </div>
-            
+
             <div class="modal-body">
                 @if (errorMessage != null)
                 {
@@ -93,7 +93,9 @@
                                                 <span class="serial-notes">@serial.Notes</span>
                                             }
                                         </div>
-                                        <button type="button" class="btn-icon btn-remove" @onclick="() => RemoveSerialNumber(serial)" title="Remove">×</button>
+                                        <button type="button" class="btn-icon btn-remove" @onclick="() => RemoveSerialNumber(serial)" title="Remove" aria-label="Remove">
+                                            <i class="fas fa-times" aria-hidden="true"></i>
+                                        </button>
                                     </div>
                                 }
                             </div>
@@ -147,7 +149,9 @@
                                                 <span class="alternate-notes">@title.Notes</span>
                                             }
                                         </div>
-                                        <button type="button" class="btn-icon btn-remove" @onclick="() => RemoveAlternateTitle(title)" title="Remove">×</button>
+                                        <button type="button" class="btn-icon btn-remove" @onclick="() => RemoveAlternateTitle(title)" title="Remove" aria-label="Remove">
+                                            <i class="fas fa-times" aria-hidden="true"></i>
+                                        </button>
                                     </div>
                                 }
                             </div>
@@ -188,9 +192,9 @@
                         {
                             <select @bind="internalTypeOwned" class="search-input" disabled="@(!internalOwnPhysicalCopy)">
                                 <option value="">-- Select Type --</option>
-                                @foreach (var type in ownershipTypes)
+                                @foreach (var ownedType in ownershipTypes.Select(type => type.TypeOwned))
                                 {
-                                    <option value="@type.TypeOwned">@type.TypeOwned</option>
+                                    <option value="@ownedType">@ownedType</option>
                                 }
                             </select>
                         }
@@ -276,12 +280,12 @@
     private string? errorMessage;
     private bool isProcessing;
     private bool isLoadingData;
-    
+
     // Track the last game ID to detect when we switch between games
     private int? lastGameId;
 
     // Internal class to track serial numbers (both existing and new)
-    private class SerialNumberEntry
+    private sealed class SerialNumberEntry
     {
         public int? SerialId { get; set; } // Null for new entries
         public required string SerialNumber { get; set; }
@@ -291,7 +295,7 @@
     }
 
     // Internal class to track alternate titles (both existing and new)
-    private class AlternateTitleEntry
+    private sealed class AlternateTitleEntry
     {
         public int? AlternateTitleId { get; set; } // Null for new entries
         public required string Title { get; set; }
@@ -327,76 +331,83 @@
             await LoadOwnershipTypes();
         }
 
-        // When modal becomes visible, always check if we need to reload data
-        if (IsVisible && Game != null)
-        {
-            // Detect if we're opening a different game or switching modes
-            var currentGameId = Game?.Id;
-            var gameChanged = currentGameId != lastGameId;
-            
-            // Reset state when switching between games, reopening, or opening for a new game
-            if (gameChanged || currentGameId == 0)
-            {
-                isLoadingData = true;
-                
-                // Always start fresh - reset all fields first
-                internalTitle = Game?.Title;
-                internalDeveloper = Game?.Developer;
-                internalPublisher = Game?.Publisher;
-                internalFirstReleased = Game?.FirstReleased?.ToDateTime(TimeOnly.MinValue);
-                internalRegion = Game?.RegionFirstReleasedIn;
-                internalReleasedInEuPalOrNa = Game?.ReleasedInEuPalOrNa ?? false;
-                internalIsExcluded = Game?.IsExcluded ?? false;
-                
-                // Always clear serial numbers and alternate titles and form for new games or when switching
-                serialNumbers.Clear();
-                alternateTitles.Clear();
-                ClearSerialNumberForm();
-                ClearAlternateTitleForm();
-                
-                // Reset ownership and exclusion to defaults
-                internalOwnPhysicalCopy = false;
-                internalTypeOwned = string.Empty;
-                internalExclusionReason = string.Empty;
-                
-                // Load all async data before setting up the UI state
-                if (IsEditMode && currentGameId > 0)
-                {
-                    // Load serial numbers, alternate titles, ownership, and exclusion in parallel
-                    var tasks = new List<Task>
-                    {
-                        LoadSerialNumbers(),
-                        LoadAlternateTitles(),
-                        LoadCurrentOwnership()
-                    };
-                    
-                    if (Game?.IsExcluded == true)
-                    {
-                        tasks.Add(LoadCurrentExclusion());
-                    }
+        if (IsVisible)
+            await HandleVisibleStateAsync();
+        else
+            lastGameId = null;
 
-                    await Task.WhenAll(tasks);
-                }
-                
-                isLoadingData = false;
-            }
-            
-            // Update lastGameId after processing
-            lastGameId = currentGameId;
-        }
-        else if (IsVisible && !IsEditMode && Game == null)
-        {
-            // Ensure clean state when opening for a new game with null Game object
-            ResetForm();
-            lastGameId = null;
-        }
-        else if (!IsVisible)
-        {
-            // Reset tracking when modal is closed
-            lastGameId = null;
-        }
-        
         errorMessage = null;
+    }
+
+    private async Task HandleVisibleStateAsync()
+    {
+        if (Game == null)
+        {
+            if (!IsEditMode)
+                ResetForm();
+
+            lastGameId = null;
+            return;
+        }
+
+        var currentGameId = Game.Id;
+        var gameChanged = currentGameId != lastGameId;
+
+        if (gameChanged || currentGameId == 0)
+            await ReloadGameStateAsync(currentGameId);
+
+        lastGameId = currentGameId;
+    }
+
+    private async Task ReloadGameStateAsync(int currentGameId)
+    {
+        isLoadingData = true;
+
+        InitializeFormFromGame();
+        ResetCollectionsAndForms();
+
+        internalOwnPhysicalCopy = false;
+        internalTypeOwned = string.Empty;
+        internalExclusionReason = string.Empty;
+
+        if (IsEditMode && currentGameId > 0)
+            await LoadEditModeDataAsync();
+
+        isLoadingData = false;
+    }
+
+    private void InitializeFormFromGame()
+    {
+        internalTitle = Game?.Title;
+        internalDeveloper = Game?.Developer;
+        internalPublisher = Game?.Publisher;
+        internalFirstReleased = Game?.FirstReleased?.ToDateTime(TimeOnly.MinValue);
+        internalRegion = Game?.RegionFirstReleasedIn;
+        internalReleasedInEuPalOrNa = Game?.ReleasedInEuPalOrNa ?? false;
+        internalIsExcluded = Game?.IsExcluded ?? false;
+    }
+
+    private void ResetCollectionsAndForms()
+    {
+        serialNumbers.Clear();
+        alternateTitles.Clear();
+        ClearSerialNumberForm();
+        ClearAlternateTitleForm();
+    }
+
+    private async Task LoadEditModeDataAsync()
+    {
+        var tasks = new List<Task>
+        {
+            LoadSerialNumbers(),
+            LoadAlternateTitles(),
+            LoadCurrentOwnership()
+        };
+
+        if (Game?.IsExcluded == true)
+            tasks.Add(LoadCurrentExclusion());
+
+        await Task.WhenAll(tasks);
     }
 
     private async Task LoadSerialNumbers()
@@ -405,12 +416,12 @@
         {
             using var scope = ScopeFactory.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
-            
+
             var existingSerials = await db.GameSerialNumbers
                 .AsNoTracking()
                 .Where(gsn => gsn.GameId == Game!.Id)
                 .ToListAsync();
-            
+
             serialNumbers = existingSerials.Select(s => new SerialNumberEntry
             {
                 SerialId = s.SerialId,
@@ -433,12 +444,12 @@
         {
             using var scope = ScopeFactory.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
-            
+
             var existingTitles = await db.AlternateTitles
                 .AsNoTracking()
                 .Where(at => at.GameId == Game!.Id)
                 .ToListAsync();
-            
+
             alternateTitles = existingTitles.Select(t => new AlternateTitleEntry
             {
                 AlternateTitleId = t.AlternateTitleId,
@@ -552,11 +563,11 @@
         {
             using var scope = ScopeFactory.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
-            
+
             var ownership = await db.GamesOwned
                 .AsNoTracking()
                 .FirstOrDefaultAsync(o => o.GameId == Game!.Id);
-            
+
             if (ownership != null)
             {
                 internalOwnPhysicalCopy = ownership.OwnPhysicalCopy;
@@ -575,11 +586,11 @@
         {
             using var scope = ScopeFactory.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
-            
+
             var exclusion = await db.ExcludedGames
                 .AsNoTracking()
                 .FirstOrDefaultAsync(e => e.GameId == Game!.Id);
-            
+
             if (exclusion != null)
             {
                 internalExclusionReason = exclusion.Reason;
@@ -631,89 +642,13 @@
     {
         errorMessage = null;
 
-        // Validation
-        if (string.IsNullOrWhiteSpace(internalTitle))
-        {
-            errorMessage = "Title is required";
+        if (!ValidateForm())
             return;
-        }
-        if (string.IsNullOrWhiteSpace(internalDeveloper))
-        {
-            errorMessage = "Developer is required";
-            return;
-        }
-        if (string.IsNullOrWhiteSpace(internalPublisher))
-        {
-            errorMessage = "Publisher is required";
-            return;
-        }
-        if (string.IsNullOrWhiteSpace(internalRegion))
-        {
-            errorMessage = "Region is required";
-            return;
-        }
-        if (internalIsExcluded && string.IsNullOrWhiteSpace(internalExclusionReason))
-        {
-            errorMessage = "Exclusion reason is required when excluding a game";
-            return;
-        }
 
         isProcessing = true;
         try
         {
-            using var scope = ScopeFactory.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
-
-            int gameId;
-
-            if (IsEditMode && Game != null && Game.Id > 0)
-            {
-                // Update existing game
-                var gameDto = new GameDto
-                {
-                    Id = Game.Id,
-                    Title = internalTitle.Trim(),
-                    Developer = internalDeveloper.Trim(),
-                    Publisher = internalPublisher.Trim(),
-                    FirstReleased = internalFirstReleased.HasValue ? DateOnly.FromDateTime(internalFirstReleased.Value) : null,
-                    RegionFirstReleasedIn = internalRegion.Trim(),
-                    ReleasedInEuPalOrNa = internalReleasedInEuPalOrNa
-                };
-
-                await GameService.UpdateGameAsync(Game.Id, gameDto);
-                gameId = Game.Id;
-
-                // Update ownership (service will determine if owned based on physical copy or type)
-                await GameService.UpdateOwnershipAsync(Game.Id, internalOwnPhysicalCopy, internalTypeOwned ?? string.Empty);
-
-                // Update exclusion - this might affect the total game count
-                await GameService.UpdateExclusionAsync(Game.Id, internalIsExcluded, internalExclusionReason);
-            }
-            else
-            {
-                // Create new game
-                var gameDto = new GameDto
-                {
-                    Title = internalTitle.Trim(),
-                    Developer = internalDeveloper.Trim(),
-                    Publisher = internalPublisher.Trim(),
-                    FirstReleased = internalFirstReleased.HasValue ? DateOnly.FromDateTime(internalFirstReleased.Value) : null,
-                    RegionFirstReleasedIn = internalRegion.Trim(),
-                    ReleasedInEuPalOrNa = internalReleasedInEuPalOrNa
-                };
-
-                var createdGame = await GameService.AddGameAsync(gameDto);
-                gameId = createdGame.Id;
-
-                // Set ownership (service will determine if owned based on physical copy or type)
-                await GameService.UpdateOwnershipAsync(createdGame.Id, internalOwnPhysicalCopy, internalTypeOwned ?? string.Empty);
-
-                // Set exclusion if needed
-                if (internalIsExcluded)
-                {
-                    await GameService.UpdateExclusionAsync(createdGame.Id, true, internalExclusionReason ?? "No reason provided");
-                }
-            }
+            var gameId = await SaveGameCoreAsync();
 
             // Handle serial numbers
             await SaveSerialNumbers(gameId);
@@ -735,6 +670,91 @@
         {
             isProcessing = false;
         }
+    }
+
+    private bool ValidateForm()
+    {
+        if (string.IsNullOrWhiteSpace(internalTitle))
+        {
+            errorMessage = "Title is required";
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(internalDeveloper))
+        {
+            errorMessage = "Developer is required";
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(internalPublisher))
+        {
+            errorMessage = "Publisher is required";
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(internalRegion))
+        {
+            errorMessage = "Region is required";
+            return false;
+        }
+
+        if (internalIsExcluded && string.IsNullOrWhiteSpace(internalExclusionReason))
+        {
+            errorMessage = "Exclusion reason is required when excluding a game";
+            return false;
+        }
+
+        return true;
+    }
+
+    private async Task<int> SaveGameCoreAsync()
+    {
+        if (IsEditMode && Game != null && Game.Id > 0)
+            return await UpdateExistingGameAsync();
+
+        return await CreateGameAsync();
+    }
+
+    private async Task<int> UpdateExistingGameAsync()
+    {
+        var gameDto = BuildGameDto(Game!.Id);
+
+        await GameService.UpdateGameAsync(Game.Id, gameDto);
+        await GameService.UpdateOwnershipAsync(Game.Id, internalOwnPhysicalCopy, internalTypeOwned ?? string.Empty);
+        await GameService.UpdateExclusionAsync(Game.Id, internalIsExcluded, internalExclusionReason);
+
+        return Game.Id;
+    }
+
+    private async Task<int> CreateGameAsync()
+    {
+        var gameDto = BuildGameDto();
+        var createdGame = await GameService.AddGameAsync(gameDto);
+
+        await GameService.UpdateOwnershipAsync(createdGame.Id, internalOwnPhysicalCopy, internalTypeOwned ?? string.Empty);
+
+        if (internalIsExcluded)
+            await GameService.UpdateExclusionAsync(createdGame.Id, true, internalExclusionReason ?? "No reason provided");
+
+        return createdGame.Id;
+    }
+
+    private GameDto BuildGameDto(int? id = null)
+    {
+        var gameDto = new GameDto
+        {
+            Title = internalTitle!.Trim(),
+            Developer = internalDeveloper!.Trim(),
+            Publisher = internalPublisher!.Trim(),
+            FirstReleased = internalFirstReleased.HasValue ? DateOnly.FromDateTime(internalFirstReleased.Value) : null,
+            RegionFirstReleasedIn = internalRegion!.Trim(),
+            ReleasedInEuPalOrNa = internalReleasedInEuPalOrNa
+        };
+
+        if (id.HasValue)
+            gameDto.Id = id.Value;
+
+        return gameDto;
     }
 
     private async Task SaveSerialNumbers(int gameId)
@@ -760,7 +780,7 @@
             // Check if serial number already exists in database
             var duplicate = await db.GameSerialNumbers
                 .FirstOrDefaultAsync(gsn => gsn.SerialNumber == serial.SerialNumber);
-            
+
             if (duplicate != null)
             {
                 var existingGame = await db.Games.FindAsync(duplicate.GameId);
@@ -815,7 +835,7 @@
     {
         if (Game == null || !IsEditMode) return;
 
-        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", 
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm",
             $"Are you sure you want to delete '{Game.Title}'? This will also remove all related data (ownership, exclusions, progress, serial numbers).");
 
         if (confirmed)
@@ -824,10 +844,10 @@
             try
             {
                 await GameService.DeleteGameAsync(Game.Id);
-                
+
                 // Notify SignalR clients that a game was deleted
                 await HubContext.Clients.All.SendAsync("GamesUpdated");
-                
+
                 await OnDelete.InvokeAsync(Game.Id);
             }
             catch (Exception ex)

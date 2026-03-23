@@ -1,7 +1,10 @@
+using System.Text.Json.Serialization;
+
 namespace PS2Challenge.Api.Api.Models;
 
 public class UploadRoundDto
 {
+    [JsonRequired]
     public int VoteRound { get; set; }
     public List<UploadGameVote> Votes { get; set; } = new();
     public string? Notes { get; set; }
@@ -10,7 +13,10 @@ public class UploadRoundDto
 public class UploadGameVote
 {
     public string? GameTitle { get; set; }
+
+    [JsonRequired]
     public int Count { get; set; }
+
     public int? Position { get; set; }  // 1 = first, 2 = second, 3 = third (optional for ties)
 }
 

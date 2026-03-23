@@ -4,6 +4,7 @@ using PS2Challenge.Api.Api.Models;
 using PS2Challenge.Backend.Models;
 using PS2Challenge.Backend.Models.Api;
 using PS2Challenge.Backend.Services;
+using System.Text.Json.Serialization;
 using System.Security.Claims;
 
 namespace PS2Challenge.Api.Api.Controllers;
@@ -1077,6 +1078,7 @@ public class GamesController : ControllerBase
         /// <summary>
         /// Whether the game should be excluded from the challenge
         /// </summary>
+        [JsonRequired]
         public bool IsExcluded { get; set; }
 
         /// <summary>
@@ -1093,6 +1095,7 @@ public class GamesController : ControllerBase
         /// <summary>
         /// Whether a physical copy of the game is owned
         /// </summary>
+        [JsonRequired]
         public bool OwnPhysicalCopy { get; set; }
 
         /// <summary>
