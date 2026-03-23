@@ -102,8 +102,9 @@ jobs:
         if: env.SONAR_TOKEN != ''
         shell: powershell
         run: |
-          ${{ runner.temp }}\scanner\dotnet-sonarscanner begin /k:"RobinDadswell_PS2-Challenge-Website" /o:"retrodadson" /d:sonar.host.url="https://sonarcloud.io" /d:sonar.token="${{ env.SONAR_TOKEN }}"
+          ${{ runner.temp }}\scanner\dotnet-sonarscanner begin /k:"RobinDadswell_PS2-Challenge-Website" /o:"retrodadson" /d:sonar.host.url="https://sonarcloud.io" /d:sonar.token="${{ env.SONAR_TOKEN }}" /d:sonar.cs.opencover.reportsPaths="**/coverage.opencover.xml"
           dotnet build src/PS2Challenge.sln --configuration Release
+          dotnet test src/PS2Challenge.Main.Tests/PS2Challenge.Main.Tests.csproj --configuration Release --no-build --collect:"XPlat Code Coverage;Format=opencover"
           ${{ runner.temp }}\scanner\dotnet-sonarscanner end /d:sonar.token="${{ env.SONAR_TOKEN }}"
 
       - name: Skip SonarQube (missing SONAR_TOKEN)

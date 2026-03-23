@@ -6,6 +6,7 @@ public class UpdateProgressRequest
 {
     public string Title { get; set; } = string.Empty;
 
+    [JsonRequired]
     [JsonConverter(typeof(FlexibleDateOnlyConverter))]
     public DateOnly DateStarted { get; set; }
 

@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PS2Challenge.Backend.Data.Repositories;
 using PS2Challenge.Backend.Models;
+using System.Text.Json.Serialization;
 using System.Security.Claims;
 
 namespace PS2Challenge.Api.Api.Controllers;
@@ -191,6 +192,7 @@ public class AdminController : ControllerBase
         /// <summary>
         /// The ID of the role to assign to the user
         /// </summary>
+        [JsonRequired]
         public int RoleId { get; set; }
     }
 

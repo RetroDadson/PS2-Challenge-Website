@@ -117,8 +117,8 @@
                                 @if (!string.IsNullOrEmpty(game.ImageUrl))
                                 {
                                     <div class="cover-wrapper">
-                                        <img src="@game.ImageUrl" 
-                                             alt="@game.Title cover" 
+                                        <img src="@game.ImageUrl"
+                                             alt="@game.Title cover"
                                              class="game-cover"
                                              loading="lazy"
                                              width="80"
@@ -196,7 +196,7 @@
         </div>
 </div>
 
-<GameEditModal 
+<GameEditModal
     IsVisible="@showModal"
     IsEditMode="@isEditMode"
     Game="@selectedGame"
@@ -246,7 +246,7 @@ private HubConnection? hubConnection;
     {
         // Load admin status first as it doesn't depend on other data
         await CheckAdminStatus();
-        
+
         // Load all games page data in a single optimized call
         await LoadAllData();
 
@@ -339,30 +339,12 @@ private HubConnection? hubConnection;
         // No need to call StateHasChanged() - Blazor does this automatically after event handlers
     }
 
-    private async Task LoadGames()
-    {
-        try
-        {
-            var result = await GameService.GetAllGamesAsync();
-            allGames = result?.ToList() ?? new List<GameDto>();
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error loading games: {ex.Message}");
-            allGames = new List<GameDto>();
-        }
-        finally
-        {
-            isLoading = false;
-        }
-    }
-
     private async Task LoadAllData()
     {
         try
         {
             var pageData = await GameService.GetGamesPageDataAsync();
-            
+
             if (pageData != null)
             {
                 allGames = pageData.Games ?? new List<GameDto>();
@@ -370,10 +352,10 @@ private HubConnection? hubConnection;
                 exclusionReasons = pageData.ExclusionReasons ?? new Dictionary<int, string>();
                 completionStatus = pageData.CompletionStatus ?? new Dictionary<int, string>();
                 alternateTitles = pageData.AlternateTitles ?? new Dictionary<int, List<AlternateTitle>>();
-                
+
                 // Pre-compute statistics once
                 ComputeStatistics();
-                
+
                 // Invalidate cache when data changes
                 _cachedFilteredGames = null;
             }
@@ -408,81 +390,18 @@ private HubConnection? hubConnection;
     private void ComputeStatistics()
     {
         _totalGames = allGames.Count;
-        _ownedCount = 0;
-        _excludedCount = 0;
+        _ownedCount = allGames.Count(g => g.IsOwned);
+        _excludedCount = allGames.Count(g => g.IsExcluded);
         _completedCount = 0;
         _inProgressCount = 0;
         _notStartedCount = 0;
 
-        foreach (var game in allGames)
+        foreach (var game in allGames.Where(g => !g.IsExcluded))
         {
-            if (game.IsOwned) _ownedCount++;
-            if (game.IsExcluded) _excludedCount++;
-
-            if (!game.IsExcluded)
-            {
-                if (completionStatus.TryGetValue(game.Id, out var status))
-                {
-                    if (status == "Completed")
-                        _completedCount++;
-                    else if (status == "In Progress")
-                        _inProgressCount++;
-                    else
-                        _notStartedCount++;
-                }
-                else
-                {
-                    _notStartedCount++;
-                }
-            }
-        }
-    }
-
-    private async Task LoadOwnedTypes()
-    {
-        try
-        {
-            ownedTypes = await GameService.GetOwnedTypesAsync();
-        }
-        catch
-        {
-            ownedTypes = new();
-        }
-    }
-
-    private async Task LoadExclusionReasons()
-    {
-        try
-        {
-            exclusionReasons = await GameService.GetExclusionReasonsAsync();
-        }
-        catch
-        {
-            exclusionReasons = new();
-        }
-    }
-
-    private async Task LoadCompletionStatus()
-    {
-        try
-        {
-            completionStatus = await GameService.GetCompletionStatusAsync();
-        }
-        catch
-        {
-            completionStatus = new();
-        }
-    }
-
-    private async Task LoadAlternateTitles()
-    {
-        try
-        {
-            alternateTitles = await GameService.GetAlternateTitlesAsync();
-        }
-        catch
-        {
-            alternateTitles = new();
+            var status = completionStatus.GetValueOrDefault(game.Id);
+            if (status == "Completed") _completedCount++;
+            else if (status == "In Progress") _inProgressCount++;
+            else _notStartedCount++;
         }
     }
 
@@ -561,117 +480,100 @@ private HubConnection? hubConnection;
 
     private IEnumerable<GameDto> FilteredGames
     {
-        get
-        {
-            // Check if cache is still valid
-            if (_cachedFilteredGames != null &&
-                _lastSearchQuery == searchQuery &&
-                _lastShowOwnedOnly == showOwnedOnly &&
-                _lastShowExcludedGames == showExcludedGames &&
-                _lastSortColumn == sortColumn &&
-                _lastSortAscending == sortAscending)
-            {
-                return _cachedFilteredGames;
-            }
-
-            // Cache is invalid, recalculate using optimized approach
-            var count = allGames.Count;
-            var results = new List<GameDto>(count);
-
-            // Fast path: no search query
-            if (string.IsNullOrWhiteSpace(searchQuery))
-            {
-                // Apply filters in a single pass
-                for (int i = 0; i < count; i++)
-                {
-                    var game = allGames[i];
-                    
-                    if (showOwnedOnly && !game.IsOwned) continue;
-                    if (!showExcludedGames && game.IsExcluded) continue;
-                    
-                    results.Add(game);
-                }
-            }
-            else
-            {
-                // Search path: filter with search query
-                var q = searchQuery.ToLowerInvariant();
-                
-                for (int i = 0; i < count; i++)
-                {
-                    var game = allGames[i];
-                    
-                    // Apply ownership and exclusion filters first (cheaper)
-                    if (showOwnedOnly && !game.IsOwned) continue;
-                    if (!showExcludedGames && game.IsExcluded) continue;
-                    
-                    // Then check search query
-                    bool matchesSearch = 
-                        (game.Title?.ToLowerInvariant().Contains(q) ?? false) ||
-                        (game.Developer?.ToLowerInvariant().Contains(q) ?? false) ||
-                        (game.Publisher?.ToLowerInvariant().Contains(q) ?? false);
-                    
-                    if (!matchesSearch && alternateTitles.TryGetValue(game.Id, out var titles))
-                    {
-                        foreach (var title in titles)
-                        {
-                            if (title.Title.ToLowerInvariant().Contains(q))
-                            {
-                                matchesSearch = true;
-                                break;
-                            }
-                        }
-                    }
-                    
-                    if (matchesSearch)
-                    {
-                        results.Add(game);
-                    }
-                }
-            }
-
-            // Sort the results
-            results = sortColumn switch
-            {
-                nameof(GameDto.Developer) => sortAscending 
-                    ? results.OrderBy(g => g.Developer).ToList()
-                    : results.OrderByDescending(g => g.Developer).ToList(),
-                nameof(GameDto.Publisher) => sortAscending 
-                    ? results.OrderBy(g => g.Publisher).ToList()
-                    : results.OrderByDescending(g => g.Publisher).ToList(),
-                nameof(GameDto.FirstReleased) => sortAscending 
-                    ? results.OrderBy(g => g.FirstReleased ?? DateOnly.MinValue).ToList()
-                    : results.OrderByDescending(g => g.FirstReleased ?? DateOnly.MinValue).ToList(),
-                nameof(GameDto.RegionFirstReleasedIn) => sortAscending 
-                    ? results.OrderBy(g => g.RegionFirstReleasedIn).ToList()
-                    : results.OrderByDescending(g => g.RegionFirstReleasedIn).ToList(),
-                "IsExcluded" => sortAscending 
-                    ? results.OrderBy(g => g.IsExcluded).ToList()
-                    : results.OrderByDescending(g => g.IsExcluded).ToList(),
-                "IsOwned" => sortAscending 
-                    ? results.OrderBy(g => g.IsOwned).ToList()
-                    : results.OrderByDescending(g => g.IsOwned).ToList(),
-                "CompletionStatus" => sortAscending 
-                    ? results.OrderBy(g => GetCompletionStatus(g.Id)).ToList()
-                    : results.OrderByDescending(g => GetCompletionStatus(g.Id)).ToList(),
-                _ => sortAscending 
-                    ? results.OrderBy(g => g.Title).ToList()
-                    : results.OrderByDescending(g => g.Title).ToList()
-            };
-
-            // Cache the result
-            _cachedFilteredGames = results;
-            _lastSearchQuery = searchQuery;
-            _lastShowOwnedOnly = showOwnedOnly;
-            _lastShowExcludedGames = showExcludedGames;
-            _lastSortColumn = sortColumn;
-            _lastSortAscending = sortAscending;
-
-            return _cachedFilteredGames;
-        }
+        get => ComputeFilteredGames();
     }
 
-    private string GetSortIcon(string column) => sortColumn == column ? (sortAscending ? "▲" : "▼") : string.Empty;
+    private IEnumerable<GameDto> ComputeFilteredGames()
+    {
+        if (_cachedFilteredGames != null &&
+            _lastSearchQuery == searchQuery &&
+            _lastShowOwnedOnly == showOwnedOnly &&
+            _lastShowExcludedGames == showExcludedGames &&
+            _lastSortColumn == sortColumn &&
+            _lastSortAscending == sortAscending)
+        {
+            return _cachedFilteredGames;
+        }
+
+        _cachedFilteredGames = SortGames(FilterGames());
+        _lastSearchQuery = searchQuery;
+        _lastShowOwnedOnly = showOwnedOnly;
+        _lastShowExcludedGames = showExcludedGames;
+        _lastSortColumn = sortColumn;
+        _lastSortAscending = sortAscending;
+
+        return _cachedFilteredGames;
+    }
+
+    private List<GameDto> FilterGames()
+    {
+        var count = allGames.Count;
+        var results = new List<GameDto>(count);
+        var searchLower = string.IsNullOrWhiteSpace(searchQuery) ? null : searchQuery.ToLowerInvariant();
+
+        for (int i = 0; i < count; i++)
+        {
+            var game = allGames[i];
+            if (showOwnedOnly && !game.IsOwned) continue;
+            if (!showExcludedGames && game.IsExcluded) continue;
+            if (searchLower != null && !GameMatchesSearch(game, searchLower)) continue;
+            results.Add(game);
+        }
+
+        return results;
+    }
+
+    private bool GameMatchesSearch(GameDto game, string searchLower)
+    {
+        bool matchesSearch =
+            (game.Title?.ToLowerInvariant().Contains(searchLower) ?? false) ||
+            (game.Developer?.ToLowerInvariant().Contains(searchLower) ?? false) ||
+            (game.Publisher?.ToLowerInvariant().Contains(searchLower) ?? false);
+
+        if (!matchesSearch && alternateTitles.TryGetValue(game.Id, out var titles))
+        {
+            foreach (var title in titles)
+            {
+                if (title.Title.ToLowerInvariant().Contains(searchLower))
+                {
+                    matchesSearch = true;
+                    break;
+                }
+            }
+        }
+
+        return matchesSearch;
+    }
+
+    private List<GameDto> SortGames(List<GameDto> results)
+    {
+        return sortColumn switch
+        {
+            nameof(GameDto.Developer) => ApplyOrder(results, g => g.Developer),
+            nameof(GameDto.Publisher) => ApplyOrder(results, g => g.Publisher),
+            nameof(GameDto.FirstReleased) => ApplyOrder(results, g => g.FirstReleased ?? DateOnly.MinValue),
+            nameof(GameDto.RegionFirstReleasedIn) => ApplyOrder(results, g => g.RegionFirstReleasedIn),
+            "IsExcluded" => ApplyOrder(results, g => g.IsExcluded),
+            "IsOwned" => ApplyOrder(results, g => g.IsOwned),
+            "CompletionStatus" => ApplyOrder(results, g => GetCompletionStatus(g.Id)),
+            _ => ApplyOrder(results, g => g.Title)
+        };
+    }
+
+    private List<T> ApplyOrder<T, TKey>(List<T> items, Func<T, TKey> keySelector)
+    {
+        return sortAscending
+            ? items.OrderBy(keySelector).ToList()
+            : items.OrderByDescending(keySelector).ToList();
+    }
+
+    private string GetSortIcon(string column)
+    {
+        if (sortColumn != column)
+            return string.Empty;
+
+        return sortAscending ? "▲" : "▼";
+    }
 
     private void SortBy(string column)
     {
@@ -686,7 +588,7 @@ private HubConnection? hubConnection;
         }
     }
 
-    private string GetRowClass(GameDto game)
+    private static string GetRowClass(GameDto game)
     {
         if (game.IsExcluded)
             return "excluded-row";

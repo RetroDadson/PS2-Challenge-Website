@@ -84,7 +84,7 @@ public class AuthController : ControllerBase
         {
             Path = "/",
             SameSite = SameSiteMode.Lax,
-            Secure = false,
+            Secure = Request.IsHttps,
             HttpOnly = true
         });
 

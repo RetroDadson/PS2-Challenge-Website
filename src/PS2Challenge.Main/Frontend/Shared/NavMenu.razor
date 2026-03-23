@@ -5,11 +5,11 @@
             <button class="nav-toggle" @onclick="ToggleNavMenu" aria-expanded="@(!collapseNavMenu)">
                 <span class="nav-toggle-icon"></span>
             </button>
-            
+
             <a href="/" class="nav-brand">PS2 Challenge</a>
 
             <div class="nav-top-right">
-                <LoginDisplay @ref="loginDisplay" />
+                <LoginDisplay />
             </div>
         </div>
 
@@ -51,7 +51,6 @@
 @code {
     // start expanded so the nav is visible by default
     private bool collapseNavMenu = false;
-    private LoginDisplay? loginDisplay;
     private bool challengeOpen = false;
 
     private string? NavMenuCssClass => collapseNavMenu ? "collapsed" : null;

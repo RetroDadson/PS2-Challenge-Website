@@ -85,7 +85,7 @@
                         <i class="fas fa-search-minus"></i> Reset Zoom
                     </button>
                     <p class="chart-help">
-                        <i class="fas fa-info-circle"></i> 
+                        <i class="fas fa-info-circle"></i>
                         Scroll to zoom, drag to pan, or use pinch gestures on touch devices
                     </p>
                 </div>
@@ -266,17 +266,17 @@
     private double percentageComplete = 0;
     private TimeSpan? averageGameDuration = null;
     private TimeSpan? estimatedTimeRemaining = null;
-    
+
     // Collection statistics
     private int gamesCollectedInChallenge = 0;
     private int gamesCollectedButExcluded = 0;
     private int totalGamesOwned = 0;
     private double collectionPercentageInChallenge = 0;
     private double collectionPercentageTotal = 0;
-    
+
     // Yearly statistics
     private List<YearlyStatistic> yearlyStats = new();
-    
+
     private bool isLoading = true;
     private bool hasRenderedChart = false;
 
@@ -474,7 +474,7 @@
         {
             parts.Add($"{hours}h");
         }
-        
+
         if (minutes > 0 || hours == 0)
         {
             parts.Add($"{minutes}m");
@@ -491,7 +491,7 @@
         }
 
         var remaining = estimatedTimeRemaining.Value;
-        
+
         if (remaining == TimeSpan.Zero)
         {
             return "Complete!";
@@ -503,7 +503,7 @@
         var seconds = remaining.Seconds;
 
         var parts = new List<string>();
-        
+
         if (days > 0)
         {
             parts.Add($"{days}d");
@@ -591,7 +591,7 @@
     }
 
     // Pie chart helper classes and methods
-    private record PieSlice(string Path, string Color, string Label, int Value, double Percent);
+    private sealed record PieSlice(string Path, string Color, string Label, int Value, double Percent);
 
     private IEnumerable<PieSlice> OwnershipPieSlices
     {
@@ -633,13 +633,13 @@
             {
                 var value = Math.Max(0, item.Count);
                 if (value == 0) { idx++; continue; }
-                
+
                 var angle = (value / (double)total) * 360.0;
                 var endAngle = startAngle + angle;
                 var path = SectorPath(startAngle, endAngle, 70);
                 var color = colors[idx % colors.Length];
                 var percent = (value / (double)total) * 100.0;
-                
+
                 slices.Add(new PieSlice(path, color, item.Type, value, percent));
                 startAngle = endAngle;
                 idx++;

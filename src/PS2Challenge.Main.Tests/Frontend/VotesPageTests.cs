@@ -440,6 +440,104 @@ public class VotesPageTests : BunitContext
         Assert.Contains("(Tied)", cut.Markup);
     }
 
+    [Fact]
+    public async Task VotesPage_SortByTopVotes_TogglesAscendingAndDescending()
+    {
+        var user = new ClaimsPrincipal(new ClaimsIdentity());
+
+        var voteHistory = new List<VoteRoundDto>
+        {
+            new() { VoteRound = 1, TopGameTitle = "Game A", TopVotes = 10, SecondGameTitle = "Game B", SecondVotes = 8, LastGameTitle = "Game C", LastVotes = 5 },
+            new() { VoteRound = 2, TopGameTitle = "Game D", TopVotes = 50, SecondGameTitle = "Game E", SecondVotes = 30, LastGameTitle = "Game F", LastVotes = 10 }
+        };
+
+        _mockVoteService.Setup(s => s.GetCurrentVotesAsync()).ReturnsAsync(new List<CurrentVoteDto>());
+        _mockVoteService.Setup(s => s.GetVoteHistoryAsync()).ReturnsAsync(voteHistory);
+        _mockCoverService.Setup(s => s.GetCoverUrlsAsync(It.IsAny<IEnumerable<int>>())).ReturnsAsync(new Dictionary<int, string>());
+
+        var mockScope = new Mock<IServiceScope>();
+        var mockServiceProvider = new Mock<IServiceProvider>();
+        mockScope.Setup(s => s.ServiceProvider).Returns(mockServiceProvider.Object);
+        _mockScopeFactory.Setup(f => f.CreateScope()).Returns(mockScope.Object);
+
+        var cut = RenderVotesWithAuth(user);
+        await Task.Delay(100);
+
+        var topVotesHeader = cut.FindAll("th").First(x => x.TextContent.Contains("Top Votes"));
+        await topVotesHeader.ClickAsync();
+
+        await cut.WaitForAssertionAsync(() =>
+        {
+            var firstRowFirstCell = cut.Find("tbody tr td");
+            Assert.Equal("1", firstRowFirstCell.TextContent.Trim());
+            Assert.Contains("Top Votes ▲", cut.Markup);
+        });
+
+        await topVotesHeader.ClickAsync();
+
+        await cut.WaitForAssertionAsync(() =>
+        {
+            var firstRowFirstCell = cut.Find("tbody tr td");
+            Assert.Equal("2", firstRowFirstCell.TextContent.Trim());
+            Assert.Contains("Top Votes ▼", cut.Markup);
+        });
+    }
+
+    [Fact]
+    public async Task VotesPage_SearchByNotes_FiltersVoteHistoryCount()
+    {
+        var user = new ClaimsPrincipal(new ClaimsIdentity());
+
+        var voteHistory = new List<VoteRoundDto>
+        {
+            new() { VoteRound = 1, TopGameTitle = "Game A", TopVotes = 10, SecondGameTitle = "Game B", SecondVotes = 8, LastGameTitle = "Game C", LastVotes = 5, Notes = "special note" },
+            new() { VoteRound = 2, TopGameTitle = "Game D", TopVotes = 50, SecondGameTitle = "Game E", SecondVotes = 30, LastGameTitle = "Game F", LastVotes = 10, Notes = "other" }
+        };
+
+        _mockVoteService.Setup(s => s.GetCurrentVotesAsync()).ReturnsAsync(new List<CurrentVoteDto>());
+        _mockVoteService.Setup(s => s.GetVoteHistoryAsync()).ReturnsAsync(voteHistory);
+        _mockCoverService.Setup(s => s.GetCoverUrlsAsync(It.IsAny<IEnumerable<int>>())).ReturnsAsync(new Dictionary<int, string>());
+
+        var mockScope = new Mock<IServiceScope>();
+        var mockServiceProvider = new Mock<IServiceProvider>();
+        mockScope.Setup(s => s.ServiceProvider).Returns(mockServiceProvider.Object);
+        _mockScopeFactory.Setup(f => f.CreateScope()).Returns(mockScope.Object);
+
+        var cut = RenderVotesWithAuth(user);
+        await Task.Delay(100);
+
+        await cut.InvokeAsync(() => cut.Find("input[placeholder*='Search by round or game title']").Input("special"));
+
+        await cut.WaitForAssertionAsync(() => Assert.Contains("Showing 1 of 2 rounds", cut.Markup));
+    }
+
+    [Fact]
+    public async Task VotesPage_ZeroVoteTotals_ShowsNoVotesPieFallback()
+    {
+        var user = new ClaimsPrincipal(new ClaimsIdentity());
+
+        var currentVotes = new List<CurrentVoteDto>
+        {
+            new() { GameTitle = "Game A", VoteCount = 0, GameNumber = 1 },
+            new() { GameTitle = "Game B", VoteCount = 0, GameNumber = 2 }
+        };
+
+        _mockVoteService.Setup(s => s.GetCurrentVotesAsync()).ReturnsAsync(currentVotes);
+        _mockVoteService.Setup(s => s.GetVoteHistoryAsync()).ReturnsAsync(new List<VoteRoundDto>());
+        _mockCoverService.Setup(s => s.GetCoverUrlsAsync(It.IsAny<IEnumerable<int>>())).ReturnsAsync(new Dictionary<int, string>());
+
+        var mockScope = new Mock<IServiceScope>();
+        var mockServiceProvider = new Mock<IServiceProvider>();
+        mockScope.Setup(s => s.ServiceProvider).Returns(mockServiceProvider.Object);
+        _mockScopeFactory.Setup(f => f.CreateScope()).Returns(mockScope.Object);
+
+        var cut = RenderVotesWithAuth(user);
+        await Task.Delay(100);
+
+        Assert.Contains("No votes", cut.Markup);
+        Assert.Contains("0 (100.0%)", cut.Markup);
+    }
+
     private void SetupBasicVotingData()
     {
         _mockVoteService.Setup(s => s.GetCurrentVotesAsync()).ReturnsAsync(new List<CurrentVoteDto>
