@@ -1,0 +1,5 @@
+User-agent: *
+Disallow: /api/
+Disallow: /admin
+
+Sitemap: https://ps2challenge.com/sitemap.xml
