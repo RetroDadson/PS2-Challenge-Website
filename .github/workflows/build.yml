@@ -156,12 +156,6 @@ jobs:
         with:
           dotnet-version: '10.x'
 
-      - name: Download test binaries artifact
-        uses: actions/download-artifact@v8
-        with:
-          name: test-binaries
-          path: src
-
       - name: Run ${{ matrix.suite }} tests
         shell: bash
         run: |
@@ -170,27 +164,27 @@ jobs:
           if [[ "${{ matrix.suite }}" == "backend" ]]; then
             MIGRATION_TEST_CONNECTION_STRING="Host=localhost;Port=5432;Database=postgres;Username=postgres;Password=${TEST_POSTGRES_PASSWORD};Pooling=false" \
             dotnet test src/PS2Challenge.Backend.Tests/PS2Challenge.Backend.Tests.csproj \
-              --configuration Release --no-build \
+              --configuration Release \
               --logger:"trx;LogFileName=backend.trx" \
               --results-directory ./TestResults \
               --collect:"XPlat Code Coverage;Format=opencover"
           elif [[ "${{ matrix.suite }}" == "main" ]]; then
             dotnet test src/PS2Challenge.Main.Tests/PS2Challenge.Main.Tests.csproj \
-              --configuration Release --no-build \
+              --configuration Release \
               --filter "FullyQualifiedName!~Frontend" \
               --logger:"trx;LogFileName=main.trx" \
               --results-directory ./TestResults \
               --collect:"XPlat Code Coverage;Format=opencover"
           elif [[ "${{ matrix.suite }}" == "frontend" ]]; then
             dotnet test src/PS2Challenge.Main.Tests/PS2Challenge.Main.Tests.csproj \
-              --configuration Release --no-build \
+              --configuration Release \
               --filter "FullyQualifiedName~Frontend" \
               --logger:"trx;LogFileName=frontend.trx" \
               --results-directory ./TestResults \
               --collect:"XPlat Code Coverage;Format=opencover"
           else
             dotnet test src/PS2Challenge.IntegrationTests/PS2Challenge.IntegrationTests.csproj \
-              --configuration Release --no-build \
+              --configuration Release \
               --logger:"trx;LogFileName=integration.trx" \
               --results-directory ./TestResults \
               --collect:"XPlat Code Coverage;Format=opencover"
