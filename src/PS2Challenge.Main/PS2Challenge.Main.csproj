@@ -12,6 +12,7 @@
     <PackageReference Include="AspNet.Security.OAuth.Twitch" Version="10.0.0" />
     <PackageReference Include="FluentMigrator.Runner" Version="8.0.1" />
     <PackageReference Include="FluentMigrator.Runner.Postgres" Version="8.0.1" />
+    <PackageReference Include="Microsoft.ApplicationInsights.AspNetCore" Version="2.23.0" />
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="10.0.1" />
     <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.1" />
     <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks.EntityFrameworkCore" Version="10.0.1" />
