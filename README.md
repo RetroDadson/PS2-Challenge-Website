@@ -22,6 +22,9 @@
   - `TWITCH_CLIENT_ID`
   - `TWITCH_CLIENT_SECRET`
   - `ADMIN_API_KEY`
+3. Optional telemetry values (Azure Application Insights):
+  - `APPLICATIONINSIGHTS_CONNECTION_STRING` (preferred)
+  - `APPINSIGHTS_INSTRUMENTATIONKEY` (legacy fallback)
 3. Create local mount-point folders if they do not already exist:
   - `mounts/postgres-data`
   - `mounts/app-logs`
@@ -58,8 +61,9 @@ Copy `.env.example` to `.env` and set at least:
 - `TWITCH_CLIENT_ID`
 - `TWITCH_CLIENT_SECRET`
 - `ADMIN_API_KEY`
+- `APPLICATIONINSIGHTS_CONNECTION_STRING` (optional)
 
-The app uses `DATABASE_CONNECTION_STRING`, `TWITCH_CLIENT_ID`, and `TWITCH_CLIENT_SECRET` in container environments.
+The app uses `DATABASE_CONNECTION_STRING`, `TWITCH_CLIENT_ID`, and `TWITCH_CLIENT_SECRET` in container environments. If `APPLICATIONINSIGHTS_CONNECTION_STRING` (or legacy `APPINSIGHTS_INSTRUMENTATIONKEY`) is present, Application Insights telemetry is enabled automatically.
 
 ### Production-style compose
 
