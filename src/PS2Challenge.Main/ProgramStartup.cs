@@ -198,25 +198,30 @@ internal static class ProgramStartup
 
     private static void ConfigureApplicationInsights(IServiceCollection services)
     {
-        var connectionString = Environment.GetEnvironmentVariable("APPLICATIONINSIGHTS_CONNECTION_STRING");
-        var instrumentationKey = Environment.GetEnvironmentVariable("APPINSIGHTS_INSTRUMENTATIONKEY");
-
-        if (string.IsNullOrWhiteSpace(connectionString) && string.IsNullOrWhiteSpace(instrumentationKey))
+        var resolvedConnectionString = ResolveApplicationInsightsConnectionStringFromEnvironment();
+        if (string.IsNullOrWhiteSpace(resolvedConnectionString))
         {
             return;
         }
 
         services.AddApplicationInsightsTelemetry(options =>
         {
-            if (!string.IsNullOrWhiteSpace(connectionString))
-            {
-                options.ConnectionString = connectionString;
-            }
-            else
-            {
-                options.ConnectionString = $"InstrumentationKey={instrumentationKey}";
-            }
+            options.ConnectionString = resolvedConnectionString;
         });
+    }
+
+    private static string? ResolveApplicationInsightsConnectionStringFromEnvironment()
+    {
+        var connectionString = Environment.GetEnvironmentVariable("APPLICATIONINSIGHTS_CONNECTION_STRING");
+        if (!string.IsNullOrWhiteSpace(connectionString))
+        {
+            return connectionString;
+        }
+
+        var instrumentationKey = Environment.GetEnvironmentVariable("APPINSIGHTS_INSTRUMENTATIONKEY");
+        return string.IsNullOrWhiteSpace(instrumentationKey)
+            ? null
+            : $"InstrumentationKey={instrumentationKey}";
     }
 
     private static void ConfigureAuthentication(IServiceCollection services, EnvironmentConfig envConfig)
