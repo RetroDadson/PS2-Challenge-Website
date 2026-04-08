@@ -112,6 +112,8 @@ internal static class ProgramStartup
         builder.Services.AddHealthChecks()
             .AddDbContextCheck<Ps2ChallengeDbContext>(name: "database", tags: ["db", "postgres"]);
 
+        ConfigureApplicationInsights(builder.Services);
+
         if (!isTesting)
         {
             ConfigureFluentMigrator(builder.Services, envConfig.ConnectionString);
@@ -192,6 +194,29 @@ internal static class ProgramStartup
                 .WithGlobalConnectionString(connectionString)
                 .ScanIn(typeof(InitialSchema).Assembly).For.Migrations())
             .AddLogging(lb => lb.AddFluentMigratorConsole());
+    }
+
+    private static void ConfigureApplicationInsights(IServiceCollection services)
+    {
+        var connectionString = Environment.GetEnvironmentVariable("APPLICATIONINSIGHTS_CONNECTION_STRING");
+        var instrumentationKey = Environment.GetEnvironmentVariable("APPINSIGHTS_INSTRUMENTATIONKEY");
+
+        if (string.IsNullOrWhiteSpace(connectionString) && string.IsNullOrWhiteSpace(instrumentationKey))
+        {
+            return;
+        }
+
+        services.AddApplicationInsightsTelemetry(options =>
+        {
+            if (!string.IsNullOrWhiteSpace(connectionString))
+            {
+                options.ConnectionString = connectionString;
+            }
+            else
+            {
+                options.ConnectionString = $"InstrumentationKey={instrumentationKey}";
+            }
+        });
     }
 
     private static void ConfigureAuthentication(IServiceCollection services, EnvironmentConfig envConfig)
