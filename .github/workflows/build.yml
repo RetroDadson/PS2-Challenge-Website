@@ -54,7 +54,8 @@ jobs:
 
   sonarqube:
     name: SonarQube
-    runs-on: windows-latest
+    needs: test
+    runs-on: ubuntu-latest
     permissions:
       contents: read
     env:
@@ -79,7 +80,7 @@ jobs:
       - name: Cache SonarQube Cloud packages
         uses: actions/cache@v5
         with:
-          path: ~\sonar\cache
+          path: ~/.sonar/cache
           key: ${{ runner.os }}-sonar
           restore-keys: ${{ runner.os }}-sonar
 
@@ -87,30 +88,34 @@ jobs:
         id: cache-sonar-scanner
         uses: actions/cache@v5
         with:
-          path: ${{ runner.temp }}\scanner
+          path: ${{ runner.temp }}/scanner
           key: ${{ runner.os }}-sonar-scanner
           restore-keys: ${{ runner.os }}-sonar-scanner
 
       - name: Install SonarQube Cloud scanner
         if: env.SONAR_TOKEN != '' && steps.cache-sonar-scanner.outputs.cache-hit != 'true'
-        shell: powershell
         run: |
-          New-Item -Path ${{ runner.temp }}\scanner -ItemType Directory -Force
-          dotnet tool update dotnet-sonarscanner --tool-path ${{ runner.temp }}\scanner
+          mkdir -p ${{ runner.temp }}/scanner
+          dotnet tool update dotnet-sonarscanner --tool-path ${{ runner.temp }}/scanner
+
+      - name: Download coverage reports
+        if: env.SONAR_TOKEN != ''
+        uses: actions/download-artifact@v8
+        with:
+          pattern: coverage-*
+          merge-multiple: true
+          path: coverage
 
       - name: Build and analyze
         if: env.SONAR_TOKEN != ''
-        shell: powershell
         run: |
-          ${{ runner.temp }}\scanner\dotnet-sonarscanner begin /k:"RobinDadswell_PS2-Challenge-Website" /o:"retrodadson" /d:sonar.host.url="https://sonarcloud.io" /d:sonar.token="${{ env.SONAR_TOKEN }}" /d:sonar.cs.opencover.reportsPaths="**/coverage.opencover.xml"
+          ${{ runner.temp }}/scanner/dotnet-sonarscanner begin /k:"RobinDadswell_PS2-Challenge-Website" /o:"retrodadson" /d:sonar.host.url="https://sonarcloud.io" /d:sonar.token="${{ env.SONAR_TOKEN }}" /d:sonar.cs.opencover.reportsPaths="**/coverage.opencover.xml"
           dotnet build src/PS2Challenge.sln --configuration Release
-          dotnet test src/PS2Challenge.Main.Tests/PS2Challenge.Main.Tests.csproj --configuration Release --no-build --collect:"XPlat Code Coverage;Format=opencover"
-          ${{ runner.temp }}\scanner\dotnet-sonarscanner end /d:sonar.token="${{ env.SONAR_TOKEN }}"
+          ${{ runner.temp }}/scanner/dotnet-sonarscanner end /d:sonar.token="${{ env.SONAR_TOKEN }}"
 
       - name: Skip SonarQube (missing SONAR_TOKEN)
         if: env.SONAR_TOKEN == ''
-        shell: powershell
-        run: Write-Host "SONAR_TOKEN not set. Skipping SonarQube analysis."
+        run: echo "SONAR_TOKEN not set. Skipping SonarQube analysis."
 
   test:
     runs-on: ubuntu-latest
@@ -164,24 +169,39 @@ jobs:
 
           if [[ "${{ matrix.suite }}" == "backend" ]]; then
             MIGRATION_TEST_CONNECTION_STRING="Host=localhost;Port=5432;Database=postgres;Username=postgres;Password=${TEST_POSTGRES_PASSWORD};Pooling=false" \
-            dotnet vstest src/PS2Challenge.Backend.Tests/bin/Release/net10.0/PS2Challenge.Backend.Tests.dll \
+            dotnet test src/PS2Challenge.Backend.Tests/PS2Challenge.Backend.Tests.csproj \
+              --configuration Release --no-build --no-restore \
               --logger:"trx;LogFileName=backend.trx" \
-              --ResultsDirectory:./TestResults
+              --results-directory ./TestResults \
+              --collect:"XPlat Code Coverage;Format=opencover"
           elif [[ "${{ matrix.suite }}" == "main" ]]; then
-            dotnet vstest src/PS2Challenge.Main.Tests/bin/Release/net10.0/PS2Challenge.Main.Tests.dll \
-              --TestCaseFilter:"FullyQualifiedName!~Frontend" \
+            dotnet test src/PS2Challenge.Main.Tests/PS2Challenge.Main.Tests.csproj \
+              --configuration Release --no-build --no-restore \
+              --filter "FullyQualifiedName!~Frontend" \
               --logger:"trx;LogFileName=main.trx" \
-              --ResultsDirectory:./TestResults
+              --results-directory ./TestResults \
+              --collect:"XPlat Code Coverage;Format=opencover"
           elif [[ "${{ matrix.suite }}" == "frontend" ]]; then
-            dotnet vstest src/PS2Challenge.Main.Tests/bin/Release/net10.0/PS2Challenge.Main.Tests.dll \
-              --TestCaseFilter:"FullyQualifiedName~Frontend" \
+            dotnet test src/PS2Challenge.Main.Tests/PS2Challenge.Main.Tests.csproj \
+              --configuration Release --no-build --no-restore \
+              --filter "FullyQualifiedName~Frontend" \
               --logger:"trx;LogFileName=frontend.trx" \
-              --ResultsDirectory:./TestResults
+              --results-directory ./TestResults \
+              --collect:"XPlat Code Coverage;Format=opencover"
           else
-            dotnet vstest src/PS2Challenge.IntegrationTests/bin/Release/net10.0/PS2Challenge.IntegrationTests.dll \
+            dotnet test src/PS2Challenge.IntegrationTests/PS2Challenge.IntegrationTests.csproj \
+              --configuration Release --no-build --no-restore \
               --logger:"trx;LogFileName=integration.trx" \
-              --ResultsDirectory:./TestResults
+              --results-directory ./TestResults \
+              --collect:"XPlat Code Coverage;Format=opencover"
           fi
+
+      - name: Upload ${{ matrix.suite }} coverage
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-${{ matrix.suite }}
+          path: TestResults/**/coverage.opencover.xml
+          if-no-files-found: warn
 
       - name: Publish ${{ matrix.suite }} test results
         uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2 # v3.0.0
