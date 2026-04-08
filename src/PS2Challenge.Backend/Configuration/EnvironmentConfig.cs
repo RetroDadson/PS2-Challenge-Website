@@ -21,7 +21,7 @@ public class EnvironmentConfig
     private void LoadEnvironmentVariables()
     {
         Console.WriteLine("[EnvironmentConfig] Loading environment variables...");
-        ConnectionString = GetEnvironmentVariable("DATABASE_CONNECTION_STRING") ?? string.Empty;
+        ConnectionString = ResolveConnectionString(configuration: null) ?? string.Empty;
         TwitchClientId = GetEnvironmentVariable("TWITCH_CLIENT_ID") ?? string.Empty;
         TwitchClientSecret = GetEnvironmentVariable("TWITCH_CLIENT_SECRET") ?? string.Empty;
     }
@@ -32,10 +32,7 @@ public class EnvironmentConfig
 
         Console.WriteLine("[EnvironmentConfig] Initializing configuration from environment variables and appsettings...");
 
-        ConnectionString =
-            GetEnvironmentVariable("DATABASE_CONNECTION_STRING")
-            ?? configuration.GetConnectionString("DefaultConnection")
-            ?? string.Empty;
+        ConnectionString = ResolveConnectionString(configuration) ?? string.Empty;
 
         TwitchClientId =
             GetEnvironmentVariable("TWITCH_CLIENT_ID")
@@ -46,6 +43,57 @@ public class EnvironmentConfig
             GetEnvironmentVariable("TWITCH_CLIENT_SECRET")
             ?? configuration["Twitch:ClientSecret"]
             ?? string.Empty;
+    }
+
+    private static string? ResolveConnectionString(IConfiguration? configuration)
+    {
+        var appServiceDefaultConnection =
+            GetEnvironmentVariable("POSTGRESQLCONNSTR_DefaultConnection")
+            ?? GetEnvironmentVariable("CUSTOMCONNSTR_DefaultConnection");
+        if (!string.IsNullOrWhiteSpace(appServiceDefaultConnection))
+        {
+            return appServiceDefaultConnection;
+        }
+
+        var fallbackAppServiceConnection =
+            GetFirstEnvironmentVariableWithPrefix("POSTGRESQLCONNSTR_")
+            ?? GetFirstEnvironmentVariableWithPrefix("CUSTOMCONNSTR_");
+        if (!string.IsNullOrWhiteSpace(fallbackAppServiceConnection))
+        {
+            return fallbackAppServiceConnection;
+        }
+
+        var directEnvironmentValue = GetEnvironmentVariable("DATABASE_CONNECTION_STRING");
+        if (!string.IsNullOrWhiteSpace(directEnvironmentValue))
+        {
+            return directEnvironmentValue;
+        }
+
+        var defaultConnection = configuration?.GetConnectionString("DefaultConnection");
+        if (!string.IsNullOrWhiteSpace(defaultConnection))
+        {
+            return defaultConnection;
+        }
+
+        return null;
+    }
+
+    private static string? GetFirstEnvironmentVariableWithPrefix(string prefix)
+    {
+        foreach (System.Collections.DictionaryEntry variable in Environment.GetEnvironmentVariables())
+        {
+            if (variable.Key is not string key || !key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            if (variable.Value is string value && !string.IsNullOrWhiteSpace(value))
+            {
+                return value;
+            }
+        }
+
+        return null;
     }
 
     private static string? GetEnvironmentVariable(string key)
@@ -59,7 +107,7 @@ public class EnvironmentConfig
 
         if (string.IsNullOrWhiteSpace(ConnectionString))
         {
-            errors.Add("DATABASE_CONNECTION_STRING is required");
+            errors.Add("A database connection string is required (DATABASE_CONNECTION_STRING, ConnectionStrings:DefaultConnection, or App Service POSTGRESQLCONNSTR_*)");
         }
 
         if (string.IsNullOrWhiteSpace(TwitchClientId))
