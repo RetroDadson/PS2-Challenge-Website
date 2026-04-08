@@ -63,7 +63,13 @@ Copy `.env.example` to `.env` and set at least:
 - `ADMIN_API_KEY`
 - `APPLICATIONINSIGHTS_CONNECTION_STRING` (optional)
 
-The app uses `DATABASE_CONNECTION_STRING`, `TWITCH_CLIENT_ID`, and `TWITCH_CLIENT_SECRET` in container environments. If `APPLICATIONINSIGHTS_CONNECTION_STRING` (or legacy `APPINSIGHTS_INSTRUMENTATIONKEY`) is present, Application Insights telemetry is enabled automatically.
+The app resolves the database connection string in this order:
+
+- Azure App Service connection-string variables (`POSTGRESQLCONNSTR_DefaultConnection`, then any `POSTGRESQLCONNSTR_*`)
+- `DATABASE_CONNECTION_STRING` (recommended fallback for Docker/local environment variables)
+- `ConnectionStrings:DefaultConnection` (for `appsettings*.json` or `ConnectionStrings__DefaultConnection`)
+
+Twitch values are loaded from `TWITCH_CLIENT_ID` and `TWITCH_CLIENT_SECRET` (with `Twitch:ClientId` / `Twitch:ClientSecret` as configuration fallback). If `APPLICATIONINSIGHTS_CONNECTION_STRING` (or legacy `APPINSIGHTS_INSTRUMENTATIONKEY`) is present, Application Insights telemetry is enabled automatically.
 
 ### Production-style compose
 
