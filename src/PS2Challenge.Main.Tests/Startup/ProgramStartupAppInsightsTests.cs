@@ -15,12 +15,12 @@ public sealed class ProgramStartupAppInsightsTests
         using var _ = new AppInsightsEnvironmentScope(connectionString: null, instrumentationKey: null);
 
         var services = new ServiceCollection();
-        var appInsightsServiceCountBefore = CountApplicationInsightsServices(services);
+        var telemetryServiceCountBefore = CountTelemetryServices(services);
 
         InvokeConfigureApplicationInsights(services);
 
-        var appInsightsServiceCountAfter = CountApplicationInsightsServices(services);
-        Assert.Equal(appInsightsServiceCountBefore, appInsightsServiceCountAfter);
+        var telemetryServiceCountAfter = CountTelemetryServices(services);
+        Assert.Equal(telemetryServiceCountBefore, telemetryServiceCountAfter);
     }
 
     [Fact]
@@ -41,12 +41,12 @@ public sealed class ProgramStartupAppInsightsTests
         using var _ = new AppInsightsEnvironmentScope(connectionString: expectedConnectionString, instrumentationKey: null);
 
         var services = new ServiceCollection();
-        var appInsightsServiceCountBefore = CountApplicationInsightsServices(services);
+        var telemetryServiceCountBefore = CountTelemetryServices(services);
 
         InvokeConfigureApplicationInsights(services);
 
-        var appInsightsServiceCountAfter = CountApplicationInsightsServices(services);
-        Assert.True(appInsightsServiceCountAfter > appInsightsServiceCountBefore);
+        var telemetryServiceCountAfter = CountTelemetryServices(services);
+        Assert.True(telemetryServiceCountAfter > telemetryServiceCountBefore);
     }
 
     [Fact]
@@ -84,10 +84,13 @@ public sealed class ProgramStartupAppInsightsTests
         Assert.Equal(expectedConnectionString, resolvedConnectionString);
     }
 
-    private static int CountApplicationInsightsServices(IServiceCollection services)
+    private static int CountTelemetryServices(IServiceCollection services)
     {
         return services.Count(descriptor =>
-            descriptor.ServiceType.Namespace?.StartsWith("Microsoft.ApplicationInsights", StringComparison.Ordinal) == true);
+            descriptor.ServiceType.Namespace?.StartsWith("OpenTelemetry", StringComparison.Ordinal) == true
+            || descriptor.ServiceType.Namespace?.StartsWith("Azure.Monitor.OpenTelemetry", StringComparison.Ordinal) == true
+            || descriptor.ImplementationType?.Namespace?.StartsWith("OpenTelemetry", StringComparison.Ordinal) == true
+            || descriptor.ImplementationType?.Namespace?.StartsWith("Azure.Monitor.OpenTelemetry", StringComparison.Ordinal) == true);
     }
 
     private static string? InvokeResolveApplicationInsightsConnectionStringFromEnvironment()
