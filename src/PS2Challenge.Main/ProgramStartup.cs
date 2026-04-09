@@ -1,9 +1,11 @@
 using FluentMigrator.Runner;
+using Azure.Monitor.OpenTelemetry.AspNetCore;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Localization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.OpenApi.Models;
+using OpenTelemetry.Trace;
 using PS2Challenge.Backend;
 using PS2Challenge.Backend.Configuration;
 using PS2Challenge.Backend.Data;
@@ -204,7 +206,11 @@ internal static class ProgramStartup
             return;
         }
 
-        services.AddApplicationInsightsTelemetry(options =>
+        var telemetryBuilder = services
+            .AddOpenTelemetry()
+            .WithTracing(tracing => tracing.AddSource("Npgsql"));
+
+        telemetryBuilder.UseAzureMonitor(options =>
         {
             options.ConnectionString = resolvedConnectionString;
         });
