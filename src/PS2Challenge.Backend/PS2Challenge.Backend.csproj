@@ -8,13 +8,13 @@
 
   <ItemGroup>
     <PackageReference Include="FluentMigrator.Runner" Version="8.0.1" />
-    <PackageReference Include="Npgsql" Version="10.0.1" />
+    <PackageReference Include="Npgsql" Version="10.0.2" />
   </ItemGroup>
 
   <!-- Add these package references for Entity Framework Core and Npgsql EF provider -->
   <ItemGroup>
-    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.1" />
-    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.5" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.1" />
     <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.1" />
   </ItemGroup>
 
