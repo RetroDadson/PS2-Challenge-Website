@@ -33,6 +33,7 @@
     <PackageReference Include="Net.IBM.Data.Db2" Version="9.0.0.300">
       <ExcludeAssets>all</ExcludeAssets>
     </PackageReference>
+    <PackageReference Include="OpenTelemetry.Api" Version="1.15.3" />
   </ItemGroup>
 
 </Project>
