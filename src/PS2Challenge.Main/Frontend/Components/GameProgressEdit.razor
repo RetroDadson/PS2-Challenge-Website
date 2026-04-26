@@ -239,9 +239,11 @@
     private async Task<GameDto?> FindGameByTitleAsync(Ps2ChallengeDbContext db)
     {
         var normalizedTitle = internalGameTitle.Trim();
+        var normalizedTitleUpper = normalizedTitle.ToUpper();
+
         return await db.Games
             .AsNoTracking()
-            .FirstOrDefaultAsync(g => g.Title.Equals(normalizedTitle, StringComparison.OrdinalIgnoreCase));
+            .FirstOrDefaultAsync(g => g.Title != null && g.Title.ToUpper() == normalizedTitleUpper);
     }
 
     private async Task UpdateExistingProgressAsync(
