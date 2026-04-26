@@ -3,7 +3,6 @@
 @using System.Text.Json
 @using System.Text.Json.Serialization
 @using Microsoft.AspNetCore.Components.Authorization
-@using Microsoft.AspNetCore.Components.Web.Virtualization
 @using Microsoft.AspNetCore.SignalR.Client
 @using PS2Challenge.Main.Frontend.Components
 @using PS2Challenge.Main.Frontend.Shared
@@ -23,8 +22,8 @@
     <div class="search-box">
         <input type="text"
                placeholder="Search games by title, developer, or publisher..."
-               @bind="searchQuery"
-               @bind:event="oninput"
+               value="@searchQuery"
+               @oninput="OnSearchInput"
                class="search-input"
                disabled="@isLoading" />
         <span class="search-icon">🔍</span>
@@ -50,7 +49,7 @@
     else
     {
         <div class="results-count">
-            <p>Showing @FilteredGames.Count() of @_totalGames games | Owned: @_ownedCount | Excluded: @_excludedCount | Completed: @_completedCount | In Progress: @_inProgressCount | Not Started: @_notStartedCount</p>
+            <p>Showing @FilteredGames.Count of @_totalGames games | Owned: @_ownedCount | Excluded: @_excludedCount | Completed: @_completedCount | In Progress: @_inProgressCount | Not Started: @_notStartedCount</p>
         </div>
     }
 
@@ -62,7 +61,7 @@
     }
 </div>
 
-<div class="games-table-container">
+<div class="games-table-container" @ref="gamesTableContainer" @onscroll="OnGamesTableScroll">
     <table class="games-table">
         <thead>
             <tr>
@@ -103,8 +102,9 @@
             }
             else
             {
-                    <Virtualize Items="@FilteredGames.ToList()" Context="game" OverscanCount="20">
-                        <tr class="@GetRowClass(game)">
+                    @foreach (var game in VisibleGames)
+                    {
+                        <tr class="@GetRowClass(game)" @key="game.Id">
                             @if (isAdmin)
                             {
                                 <td>
@@ -189,10 +189,11 @@
                                 }
                             </td>
                         </tr>
-                    </Virtualize>
+                    }
                 }
                 </tbody>
             </table>
+
         </div>
 </div>
 
@@ -222,6 +223,10 @@ private bool isAdmin = false;
 private bool showModal = false;
 private bool isEditMode = false;
 private GameDto? selectedGame = null;
+private ElementReference gamesTableContainer;
+private const int BatchSize = 250;
+private int visibleGameCount = BatchSize;
+private bool isLoadingMoreGames;
 
 // Cache filtered results to avoid recomputing on every access
 private List<GameDto>? _cachedFilteredGames = null;
@@ -326,17 +331,19 @@ private HubConnection? hubConnection;
     private void ToggleShowOwnedOnly(ChangeEventArgs e)
     {
         showOwnedOnly = e.Value is bool b && b;
+        _cachedFilteredGames = null;
+        ResetVisibleGames();
         // Save preferences asynchronously without blocking the UI
         _ = SavePreferences();
-        // No need to call StateHasChanged() - Blazor does this automatically after event handlers
     }
 
     private void ToggleShowExcluded(ChangeEventArgs e)
     {
         showExcludedGames = e.Value is bool b && b;
+        _cachedFilteredGames = null;
+        ResetVisibleGames();
         // Save preferences asynchronously without blocking the UI
         _ = SavePreferences();
-        // No need to call StateHasChanged() - Blazor does this automatically after event handlers
     }
 
     private async Task LoadAllData()
@@ -358,6 +365,7 @@ private HubConnection? hubConnection;
 
                 // Invalidate cache when data changes
                 _cachedFilteredGames = null;
+                ResetVisibleGames();
             }
             else
             {
@@ -368,6 +376,7 @@ private HubConnection? hubConnection;
                 alternateTitles = new();
                 ComputeStatistics();
                 _cachedFilteredGames = null;
+                ResetVisibleGames();
             }
         }
         catch (Exception ex)
@@ -380,6 +389,7 @@ private HubConnection? hubConnection;
             alternateTitles = new();
             ComputeStatistics();
             _cachedFilteredGames = null;
+            ResetVisibleGames();
         }
         finally
         {
@@ -478,12 +488,17 @@ private HubConnection? hubConnection;
         CloseModal();
     }
 
-    private IEnumerable<GameDto> FilteredGames
+    private List<GameDto> FilteredGames
     {
         get => ComputeFilteredGames();
     }
 
-    private IEnumerable<GameDto> ComputeFilteredGames()
+    private IEnumerable<GameDto> VisibleGames
+    {
+        get => FilteredGames.Take(visibleGameCount);
+    }
+
+    private List<GameDto> ComputeFilteredGames()
     {
         if (_cachedFilteredGames != null &&
             _lastSearchQuery == searchQuery &&
@@ -586,6 +601,47 @@ private HubConnection? hubConnection;
             sortColumn = column;
             sortAscending = true;
         }
+
+        _cachedFilteredGames = null;
+        ResetVisibleGames();
+    }
+
+    private void OnSearchInput(ChangeEventArgs e)
+    {
+        searchQuery = (string?)e.Value ?? string.Empty;
+        _cachedFilteredGames = null;
+        ResetVisibleGames();
+    }
+
+    private void ResetVisibleGames()
+    {
+        visibleGameCount = BatchSize;
+        isLoadingMoreGames = false;
+    }
+
+    private async Task OnGamesTableScroll()
+    {
+        if (isLoadingMoreGames)
+        {
+            return;
+        }
+
+        var totalFiltered = FilteredGames.Count;
+        if (visibleGameCount >= totalFiltered)
+        {
+            return;
+        }
+
+        var shouldLoadMore = await JSRuntime.InvokeAsync<bool>("gamesScroll.shouldLoadMore", gamesTableContainer, 220);
+        if (!shouldLoadMore)
+        {
+            return;
+        }
+
+        isLoadingMoreGames = true;
+        visibleGameCount = Math.Min(visibleGameCount + BatchSize, totalFiltered);
+        isLoadingMoreGames = false;
+        await InvokeAsync(StateHasChanged);
     }
 
     private static string GetRowClass(GameDto game)

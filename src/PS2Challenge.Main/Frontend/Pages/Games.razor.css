@@ -189,11 +189,10 @@
     border: 1px solid var(--border-color);
     border-radius: 12px;
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
-    max-height: calc(100vh - 350px);
+    max-height: calc(100vh - 340px);
     overflow-y: auto;
     overflow-x: auto;
     position: relative;
-    min-height: 400px;
 }
 
 .games-table {
@@ -245,26 +244,12 @@
     white-space: nowrap;
 }
 
-.games-table tbody {
-    overflow: visible;
-}
-
 .games-table tbody tr {
     border-bottom: 1px solid var(--border-color);
     transition: background 0.2s ease;
-    opacity: 0;
-    animation: fadeInRow 0.2s ease-in forwards;
     position: relative;
     z-index: 1;
-}
-
-@keyframes fadeInRow {
-    from {
-        opacity: 0;
-    }
-    to {
-        opacity: 1;
-    }
+    height: 88px;
 }
 
 .games-table tbody tr:hover {
@@ -298,7 +283,7 @@
 }
 
 .games-table tbody td {
-    padding: 1rem;
+    padding: 0.75rem 1rem;
     color: var(--text-secondary);
     position: relative;
 }

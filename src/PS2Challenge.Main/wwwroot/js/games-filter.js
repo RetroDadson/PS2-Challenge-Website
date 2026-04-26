@@ -168,3 +168,15 @@ if (document.readyState === 'loading') {
 } else {
     setTimeout(() => globalThis.gamesFilter.activateOnDisconnect(), 500);
 }
+
+// Helper for Blazor incremental table loading
+globalThis.gamesScroll = {
+    shouldLoadMore: function(container, thresholdPx = 220) {
+        if (!container) {
+            return false;
+        }
+
+        return (container.scrollTop + container.clientHeight) >= (container.scrollHeight - thresholdPx);
+    }
+};
+
