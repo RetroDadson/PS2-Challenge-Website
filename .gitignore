@@ -34,3 +34,8 @@ bld/
 # Connection strings with sensitive data
 appsettings.Development.json
 launchSettings.json
+
+# Environment variables
+.env
+.env.*
+!.env.example
