@@ -8,8 +8,34 @@ on:
       - completed
 
 jobs:
-  deploy:
+  check-paths:
+    runs-on: ubuntu-latest
     if: ${{ github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' }}
+    outputs:
+      relevant: ${{ steps.check.outputs.relevant }}
+    permissions:
+      contents: read
+    steps:
+      - name: Check if relevant paths changed
+        id: check
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const headSha = context.payload.workflow_run.head_sha;
+            const { data: commit } = await github.rest.repos.getCommit({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: headSha,
+            });
+            const relevant = commit.files.some(f =>
+              f.filename.startsWith('src/') ||
+              f.filename.startsWith('.github/workflows/')
+            );
+            core.setOutput('relevant', String(relevant));
+
+  deploy:
+    needs: check-paths
+    if: ${{ needs.check-paths.outputs.relevant == 'true' }}
     runs-on: ubuntu-latest
     permissions:
       actions: read
