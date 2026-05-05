@@ -529,6 +529,19 @@ h1:has(> [style*="background"]) {
     user-select: none;
 }
 
+/* Keep navbar branding aligned with hero headline gradient styling */
+.navbar .nav-brand,
+.navbar .nav-brand:link,
+.navbar .nav-brand:visited {
+    background-image: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 50%, var(--accent-orange) 100%) !important;
+    -webkit-background-clip: text !important;
+    -webkit-text-fill-color: transparent !important;
+    background-clip: text !important;
+    -webkit-box-decoration-break: clone !important;
+    box-decoration-break: clone !important;
+    color: transparent !important;
+}
+
 /* Custom text selection colors */
 ::selection {
     background: rgba(233, 30, 99, 0.3);

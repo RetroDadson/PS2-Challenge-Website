@@ -69,7 +69,13 @@
 
 /* brand */
 .nav-brand {
-    color: #fff;
+    color: var(--primary-color);
+    background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 50%, var(--accent-orange) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
     font-weight: 700;
     font-size: 1.25rem;
     text-decoration: none;
