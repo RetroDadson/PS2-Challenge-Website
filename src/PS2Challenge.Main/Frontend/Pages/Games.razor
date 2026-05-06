@@ -61,7 +61,7 @@
     }
 </div>
 
-<div class="games-table-container" @ref="gamesTableContainer" @onscroll="OnGamesTableScroll">
+<div class="games-table-container">
     <table class="games-table">
         <thead>
             <tr>
@@ -102,9 +102,9 @@
             }
             else
             {
-                    @foreach (var game in VisibleGames)
+                    @foreach (var game in FilteredGames)
                     {
-                        <tr class="@GetRowClass(game)" @key="game.Id">
+                        <tr class="@GetRowClass(game)" data-game-row="true" @key="game.Id">
                             @if (isAdmin)
                             {
                                 <td>
@@ -223,10 +223,6 @@ private bool isAdmin = false;
 private bool showModal = false;
 private bool isEditMode = false;
 private GameDto? selectedGame = null;
-private ElementReference gamesTableContainer;
-private const int BatchSize = 250;
-private int visibleGameCount = BatchSize;
-private bool isLoadingMoreGames;
 
 // Cache filtered results to avoid recomputing on every access
 private List<GameDto>? _cachedFilteredGames = null;
@@ -332,7 +328,6 @@ private HubConnection? hubConnection;
     {
         showOwnedOnly = e.Value is bool b && b;
         _cachedFilteredGames = null;
-        ResetVisibleGames();
         // Save preferences asynchronously without blocking the UI
         _ = SavePreferences();
     }
@@ -341,7 +336,6 @@ private HubConnection? hubConnection;
     {
         showExcludedGames = e.Value is bool b && b;
         _cachedFilteredGames = null;
-        ResetVisibleGames();
         // Save preferences asynchronously without blocking the UI
         _ = SavePreferences();
     }
@@ -365,7 +359,6 @@ private HubConnection? hubConnection;
 
                 // Invalidate cache when data changes
                 _cachedFilteredGames = null;
-                ResetVisibleGames();
             }
             else
             {
@@ -376,7 +369,6 @@ private HubConnection? hubConnection;
                 alternateTitles = new();
                 ComputeStatistics();
                 _cachedFilteredGames = null;
-                ResetVisibleGames();
             }
         }
         catch (Exception ex)
@@ -389,7 +381,6 @@ private HubConnection? hubConnection;
             alternateTitles = new();
             ComputeStatistics();
             _cachedFilteredGames = null;
-            ResetVisibleGames();
         }
         finally
         {
@@ -491,11 +482,6 @@ private HubConnection? hubConnection;
     private List<GameDto> FilteredGames
     {
         get => ComputeFilteredGames();
-    }
-
-    private IEnumerable<GameDto> VisibleGames
-    {
-        get => FilteredGames.Take(visibleGameCount);
     }
 
     private List<GameDto> ComputeFilteredGames()
@@ -603,45 +589,12 @@ private HubConnection? hubConnection;
         }
 
         _cachedFilteredGames = null;
-        ResetVisibleGames();
     }
 
     private void OnSearchInput(ChangeEventArgs e)
     {
         searchQuery = (string?)e.Value ?? string.Empty;
         _cachedFilteredGames = null;
-        ResetVisibleGames();
-    }
-
-    private void ResetVisibleGames()
-    {
-        visibleGameCount = BatchSize;
-        isLoadingMoreGames = false;
-    }
-
-    private async Task OnGamesTableScroll()
-    {
-        if (isLoadingMoreGames)
-        {
-            return;
-        }
-
-        var totalFiltered = FilteredGames.Count;
-        if (visibleGameCount >= totalFiltered)
-        {
-            return;
-        }
-
-        var shouldLoadMore = await JSRuntime.InvokeAsync<bool>("gamesScroll.shouldLoadMore", gamesTableContainer, 220);
-        if (!shouldLoadMore)
-        {
-            return;
-        }
-
-        isLoadingMoreGames = true;
-        visibleGameCount = Math.Min(visibleGameCount + BatchSize, totalFiltered);
-        isLoadingMoreGames = false;
-        await InvokeAsync(StateHasChanged);
     }
 
     private static string GetRowClass(GameDto game)

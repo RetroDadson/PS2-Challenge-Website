@@ -16,8 +16,12 @@ globalThis.gamesFilter = {
     },
 
     // Initialize the filter system
-    init: function() {
-        if (this.isBlazorConnected()) return;
+    init: function(force = false) {
+        if (!force && this.isBlazorConnected()) return;
+        if (this.isActive) {
+            this.applyFilters();
+            return;
+        }
 
         console.log('JavaScript filters activated');
         this.isActive = true;
@@ -78,7 +82,7 @@ globalThis.gamesFilter = {
         const searchInput = document.querySelector('.search-input');
         const showOwnedCheckbox = document.querySelector('input[type="checkbox"][id="showOwnedOnly"]');
         const showExcludedCheckbox = document.querySelector('input[type="checkbox"][id="showExcludedGames"]');
-        const rows = document.querySelectorAll('.games-table tbody tr');
+        const rows = document.querySelectorAll('.games-table tbody tr[data-game-row="true"]');
 
         const searchQuery = searchInput ? searchInput.value.toLowerCase().trim() : '';
         const showOwnedOnly = showOwnedCheckbox ? showOwnedCheckbox.checked : false;
@@ -168,15 +172,4 @@ if (document.readyState === 'loading') {
 } else {
     setTimeout(() => globalThis.gamesFilter.activateOnDisconnect(), 500);
 }
-
-// Helper for Blazor incremental table loading
-globalThis.gamesScroll = {
-    shouldLoadMore: function(container, thresholdPx = 220) {
-        if (!container) {
-            return false;
-        }
-
-        return (container.scrollTop + container.clientHeight) >= (container.scrollHeight - thresholdPx);
-    }
-};
 
