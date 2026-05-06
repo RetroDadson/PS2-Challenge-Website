@@ -120,7 +120,7 @@ public class EnvironmentConfig
             errors.Add("TWITCH_CLIENT_SECRET is required");
         }
 
-        if (errors.Any())
+        if (errors.Count > 0)
         {
             throw new InvalidOperationException(
                 $"Environment configuration is invalid:{Environment.NewLine}{string.Join(Environment.NewLine, errors)}");

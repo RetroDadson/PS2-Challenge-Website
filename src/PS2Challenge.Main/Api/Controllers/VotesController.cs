@@ -94,7 +94,7 @@ public class VotesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> UploadHistory([FromBody] List<UploadRoundDto>? rounds)
     {
-        if (rounds == null || !rounds.Any())
+        if (rounds == null || rounds.Count == 0)
             return BadRequest(new { message = "No rounds provided" });
 
         using var scope = _scopeFactory.CreateScope();
@@ -107,7 +107,7 @@ public class VotesController : ControllerBase
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        if (!titles.Any())
+        if (titles.Count == 0)
             return BadRequest(new { message = "No game titles provided" });
 
         // case-insensitive lookup: translate titles to lower then compare using column ToLower()
@@ -124,7 +124,7 @@ public class VotesController : ControllerBase
 
         // determine missing titles
         var missing = titlesLower.Where(t => !titleToId.ContainsKey(t)).ToList();
-        if (missing.Any())
+        if (missing.Count > 0)
         {
             return BadRequest(new { message = "Some game titles were not found", missing });
         }
@@ -224,7 +224,7 @@ public class VotesController : ControllerBase
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> SetCurrentVotes([FromBody] List<CurrentVoteDto>? votes)
     {
-        if (votes == null || !votes.Any())
+        if (votes == null || votes.Count == 0)
             return BadRequest(new { message = "No votes provided" });
 
         try
@@ -527,7 +527,7 @@ public class VotesController : ControllerBase
                 .Where(id => !currentVoteGameIds.Contains(id))
                 .ToList();
 
-            if (!eligibleGameIds.Any())
+            if (eligibleGameIds.Count == 0)
             {
                 return BadRequest(new { message = "No eligible games found. Games must be owned, not excluded, and not started." });
             }
@@ -609,7 +609,7 @@ public class VotesController : ControllerBase
         }
     }
 
-    private IActionResult? ValidateUploadRound(UploadRoundDto round)
+    private BadRequestObjectResult? ValidateUploadRound(UploadRoundDto round)
     {
         if (round.Votes == null || round.Votes.Count != 3)
         {

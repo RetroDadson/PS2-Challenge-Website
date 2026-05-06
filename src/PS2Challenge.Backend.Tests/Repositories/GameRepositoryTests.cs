@@ -7,7 +7,7 @@ namespace PS2Challenge.Backend.Tests.Repositories;
 
 public class GameRepositoryTests
 {
-    private Ps2ChallengeDbContext GetInMemoryDbContext()
+    private static Ps2ChallengeDbContext GetInMemoryDbContext()
     {
         var options = new DbContextOptionsBuilder<Ps2ChallengeDbContext>()
             .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())

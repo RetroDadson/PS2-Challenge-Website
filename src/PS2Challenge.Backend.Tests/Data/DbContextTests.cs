@@ -18,6 +18,7 @@ public class Ps2ChallengeDbContextTests : IDisposable
     {
         _context.Database.EnsureDeleted();
         _context.Dispose();
+        GC.SuppressFinalize(this);
     }
 
     [Fact]

@@ -31,7 +31,7 @@ public class GamesController : ControllerBase
 
     private ObjectResult InternalServerError(Exception exception, string message, params object[] args)
     {
-        _logger.LogError(exception, message, args);
+        _logger.LogError(exception, "Request failed: {ErrorMessage}", message);
         return StatusCode(StatusCodes.Status500InternalServerError, new { message = InternalServerErrorMessage });
     }
 
@@ -177,7 +177,7 @@ public class GamesController : ControllerBase
 
         // Validate required fields
         var validationErrors = ValidateGameDto(gameDto);
-        if (validationErrors.Any())
+        if (validationErrors.Count > 0)
         {
             return BadRequest(new { errors = validationErrors });
         }
@@ -187,9 +187,12 @@ public class GamesController : ControllerBase
             var createdGame = await _gameService.AddGameAsync(gameDto);
 
             var adminUsername = User.FindFirst(ClaimTypes.Name)?.Value;
-            _logger.LogInformation(
-                "AUDIT: Admin {AdminUser} created game ID {GameId}: {GameTitle}",
-                adminUsername, createdGame.Id, createdGame.Title);
+            if (_logger.IsEnabled(LogLevel.Information))
+            {
+                _logger.LogInformation(
+                    "AUDIT: Admin {AdminUser} created game ID {GameId}: {GameTitle}",
+                    adminUsername, createdGame.Id, createdGame.Title);
+            }
 
             return CreatedAtAction(nameof(GetGameById), new { id = createdGame.Id }, createdGame);
         }
@@ -230,7 +233,7 @@ public class GamesController : ControllerBase
 
             // Validate required fields
             var validationErrors = ValidateGameDto(gameDto);
-            if (validationErrors.Any())
+            if (validationErrors.Count > 0)
             {
                 return BadRequest(new { errors = validationErrors });
             }
@@ -238,9 +241,12 @@ public class GamesController : ControllerBase
             var updatedGame = await _gameService.UpdateGameAsync(id, gameDto);
 
             var adminUsername = User.FindFirst(ClaimTypes.Name)?.Value;
-            _logger.LogInformation(
-                "AUDIT: Admin {AdminUser} updated game ID {GameId}: {GameTitle}",
-                adminUsername, id, gameDto.Title);
+            if (_logger.IsEnabled(LogLevel.Information))
+            {
+                _logger.LogInformation(
+                    "AUDIT: Admin {AdminUser} updated game ID {GameId}: {GameTitle}",
+                    adminUsername, id, gameDto.Title);
+            }
 
             return Ok(updatedGame);
         }
@@ -291,9 +297,12 @@ public class GamesController : ControllerBase
             }
 
             var adminUsername = User.FindFirst(ClaimTypes.Name)?.Value;
-            _logger.LogInformation(
-                "AUDIT: Admin {AdminUser} deleted game ID {GameId}: {GameTitle}",
-                adminUsername, id, game.Title);
+            if (_logger.IsEnabled(LogLevel.Information))
+            {
+                _logger.LogInformation(
+                    "AUDIT: Admin {AdminUser} deleted game ID {GameId}: {GameTitle}",
+                    adminUsername, id, game.Title);
+            }
 
             return Ok(new { message = $"Game '{game.Title}' has been deleted" });
         }
@@ -346,7 +355,7 @@ public class GamesController : ControllerBase
             validationErrors.Add("Reason is required");
         }
 
-        if (validationErrors.Any())
+        if (validationErrors.Count > 0)
         {
             return BadRequest(new { errors = validationErrors });
         }
@@ -356,9 +365,12 @@ public class GamesController : ControllerBase
             var excludedGame = await _gameService.AddExcludedGameAsync(request.Title, request.Reason);
 
             var adminUsername = User.FindFirst(ClaimTypes.Name)?.Value;
-            _logger.LogInformation(
-                "AUDIT: Admin {AdminUser} excluded game ID {GameId}: {GameTitle}",
-                adminUsername, excludedGame.GameId, request.Title);
+            if (_logger.IsEnabled(LogLevel.Information))
+            {
+                _logger.LogInformation(
+                    "AUDIT: Admin {AdminUser} excluded game ID {GameId}: {GameTitle}",
+                    adminUsername, excludedGame.GameId, request.Title);
+            }
 
             return Ok(new
             {
@@ -420,12 +432,15 @@ public class GamesController : ControllerBase
             await _gameService.UpdateExclusionAsync(id, request.IsExcluded, request.Reason);
 
             var adminUsername = User.FindFirst(ClaimTypes.Name)?.Value;
-            _logger.LogInformation(
-                "AUDIT: Admin {AdminUser} {Action} game ID {GameId}: {GameTitle}",
-                adminUsername,
-                request.IsExcluded ? "excluded" : "included",
-                id,
-                game.Title);
+            if (_logger.IsEnabled(LogLevel.Information))
+            {
+                _logger.LogInformation(
+                    "AUDIT: Admin {AdminUser} {Action} game ID {GameId}: {GameTitle}",
+                    adminUsername,
+                    request.IsExcluded ? "excluded" : "included",
+                    id,
+                    game.Title);
+            }
 
             return Ok(new
             {
@@ -483,7 +498,7 @@ public class GamesController : ControllerBase
 
         validationErrors.AddRange(ValidateOwnershipRequest(request));
 
-        if (validationErrors.Any())
+        if (validationErrors.Count > 0)
         {
             return BadRequest(new { errors = validationErrors });
         }
@@ -496,9 +511,12 @@ public class GamesController : ControllerBase
                 request.TypeOwned);
 
             var adminUsername = User.FindFirst(ClaimTypes.Name)?.Value;
-            _logger.LogInformation(
-                "AUDIT: Admin {AdminUser} marked game ID {GameId}: {GameTitle} as owned",
-                adminUsername, gameOwned.GameId, request.Title);
+            if (_logger.IsEnabled(LogLevel.Information))
+            {
+                _logger.LogInformation(
+                    "AUDIT: Admin {AdminUser} marked game ID {GameId}: {GameTitle} as owned",
+                    adminUsername, gameOwned.GameId, request.Title);
+            }
 
             return Ok(new
             {
@@ -562,9 +580,12 @@ public class GamesController : ControllerBase
             bool isOwned = request.OwnPhysicalCopy || !string.IsNullOrWhiteSpace(request.TypeOwned);
 
             var adminUsername = User.FindFirst(ClaimTypes.Name)?.Value;
-            _logger.LogInformation(
-                "AUDIT: Admin {AdminUser} updated ownership for game ID {GameId}: {GameTitle} - Owned: {IsOwned}",
-                adminUsername, id, game.Title, isOwned);
+            if (_logger.IsEnabled(LogLevel.Information))
+            {
+                _logger.LogInformation(
+                    "AUDIT: Admin {AdminUser} updated ownership for game ID {GameId}: {GameTitle} - Owned: {IsOwned}",
+                    adminUsername, id, game.Title, isOwned);
+            }
 
             return Ok(new
             {
@@ -628,7 +649,7 @@ public class GamesController : ControllerBase
             validationErrors.Add("Platform is required");
         }
 
-        if (validationErrors.Any())
+        if (validationErrors.Count > 0)
         {
             return BadRequest(new { errors = validationErrors });
         }
@@ -645,9 +666,12 @@ public class GamesController : ControllerBase
                 request.Platform);
 
             var adminUsername = User.FindFirst(ClaimTypes.Name)?.Value;
-            _logger.LogInformation(
-                "AUDIT: Admin {AdminUser} updated progress for game ID {GameId}: {GameTitle}",
-                adminUsername, progress.GameId, request.Title);
+            if (_logger.IsEnabled(LogLevel.Information))
+            {
+                _logger.LogInformation(
+                    "AUDIT: Admin {AdminUser} updated progress for game ID {GameId}: {GameTitle}",
+                    adminUsername, progress.GameId, request.Title);
+            }
 
             return Ok(new
             {
@@ -716,7 +740,7 @@ public class GamesController : ControllerBase
 
         var validationErrors = ValidateAddSerialNumberRequest(request);
 
-        if (validationErrors.Any())
+        if (validationErrors.Count > 0)
         {
             return BadRequest(new { errors = validationErrors });
         }
@@ -733,9 +757,12 @@ public class GamesController : ControllerBase
             var game = await _gameService.GetGameByIdAsync(serialNumber.GameId);
 
             var adminUsername = User.FindFirst(ClaimTypes.Name)?.Value;
-            _logger.LogInformation(
-                "AUDIT: Admin {AdminUser} added serial number '{SerialNumber}' to game ID {GameId}: {GameTitle}",
-                adminUsername, serialNumber.SerialNumber, serialNumber.GameId, game?.Title ?? request.Title);
+            if (_logger.IsEnabled(LogLevel.Information))
+            {
+                _logger.LogInformation(
+                    "AUDIT: Admin {AdminUser} added serial number '{SerialNumber}' to game ID {GameId}: {GameTitle}",
+                    adminUsername, serialNumber.SerialNumber, serialNumber.GameId, game?.Title ?? request.Title);
+            }
 
             var response = new AddSerialNumberResponse
             {
@@ -851,7 +878,7 @@ public class GamesController : ControllerBase
             validationErrors.Add("Notes cannot exceed 500 characters");
         }
 
-        if (validationErrors.Any())
+        if (validationErrors.Count > 0)
         {
             return BadRequest(new { errors = validationErrors });
         }
@@ -870,9 +897,12 @@ public class GamesController : ControllerBase
                 request.Notes);
 
             var adminUsername = User.FindFirst(ClaimTypes.Name)?.Value;
-            _logger.LogInformation(
-                "AUDIT: Admin {AdminUser} added alternate title '{AlternateTitle}' to game ID {GameId}: {GameTitle}",
-                adminUsername, alternateTitle.Title, id, game.Title);
+            if (_logger.IsEnabled(LogLevel.Information))
+            {
+                _logger.LogInformation(
+                    "AUDIT: Admin {AdminUser} added alternate title '{AlternateTitle}' to game ID {GameId}: {GameTitle}",
+                    adminUsername, alternateTitle.Title, id, game.Title);
+            }
 
             return Ok(new
             {
@@ -935,9 +965,12 @@ public class GamesController : ControllerBase
             }
 
             var adminUsername = User.FindFirst(ClaimTypes.Name)?.Value;
-            _logger.LogInformation(
-                "AUDIT: Admin {AdminUser} deleted alternate title ID {AlternateTitleId} from game ID {GameId}: {GameTitle}",
-                adminUsername, alternateTitleId, id, game.Title);
+            if (_logger.IsEnabled(LogLevel.Information))
+            {
+                _logger.LogInformation(
+                    "AUDIT: Admin {AdminUser} deleted alternate title ID {AlternateTitleId} from game ID {GameId}: {GameTitle}",
+                    adminUsername, alternateTitleId, id, game.Title);
+            }
 
             return Ok(new { message = $"Alternate title deleted successfully from '{game.Title}'" });
         }

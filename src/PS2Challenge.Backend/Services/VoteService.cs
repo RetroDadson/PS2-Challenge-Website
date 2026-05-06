@@ -31,7 +31,7 @@ public class VoteService
 
         // Get all current votes
         var currentVotes = await db.CurrentVotes.ToListAsync();
-        if (!currentVotes.Any())
+        if (currentVotes.Count == 0)
         {
             throw new InvalidOperationException("No current votes to archive");
         }
@@ -88,7 +88,7 @@ public class VoteService
         var db = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
 
         var current = await db.CurrentVotes.AsNoTracking().ToListAsync();
-        if (!current.Any())
+        if (current.Count == 0)
         {
             return new List<CurrentVoteDto>();
         }
@@ -116,7 +116,7 @@ public class VoteService
     /// </summary>
     public virtual async Task<(int inserted, int updated)> SetCurrentVotesAsync(List<CurrentVoteDto> votes)
     {
-        if (votes == null || !votes.Any())
+        if (votes == null || votes.Count == 0)
         {
             throw new ArgumentException("No votes provided", nameof(votes));
         }
@@ -131,7 +131,7 @@ public class VoteService
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        if (!titles.Any())
+        if (titles.Count == 0)
         {
             throw new ArgumentException("No game titles provided");
         }
@@ -144,7 +144,7 @@ public class VoteService
 
         // Determine missing titles
         var missing = titles.Where(t => !titleToId.ContainsKey(t)).ToList();
-        if (missing.Any())
+        if (missing.Count > 0)
         {
             throw new InvalidOperationException($"Some game titles were not found: {string.Join(", ", missing)}");
         }
@@ -194,9 +194,12 @@ public class VoteService
         var db = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
 
         // Find game by title (case-insensitive)
-        var game = await db.Games
+        var normalizedGameTitle = gameTitle.Trim();
+        var games = await db.Games
             .AsNoTracking()
-            .FirstOrDefaultAsync(g => g.Title.ToLower() == gameTitle.Trim().ToLower());
+            .ToListAsync();
+        var game = games.FirstOrDefault(g =>
+            string.Equals(g.Title, normalizedGameTitle, StringComparison.OrdinalIgnoreCase));
 
         if (game == null)
         {
@@ -277,7 +280,7 @@ public class VoteService
             .Where(title => !string.IsNullOrWhiteSpace(title))
             .ToList();
 
-        if (duplicateTitles.Any())
+        if (duplicateTitles.Count > 0)
         {
             throw new ArgumentException($"Duplicate game titles are not allowed: {string.Join(", ", duplicateTitles)}");
         }
@@ -301,7 +304,7 @@ public class VoteService
             .OrderBy(gameNumber => gameNumber)
             .ToList();
 
-        if (duplicateGameNumbers.Any())
+        if (duplicateGameNumbers.Count > 0)
         {
             throw new ArgumentException($"Current votes must use unique game numbers. Duplicate positions: {string.Join(", ", duplicateGameNumbers)}");
         }
@@ -486,7 +489,7 @@ public class VoteService
             .Where(id => !currentVoteGameIds.Contains(id))
             .ToList();
 
-        if (!eligibleGameIds.Any())
+        if (eligibleGameIds.Count == 0)
         {
             throw new InvalidOperationException("No eligible games found. Games must be owned, not excluded, and not started.");
         }

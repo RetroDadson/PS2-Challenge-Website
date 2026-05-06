@@ -64,7 +64,10 @@ public class CoverImageUpdateServiceWrapper : BackgroundService
             var games = await gameService.GetAllGamesAsync();
             var gamesList = games.ToList();
 
-            _logger.LogInformation("Updating cover URLs for {GameCount} games", gamesList.Count);
+            if (_logger.IsEnabled(LogLevel.Information))
+            {
+                _logger.LogInformation("Updating cover URLs for {GameCount} games", gamesList.Count);
+            }
 
             // Get cover URLs for all games in batch
             var gameIds = gamesList.Select(g => g.Id);
@@ -97,10 +100,13 @@ public class CoverImageUpdateServiceWrapper : BackgroundService
                 }
             }
 
-            _logger.LogInformation(
-                "Cover image update completed. Updated {UpdatedCount} out of {TotalCount} games",
-                updatedCount,
-                gamesList.Count);
+            if (_logger.IsEnabled(LogLevel.Information))
+            {
+                _logger.LogInformation(
+                    "Cover image update completed. Updated {UpdatedCount} out of {TotalCount} games",
+                    updatedCount,
+                    gamesList.Count);
+            }
 
             // Notify connected clients that game data (including cover images) has been updated
             if (updatedCount > 0)
@@ -111,8 +117,7 @@ public class CoverImageUpdateServiceWrapper : BackgroundService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to update cover images");
-            throw;
+            throw new InvalidOperationException("Failed to update cover images.", ex);
         }
     }
 }

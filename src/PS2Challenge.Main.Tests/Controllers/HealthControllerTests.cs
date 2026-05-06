@@ -7,6 +7,8 @@ namespace PS2Challenge.Main.Tests.Controllers;
 
 public class HealthControllerTests
 {
+    private static readonly string[] DatabaseTags = ["db"];
+
     private readonly Mock<HealthCheckService> _healthCheckService;
     private readonly Mock<ILogger<HealthController>> _logger;
     private readonly HealthController _controller;
@@ -30,7 +32,7 @@ public class HealthControllerTests
                     TimeSpan.FromMilliseconds(10),
                     null,
                     new Dictionary<string, object>(),
-                    new[] { "db" })
+                    DatabaseTags)
             },
             TimeSpan.FromMilliseconds(12));
 
@@ -56,7 +58,7 @@ public class HealthControllerTests
                     TimeSpan.FromMilliseconds(150),
                     null,
                     new Dictionary<string, object>(),
-                    new[] { "db" })
+                    DatabaseTags)
             },
             TimeSpan.FromMilliseconds(160));
 

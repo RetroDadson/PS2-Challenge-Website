@@ -117,6 +117,33 @@ public class CoverImageUpdateServiceTests : IDisposable
         Assert.Empty(fakeGameService.Updates);
     }
 
+    [Fact]
+    public async Task UpdateCoverImagesAsync_RethrowsWithContext_WhenCoverLookupFails()
+    {
+        var game = new GameDtoBuilder().WithId(1).WithTitle("Game 1").Build();
+        var fakeGameService = new FakeGameService(_context, [game]);
+        var fakeCoverService = new ThrowingGameCoverService(_context);
+
+        var provider = new ServiceCollection()
+            .AddSingleton<GameService>(fakeGameService)
+            .AddSingleton<GameCoverService>(fakeCoverService)
+            .BuildServiceProvider();
+
+        var service = new CoverImageUpdateService(provider, NullLogger<CoverImageUpdateService>.Instance);
+
+        var updateMethod = typeof(CoverImageUpdateService).GetMethod(
+            "UpdateCoverImagesAsync",
+            BindingFlags.NonPublic | BindingFlags.Instance);
+
+        Assert.NotNull(updateMethod);
+
+        var task = (Task)updateMethod.Invoke(service, [CancellationToken.None])!;
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => task);
+
+        Assert.Equal("Failed to update cover images.", exception.Message);
+        Assert.IsType<TimeoutException>(exception.InnerException);
+    }
+
     private sealed class FakeGameService : GameService
     {
         private readonly IEnumerable<GameDto> _games;
@@ -158,6 +185,19 @@ public class CoverImageUpdateServiceTests : IDisposable
                 .ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
 
             return Task.FromResult(result);
+        }
+    }
+
+    private sealed class ThrowingGameCoverService : GameCoverService
+    {
+        public ThrowingGameCoverService(Ps2ChallengeDbContext context)
+            : base(context)
+        {
+        }
+
+        public override Task<Dictionary<int, string>> GetCoverUrlsAsync(IEnumerable<int> gameIds)
+        {
+            throw new TimeoutException("cover lookup timed out");
         }
     }
 }

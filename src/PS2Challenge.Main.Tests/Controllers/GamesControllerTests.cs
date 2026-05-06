@@ -43,7 +43,7 @@ public class GamesControllerTests
 
         // Assert
         var okResult = Assert.IsType<OkObjectResult>(result.Result);
-        var returnedGames = Assert.IsAssignableFrom<IEnumerable<GameDto>>(okResult.Value);
+        var returnedGames = Assert.IsType<IEnumerable<GameDto>>(okResult.Value, exactMatch: false);
         Assert.Equal(2, returnedGames.Count());
     }
 
@@ -62,7 +62,7 @@ public class GamesControllerTests
 
         // Assert
         var okResult = Assert.IsType<OkObjectResult>(result.Result);
-        var returnedGames = Assert.IsAssignableFrom<IEnumerable<GameDto>>(okResult.Value);
+        var returnedGames = Assert.IsType<IEnumerable<GameDto>>(okResult.Value, exactMatch: false);
         Assert.Single(returnedGames);
     }
 
@@ -130,7 +130,7 @@ public class GamesControllerTests
 
         // Assert
         var okResult = Assert.IsType<OkObjectResult>(result);
-        var types = Assert.IsAssignableFrom<IEnumerable<OwnershipType>>(okResult.Value);
+        var types = Assert.IsType<IEnumerable<OwnershipType>>(okResult.Value, exactMatch: false);
         Assert.Equal(3, types.Count());
     }
 
@@ -165,7 +165,7 @@ public class GamesControllerTests
 
         // Assert
         var okResult = Assert.IsType<OkObjectResult>(result.Result);
-        var progress = Assert.IsAssignableFrom<IEnumerable<GameProgressDto>>(okResult.Value);
+        var progress = Assert.IsType<IEnumerable<GameProgressDto>>(okResult.Value, exactMatch: false);
         Assert.Equal(2, progress.Count());
     }
 
@@ -1077,7 +1077,7 @@ public class GamesControllerTests
         var result = await _controller.GetAlternateTitles(1);
 
         var okResult = Assert.IsType<OkObjectResult>(result);
-        var payload = Assert.IsAssignableFrom<IEnumerable<AlternateTitle>>(okResult.Value);
+        var payload = Assert.IsType<IEnumerable<AlternateTitle>>(okResult.Value, exactMatch: false);
         Assert.Equal(2, payload.Count());
     }
 

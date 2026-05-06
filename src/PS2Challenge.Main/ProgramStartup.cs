@@ -59,7 +59,7 @@ internal static class ProgramStartup
         builder.WebHost.ConfigureKestrel(options => options.ListenAnyIP(parsedPort));
     }
 
-    private static EnvironmentConfig InitializeEnvironment(IConfiguration configuration, bool isTesting)
+    private static EnvironmentConfig InitializeEnvironment(ConfigurationManager configuration, bool isTesting)
     {
         var envConfig = EnvironmentConfig.Instance;
         envConfig.Initialize(configuration);
@@ -268,20 +268,17 @@ internal static class ProgramStartup
     {
         services.AddSingleton<IAuthorizationHandler, CookieOrApiKeyAuthorizationHandler>();
 
-        services.AddAuthorization(options =>
-        {
-            options.AddPolicy("AdminCookieOrApiKey", policy =>
+        services.AddAuthorizationBuilder()
+            .AddPolicy("AdminCookieOrApiKey", policy =>
             {
                 policy.AddAuthenticationSchemes(CookieAuthenticationDefaults.AuthenticationScheme, ApiKeySchemeName);
                 policy.Requirements.Add(new CookieOrApiKeyAuthorizationPolicy("Admin"));
-            });
-
-            options.AddPolicy("CookieOrApiKey", policy =>
+            })
+            .AddPolicy("CookieOrApiKey", policy =>
             {
                 policy.AddAuthenticationSchemes(CookieAuthenticationDefaults.AuthenticationScheme, ApiKeySchemeName);
                 policy.Requirements.Add(new CookieOrApiKeyAuthorizationPolicy());
             });
-        });
     }
 
     private static async Task HandleCreatingTicketAsync(Microsoft.AspNetCore.Authentication.OAuth.OAuthCreatingTicketContext context)

@@ -74,7 +74,7 @@ public sealed class VotesControllerTests : IDisposable
 
         // Assert
         var okResult = Assert.IsType<OkObjectResult>(result);
-        var rounds = Assert.IsAssignableFrom<List<VoteRoundDto>>(okResult.Value);
+        var rounds = Assert.IsType<List<VoteRoundDto>>(okResult.Value, exactMatch: false);
         Assert.Equal(2, rounds.Count);
         Assert.Equal("Round 1 notes", rounds[1].Notes);
     }
@@ -236,7 +236,7 @@ public sealed class VotesControllerTests : IDisposable
 
         // Assert
         var okResult = Assert.IsType<OkObjectResult>(result);
-        var votes = Assert.IsAssignableFrom<IEnumerable<CurrentVoteDto>>(okResult.Value);
+        var votes = Assert.IsType<IEnumerable<CurrentVoteDto>>(okResult.Value, exactMatch: false);
         Assert.Empty(votes);
     }
 
@@ -259,7 +259,7 @@ public sealed class VotesControllerTests : IDisposable
 
         // Assert
         var okResult = Assert.IsType<OkObjectResult>(result);
-        var votes = Assert.IsAssignableFrom<List<CurrentVoteDto>>(okResult.Value);
+        var votes = Assert.IsType<List<CurrentVoteDto>>(okResult.Value, exactMatch: false);
         Assert.Equal(2, votes.Count);
     }
 

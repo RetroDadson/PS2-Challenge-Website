@@ -85,7 +85,10 @@ public class ApiKeyAuthenticationHandler : AuthenticationHandler<AuthenticationS
             var principal = new ClaimsPrincipal(identity);
             var ticket = new AuthenticationTicket(principal, Scheme.Name);
 
-            _logger.LogInformation("User {Username} authenticated via API key", user.TwitchUsername);
+            if (_logger.IsEnabled(LogLevel.Information))
+            {
+                _logger.LogInformation("User {Username} authenticated via API key", user.TwitchUsername);
+            }
 
             return AuthenticateResult.Success(ticket);
         }

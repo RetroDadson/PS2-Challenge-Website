@@ -13,13 +13,21 @@ public class VotesHub : Hub
 
 	public string GetConnectionId()
 	{
-		_logger.LogDebug("VotesHub connection requested: {ConnectionId}", Context.ConnectionId);
+		if (_logger.IsEnabled(LogLevel.Debug))
+		{
+			_logger.LogDebug("VotesHub connection requested: {ConnectionId}", Context.ConnectionId);
+		}
+
 		return Context.ConnectionId;
 	}
 
 	public Task Ping()
 	{
-		_logger.LogDebug("VotesHub ping from: {ConnectionId}", Context.ConnectionId);
+		if (_logger.IsEnabled(LogLevel.Debug))
+		{
+			_logger.LogDebug("VotesHub ping from: {ConnectionId}", Context.ConnectionId);
+		}
+
 		return Clients.Caller.SendAsync("Pong");
 	}
 }

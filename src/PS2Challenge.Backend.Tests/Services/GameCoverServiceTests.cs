@@ -7,6 +7,8 @@ namespace PS2Challenge.Backend.Tests.Services;
 
 public class GameCoverServiceTests : IDisposable
 {
+    private static readonly int[] GameIdsWithMissingCover = [1, 2, 3];
+
     private readonly Ps2ChallengeDbContext _context;
     private readonly GameCoverService _service;
     private bool _disposed;
@@ -99,7 +101,7 @@ public class GameCoverServiceTests : IDisposable
 
         await _context.SaveChangesAsync();
 
-        var result = await _service.GetCoverUrlsAsync(new[] { 1, 2, 3 });
+        var result = await _service.GetCoverUrlsAsync(GameIdsWithMissingCover);
 
         Assert.Equal(2, result.Count);
         Assert.Equal("https://raw.githubusercontent.com/xlenore/ps2-covers/main/covers/default/SLUS-11111.jpg", result[1]);

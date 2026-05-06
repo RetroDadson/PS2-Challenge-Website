@@ -162,13 +162,20 @@ public class GameService
         // Use ILike for PostgreSQL or ToLower().Contains() for in-memory/testing
         var isInMemory = dbContext.Database.ProviderName == "Microsoft.EntityFrameworkCore.InMemory";
 
-        var games = isInMemory
-            ? await dbContext.Games
-                .Where(g => g.Title.ToLower().Contains(title.ToLower()))
-                .ToListAsync()
-            : await dbContext.Games
+        List<GameDto> games;
+        if (isInMemory)
+        {
+            var allGames = await dbContext.Games.ToListAsync();
+            games = allGames
+                .Where(g => g.Title.Contains(title, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+        else
+        {
+            games = await dbContext.Games
                 .Where(g => EF.Functions.ILike(g.Title, $"%{title}%"))
                 .ToListAsync();
+        }
 
         var excludedIds = await dbContext.ExcludedGames.Select(x => x.GameId).ToListAsync();
         var ownedIds = await dbContext.GamesOwned.Select(x => x.GameId).ToListAsync();
@@ -641,8 +648,11 @@ public class GameService
         }
 
         // Check if alternate title already exists for this game (case-insensitive)
-        var existingAlternateTitle = await dbContext.AlternateTitles
-            .FirstOrDefaultAsync(at => at.GameId == gameId && at.Title.ToLower() == title.ToLower());
+        var existingAlternateTitles = await dbContext.AlternateTitles
+            .Where(at => at.GameId == gameId)
+            .ToListAsync();
+        var existingAlternateTitle = existingAlternateTitles.FirstOrDefault(at =>
+            string.Equals(at.Title, title, StringComparison.OrdinalIgnoreCase));
 
         if (existingAlternateTitle != null)
         {

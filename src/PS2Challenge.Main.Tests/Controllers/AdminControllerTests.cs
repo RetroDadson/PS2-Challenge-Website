@@ -34,7 +34,7 @@ public class AdminControllerTests
         var result = await _controller.GetAllUsers();
 
         var ok = Assert.IsType<OkObjectResult>(result);
-        var users = Assert.IsAssignableFrom<IEnumerable<object>>(ok.Value);
+        var users = Assert.IsType<IEnumerable<object>>(ok.Value, exactMatch: false);
         Assert.Equal(2, users.Count());
     }
 
@@ -50,7 +50,7 @@ public class AdminControllerTests
         var result = await _controller.GetAllRoles();
 
         var ok = Assert.IsType<OkObjectResult>(result);
-        var roles = Assert.IsAssignableFrom<IEnumerable<object>>(ok.Value);
+        var roles = Assert.IsType<IEnumerable<object>>(ok.Value, exactMatch: false);
         Assert.Equal(2, roles.Count());
     }
 

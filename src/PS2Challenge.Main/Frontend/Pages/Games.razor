@@ -512,11 +512,10 @@ private HubConnection? hubConnection;
         var results = new List<GameDto>(count);
         var searchLower = string.IsNullOrWhiteSpace(searchQuery) ? null : searchQuery.ToLowerInvariant();
 
-        for (int i = 0; i < count; i++)
+        foreach (var game in allGames.Where(game =>
+            (!showOwnedOnly || game.IsOwned) &&
+            (showExcludedGames || !game.IsExcluded)))
         {
-            var game = allGames[i];
-            if (showOwnedOnly && !game.IsOwned) continue;
-            if (!showExcludedGames && game.IsExcluded) continue;
             if (searchLower != null && !GameMatchesSearch(game, searchLower)) continue;
             results.Add(game);
         }

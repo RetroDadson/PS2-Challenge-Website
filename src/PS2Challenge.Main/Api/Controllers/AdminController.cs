@@ -43,7 +43,10 @@ public class AdminController : ControllerBase
     {
         try
         {
-            _logger.LogInformation("GetAllUsers called by {User}", User.Identity?.Name);
+            if (_logger.IsEnabled(LogLevel.Information))
+            {
+                _logger.LogInformation("GetAllUsers called by {User}", User.Identity?.Name);
+            }
 
             var users = await _userRepository.GetAllUsersAsync();
 
@@ -59,7 +62,10 @@ public class AdminController : ControllerBase
                 lastLoginAt = u.LastLoginAt
             }).ToList();
 
-            _logger.LogInformation("Returning {Count} users", result.Count);
+            if (_logger.IsEnabled(LogLevel.Information))
+            {
+                _logger.LogInformation("Returning {Count} users", result.Count);
+            }
             return Ok(result);
         }
         catch (Exception ex)
@@ -85,7 +91,10 @@ public class AdminController : ControllerBase
     {
         try
         {
-            _logger.LogInformation("GetAllRoles called by {User}", User.Identity?.Name);
+            if (_logger.IsEnabled(LogLevel.Information))
+            {
+                _logger.LogInformation("GetAllRoles called by {User}", User.Identity?.Name);
+            }
 
             var roles = await _userRepository.GetAllRolesAsync();
 
@@ -96,7 +105,10 @@ public class AdminController : ControllerBase
                 description = r.Description
             }).ToList();
 
-            _logger.LogInformation("Returning {Count} roles", result.Count);
+            if (_logger.IsEnabled(LogLevel.Information))
+            {
+                _logger.LogInformation("Returning {Count} roles", result.Count);
+            }
             return Ok(result);
         }
         catch (Exception ex)
@@ -171,9 +183,12 @@ public class AdminController : ControllerBase
         await _userRepository.UpdateAsync(user);
 
         // Log the successful role change
-        _logger.LogInformation(
-            "AUDIT: Admin {AdminUser} (ID: {AdminId}) changed role for user {TargetUser} (ID: {TargetId}) from {OldRole} to {NewRole}",
-            adminUsername, currentUserId, user.TwitchUsername, user.Id, oldRole, role.Name);
+        if (_logger.IsEnabled(LogLevel.Information))
+        {
+            _logger.LogInformation(
+                "AUDIT: Admin {AdminUser} (ID: {AdminId}) changed role for user {TargetUser} (ID: {TargetId}) from {OldRole} to {NewRole}",
+                adminUsername, currentUserId, user.TwitchUsername, user.Id, oldRole, role.Name);
+        }
 
         return Ok(new
         {
