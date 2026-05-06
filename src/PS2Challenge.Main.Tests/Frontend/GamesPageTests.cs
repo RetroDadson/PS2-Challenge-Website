@@ -456,4 +456,29 @@ public class GamesPageTests : BunitContext
             Assert.Contains("Game B", firstRow.TextContent);
         });
     }
+
+    [Fact]
+    public async Task GamesPage_WhenMoreThanInitialBatch_RendersAllRowsForOfflineViewing()
+    {
+        var games = Enumerable.Range(1, 300)
+            .Select(i => new GameDto
+            {
+                Id = i,
+                Title = $"Game {i:D3}",
+                Developer = "Dev",
+                Publisher = "Pub",
+                RegionFirstReleasedIn = "NA",
+                IsOwned = true,
+                IsExcluded = false
+            })
+            .ToList();
+
+        SetupGameServiceMock(games);
+
+        var cut = Render<Games>();
+        await Task.Delay(100);
+
+        Assert.Equal(300, cut.FindAll("tbody tr").Count);
+        Assert.Contains("Game 300", cut.Markup);
+    }
 }

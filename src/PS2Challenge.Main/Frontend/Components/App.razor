@@ -44,18 +44,49 @@
     <script src="js/statistics-chart.js"></script>
     
     <script>
+        const isGamesPage = () => window.location.pathname.toLowerCase() === '/games';
+        const getReconnectModal = () => document.getElementById('components-reconnect-modal');
+
+        const activateGamesOfflineMode = () => {
+            if (!isGamesPage()) {
+                return false;
+            }
+
+            if (!document.querySelector('.games-table tbody tr[data-game-row="true"]')) {
+                return false;
+            }
+
+            console.log('Games page offline mode active; keeping rendered data visible');
+            const reconnectModal = getReconnectModal();
+            if (reconnectModal) {
+                reconnectModal.style.display = 'none';
+            }
+
+            if (window.gamesFilter && !window.gamesFilter.isActive) {
+                window.gamesFilter.init(true);
+            }
+
+            return true;
+        };
+
         // Wait for Blazor to be ready, then customize reconnection UI
         document.addEventListener('DOMContentLoaded', () => {
-            const reconnectModal = document.getElementById('components-reconnect-modal');
             let reconnecting = false;
             
             // Override Blazor's reconnection behavior
             Blazor.reconnect = async () => {
                 if (reconnecting) return;
                 reconnecting = true;
+
+                if (activateGamesOfflineMode()) {
+                    return;
+                }
                 
                 console.log('Blazor connection lost, showing reconnection modal');
-                reconnectModal.style.display = 'flex';
+                const reconnectModal = getReconnectModal();
+                if (reconnectModal) {
+                    reconnectModal.style.display = 'flex';
+                }
                 
                 // FORCE activate JavaScript filters after a short delay
                 setTimeout(() => {
@@ -90,19 +121,25 @@
                 console.log('Max reconnection attempts reached');
                 
                 // Show failure message
-                reconnectModal.querySelector('h3').textContent = 'Unable to Reconnect';
-                reconnectModal.querySelector('p').textContent = 'Please check your internet connection and refresh the page.';
-                const loadingSpinner = reconnectModal.querySelector('.loading');
-                if (loadingSpinner) loadingSpinner.style.display = 'none';
+                if (reconnectModal) {
+                    reconnectModal.querySelector('h3').textContent = 'Unable to Reconnect';
+                    reconnectModal.querySelector('p').textContent = 'Please check your internet connection and refresh the page.';
+                    const loadingSpinner = reconnectModal.querySelector('.loading');
+                    if (loadingSpinner) loadingSpinner.style.display = 'none';
+                }
             };
         });
         
         // Also detect offline event immediately
         window.addEventListener('offline', () => {
             console.log('Browser detected offline event');
+
+            if (activateGamesOfflineMode()) {
+                return;
+            }
             
             // Show reconnection modal
-            const reconnectModal = document.getElementById('components-reconnect-modal');
+            const reconnectModal = getReconnectModal();
             if (reconnectModal) {
                 reconnectModal.style.display = 'flex';
             }
