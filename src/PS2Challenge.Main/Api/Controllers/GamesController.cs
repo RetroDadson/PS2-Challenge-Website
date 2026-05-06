@@ -29,7 +29,7 @@ public class GamesController : ControllerBase
         _logger = logger;
     }
 
-    private ObjectResult InternalServerError(Exception exception, string message, params object[] args)
+    private ObjectResult InternalServerError(Exception exception, string message)
     {
         _logger.LogError(exception, "Request failed: {ErrorMessage}", message);
         return StatusCode(StatusCodes.Status500InternalServerError, new { message = InternalServerErrorMessage });
@@ -128,7 +128,7 @@ public class GamesController : ControllerBase
         }
         catch (Exception ex)
         {
-            return InternalServerError(ex, "Error getting game by ID {GameId}", id);
+            return InternalServerError(ex, $"Error getting game by ID {id}");
         }
     }
 
@@ -256,7 +256,7 @@ public class GamesController : ControllerBase
         }
         catch (Exception ex)
         {
-            return InternalServerError(ex, "Error updating game {GameId}", id);
+            return InternalServerError(ex, $"Error updating game {id}");
         }
     }
 
@@ -308,7 +308,7 @@ public class GamesController : ControllerBase
         }
         catch (Exception ex)
         {
-            return InternalServerError(ex, "Error deleting game {GameId}", id);
+            return InternalServerError(ex, $"Error deleting game {id}");
         }
     }
 
@@ -453,7 +453,7 @@ public class GamesController : ControllerBase
         }
         catch (Exception ex)
         {
-            return InternalServerError(ex, "Error updating exclusion for game {GameId}", id);
+            return InternalServerError(ex, $"Error updating exclusion for game {id}");
         }
     }
 
@@ -599,7 +599,7 @@ public class GamesController : ControllerBase
         }
         catch (Exception ex)
         {
-            return InternalServerError(ex, "Error updating ownership for game {GameId}", id);
+            return InternalServerError(ex, $"Error updating ownership for game {id}");
         }
     }
 
@@ -783,7 +783,7 @@ public class GamesController : ControllerBase
         }
         catch (Exception ex)
         {
-            return InternalServerError(ex, "Error adding serial number for game '{GameTitle}'", request.Title);
+            return InternalServerError(ex, $"Error adding serial number for game '{request.Title}'");
         }
     }
 
@@ -818,7 +818,7 @@ public class GamesController : ControllerBase
         }
         catch (Exception ex)
         {
-            return InternalServerError(ex, "Error getting alternate titles for game {GameId}", id);
+            return InternalServerError(ex, $"Error getting alternate titles for game {id}");
         }
     }
 
@@ -922,11 +922,11 @@ public class GamesController : ControllerBase
             }
 
             // Otherwise it's a different error (shouldn't happen as we check game existence above)
-            return InternalServerError(ex, "Error adding alternate title for game {GameId}", id);
+            return InternalServerError(ex, $"Error adding alternate title for game {id}");
         }
         catch (Exception ex)
         {
-            return InternalServerError(ex, "Error adding alternate title for game {GameId}", id);
+            return InternalServerError(ex, $"Error adding alternate title for game {id}");
         }
     }
 
@@ -976,7 +976,7 @@ public class GamesController : ControllerBase
         }
         catch (Exception ex)
         {
-            return InternalServerError(ex, "Error deleting alternate title {AlternateTitleId} for game {GameId}", alternateTitleId, id);
+            return InternalServerError(ex, $"Error deleting alternate title {alternateTitleId} for game {id}");
         }
     }
 

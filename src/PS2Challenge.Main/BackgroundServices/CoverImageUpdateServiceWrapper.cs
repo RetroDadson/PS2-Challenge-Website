@@ -51,73 +51,17 @@ public class CoverImageUpdateServiceWrapper : BackgroundService
 
     private async Task UpdateCoverImagesAsync(CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Starting cover image update process");
-
         using var scope = _serviceProvider.CreateScope();
-        var coverService = scope.ServiceProvider.GetRequiredService<GameCoverService>();
-        var gameService = scope.ServiceProvider.GetRequiredService<GameService>();
+        var refreshService = scope.ServiceProvider.GetRequiredService<CoverImageRefreshService>();
         var hubContext = scope.ServiceProvider.GetRequiredService<IHubContext<GamesHub>>();
 
-        try
+        var updatedCount = await refreshService.RefreshCoverImagesAsync(cancellationToken);
+        if (updatedCount <= 0)
         {
-            // Get all games
-            var games = await gameService.GetAllGamesAsync();
-            var gamesList = games.ToList();
-
-            if (_logger.IsEnabled(LogLevel.Information))
-            {
-                _logger.LogInformation("Updating cover URLs for {GameCount} games", gamesList.Count);
-            }
-
-            // Get cover URLs for all games in batch
-            var gameIds = gamesList.Select(g => g.Id);
-            var coverUrls = await coverService.GetCoverUrlsAsync(gameIds);
-
-            // Update each game's ImageUrl
-            int updatedCount = 0;
-            foreach (var game in gamesList)
-            {
-                if (cancellationToken.IsCancellationRequested)
-                    break;
-
-                if (coverUrls.TryGetValue(game.Id, out var coverUrl))
-                {
-                    // Only update if the URL has changed or is null
-                    if (game.ImageUrl != coverUrl)
-                    {
-                        await gameService.UpdateGameCoverUrlAsync(game.Id, coverUrl);
-                        updatedCount++;
-                    }
-                }
-                else
-                {
-                    // No serial number = no cover
-                    if (game.ImageUrl != null)
-                    {
-                        await gameService.UpdateGameCoverUrlAsync(game.Id, null);
-                        updatedCount++;
-                    }
-                }
-            }
-
-            if (_logger.IsEnabled(LogLevel.Information))
-            {
-                _logger.LogInformation(
-                    "Cover image update completed. Updated {UpdatedCount} out of {TotalCount} games",
-                    updatedCount,
-                    gamesList.Count);
-            }
-
-            // Notify connected clients that game data (including cover images) has been updated
-            if (updatedCount > 0)
-            {
-                await hubContext.Clients.All.SendAsync("GamesUpdated", cancellationToken);
-                _logger.LogInformation("Sent GamesUpdated notification to connected clients");
-            }
+            return;
         }
-        catch (Exception ex)
-        {
-            throw new InvalidOperationException("Failed to update cover images.", ex);
-        }
+
+        await hubContext.Clients.All.SendAsync("GamesUpdated", cancellationToken);
+        _logger.LogInformation("Sent GamesUpdated notification to connected clients");
     }
 }

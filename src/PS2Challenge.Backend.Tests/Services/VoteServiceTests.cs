@@ -244,4 +244,32 @@ public class VoteServiceTests
         Assert.Contains(currentVotes, cv => cv.GameNumber == 2);
         Assert.Contains(currentVotes, cv => cv.GameNumber == 3);
     }
+
+    [Fact]
+    public async Task FillCurrentVotesWithRandomGameDetailsAsync_ReturnsAddedVoteDetails()
+    {
+        _context.Games.Add(new GameDto
+        {
+            Id = 6,
+            Title = "Only Eligible",
+            Developer = "D",
+            Publisher = "P",
+            RegionFirstReleasedIn = "NA"
+        });
+        _context.GamesOwned.Add(new GameOwned
+        {
+            GameId = 6,
+            OwnPhysicalCopy = true,
+            TypeOwned = "PAL"
+        });
+        await _context.SaveChangesAsync();
+
+        var addedVotes = await _voteService.FillCurrentVotesWithRandomGameDetailsAsync(1);
+
+        var addedVote = Assert.Single(addedVotes);
+        Assert.Equal(6, addedVote.GameId);
+        Assert.Equal("Only Eligible", addedVote.GameTitle);
+        Assert.Equal(1, addedVote.GameNumber);
+        Assert.Equal(0, addedVote.VoteCount);
+    }
 }

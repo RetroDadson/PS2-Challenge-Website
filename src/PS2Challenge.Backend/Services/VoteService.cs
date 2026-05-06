@@ -442,6 +442,17 @@ public class VoteService
     /// <returns>Number of games added</returns>
     public virtual async Task<int> FillCurrentVotesWithRandomGamesAsync(int count)
     {
+        var addedVotes = await FillCurrentVotesWithRandomGameDetailsAsync(count);
+        return addedVotes.Count;
+    }
+
+    /// <summary>
+    /// Fills current votes with random eligible games and returns the added vote details.
+    /// </summary>
+    /// <param name="count">Number of games to add (will be limited by available slots)</param>
+    /// <returns>Details for the games added to current votes</returns>
+    public virtual async Task<List<CurrentVoteDto>> FillCurrentVotesWithRandomGameDetailsAsync(int count)
+    {
         if (count <= 0)
         {
             throw new ArgumentException("Count must be greater than 0", nameof(count));
@@ -536,6 +547,19 @@ public class VoteService
         await db.CurrentVotes.AddRangeAsync(newVotes);
         await db.SaveChangesAsync();
 
-        return newVotes.Count;
+        var gameTitles = await db.Games
+            .AsNoTracking()
+            .Where(g => selectedGameIds.Contains(g.Id))
+            .ToDictionaryAsync(g => g.Id, g => g.Title);
+
+        return newVotes
+            .Select(vote => new CurrentVoteDto
+            {
+                GameId = vote.GameId,
+                GameTitle = gameTitles.GetValueOrDefault(vote.GameId) ?? string.Empty,
+                VoteCount = vote.VoteCount,
+                GameNumber = vote.GameNumber
+            })
+            .ToList();
     }
 }

@@ -107,6 +107,7 @@ internal static class ProgramStartup
         builder.Services.AddSingleton<GameService>();
         builder.Services.AddSingleton<VoteService>();
         builder.Services.AddScoped<GameCoverService>();
+        builder.Services.AddScoped<CoverImageRefreshService>();
         builder.Services.AddScoped<UserRepository>();
         builder.Services.AddScoped<GameRepository>();
         builder.Services.AddHostedService<CoverImageUpdateServiceWrapper>();

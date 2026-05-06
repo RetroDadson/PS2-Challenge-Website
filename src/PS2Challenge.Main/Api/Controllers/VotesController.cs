@@ -8,7 +8,6 @@ using PS2Challenge.Backend.Models;
 using PS2Challenge.Backend.Services;
 using PS2Challenge.Main.Api.Hubs;
 using System.Text.Json.Serialization;
-using System.Security.Cryptography;
 
 namespace PS2Challenge.Api.Api.Controllers;
 
@@ -483,115 +482,15 @@ public class VotesController : ControllerBase
             return BadRequest(new { message = "Count must be greater than 0" });
         }
 
-        using var scope = _scopeFactory.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<Ps2ChallengeDbContext>();
-
         try
         {
-            // Get current vote count
-            var currentVotesCount = await db.CurrentVotes.CountAsync();
-
-            // Calculate how many games we can add (max 3 total)
-            var slotsAvailable = 3 - currentVotesCount;
-            if (slotsAvailable <= 0)
+            var addedVotes = await _voteService.FillCurrentVotesWithRandomGameDetailsAsync(request.Count);
+            var response = addedVotes.Select(vote => new
             {
-                return BadRequest(new { message = "Current votes already has 3 games. Archive or remove existing votes first." });
-            }
-
-            var gamesToAdd = Math.Min(request.Count, slotsAvailable);
-
-            // Get owned game IDs
-            var ownedGameIds = await db.GamesOwned
-                .Select(go => go.GameId)
-                .ToListAsync();
-
-            // Get excluded game IDs
-            var excludedGameIds = await db.ExcludedGames
-                .Select(eg => eg.GameId)
-                .ToListAsync();
-
-            // Get games that have been started (have progress with date started)
-            var startedGameIds = await db.GameProgress
-                .Select(gp => gp.GameId)
-                .ToListAsync();
-
-            // Get game IDs already in current votes
-            var currentVoteGameIds = await db.CurrentVotes
-                .Select(cv => cv.GameId)
-                .ToListAsync();
-
-            // Get eligible game IDs: owned, not excluded, not started, not in current votes
-            var eligibleGameIds = ownedGameIds
-                .Where(id => !excludedGameIds.Contains(id))
-                .Where(id => !startedGameIds.Contains(id))
-                .Where(id => !currentVoteGameIds.Contains(id))
-                .ToList();
-
-            if (eligibleGameIds.Count == 0)
-            {
-                return BadRequest(new { message = "No eligible games found. Games must be owned, not excluded, and not started." });
-            }
-
-            if (eligibleGameIds.Count < gamesToAdd)
-            {
-                return BadRequest(new
-                {
-                    message = $"Only {eligibleGameIds.Count} eligible game(s) available, but {gamesToAdd} requested.",
-                    availableGames = eligibleGameIds.Count,
-                    requestedGames = gamesToAdd
-                });
-            }
-
-            // Randomly select games
-            var shuffledGameIds = eligibleGameIds.ToList();
-            for (var i = shuffledGameIds.Count - 1; i > 0; i--)
-            {
-                var j = RandomNumberGenerator.GetInt32(i + 1);
-                (shuffledGameIds[i], shuffledGameIds[j]) = (shuffledGameIds[j], shuffledGameIds[i]);
-            }
-
-            var selectedGameIds = shuffledGameIds
-                .Take(gamesToAdd)
-                .ToList();
-
-            // Get used game numbers
-            var usedGameNumbers = await db.CurrentVotes
-                .Select(cv => cv.GameNumber)
-                .ToListAsync();
-
-            // Find available game numbers (1-3)
-            var availableGameNumbers = Enumerable.Range(1, 3)
-                .Where(n => !usedGameNumbers.Contains(n))
-                .ToList();
-
-            // Create new current vote entries
-            var newVotes = new List<CurrentVote>();
-            for (int i = 0; i < selectedGameIds.Count; i++)
-            {
-                newVotes.Add(new CurrentVote
-                {
-                    GameId = selectedGameIds[i],
-                    VoteCount = 0,
-                    GameNumber = availableGameNumbers[i]
-                });
-            }
-
-            await db.CurrentVotes.AddRangeAsync(newVotes);
-            await db.SaveChangesAsync();
-
-            // Get game titles for response
-            var addedGames = await db.Games
-                .AsNoTracking()
-                .Where(g => selectedGameIds.Contains(g.Id))
-                .Select(g => new { g.Id, g.Title })
-                .ToListAsync();
-
-            var response = newVotes.Select(cv => new
-            {
-                gameId = cv.GameId,
-                gameTitle = addedGames.FirstOrDefault(g => g.Id == cv.GameId)?.Title ?? "Unknown",
-                gameNumber = cv.GameNumber,
-                voteCount = cv.VoteCount
+                gameId = vote.GameId,
+                gameTitle = vote.GameTitle,
+                gameNumber = vote.GameNumber,
+                voteCount = vote.VoteCount
             }).ToList();
 
             // Notify SignalR clients that votes were updated
@@ -599,9 +498,17 @@ public class VotesController : ControllerBase
 
             return Ok(new
             {
-                message = $"Successfully added {newVotes.Count} random game(s) to current votes",
+                message = $"Successfully added {addedVotes.Count} random game(s) to current votes",
                 addedGames = response
             });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
         }
         catch (Exception)
         {

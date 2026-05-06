@@ -59,8 +59,10 @@ public class CoverImageUpdateServiceTests : IDisposable
         });
 
         var provider = new ServiceCollection()
-            .AddSingleton<GameService>(fakeGameService)
-            .AddSingleton<GameCoverService>(fakeCoverService)
+            .AddSingleton(new CoverImageRefreshService(
+                fakeGameService,
+                fakeCoverService,
+                NullLogger<CoverImageRefreshService>.Instance))
             .BuildServiceProvider();
 
         var service = new CoverImageUpdateService(provider, NullLogger<CoverImageUpdateService>.Instance);
@@ -96,8 +98,10 @@ public class CoverImageUpdateServiceTests : IDisposable
         });
 
         var provider = new ServiceCollection()
-            .AddSingleton<GameService>(fakeGameService)
-            .AddSingleton<GameCoverService>(fakeCoverService)
+            .AddSingleton(new CoverImageRefreshService(
+                fakeGameService,
+                fakeCoverService,
+                NullLogger<CoverImageRefreshService>.Instance))
             .BuildServiceProvider();
 
         var service = new CoverImageUpdateService(provider, NullLogger<CoverImageUpdateService>.Instance);
@@ -125,8 +129,10 @@ public class CoverImageUpdateServiceTests : IDisposable
         var fakeCoverService = new ThrowingGameCoverService(_context);
 
         var provider = new ServiceCollection()
-            .AddSingleton<GameService>(fakeGameService)
-            .AddSingleton<GameCoverService>(fakeCoverService)
+            .AddSingleton(new CoverImageRefreshService(
+                fakeGameService,
+                fakeCoverService,
+                NullLogger<CoverImageRefreshService>.Instance))
             .BuildServiceProvider();
 
         var service = new CoverImageUpdateService(provider, NullLogger<CoverImageUpdateService>.Instance);
