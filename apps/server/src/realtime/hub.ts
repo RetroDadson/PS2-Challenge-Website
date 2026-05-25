@@ -36,7 +36,7 @@ export class RealtimeHub {
     sockets.add(socket);
     this.logger?.debug({ hub, connectionId }, `${hubName(hub)} connection requested: ${connectionId}`);
     socket.on("message", (message) => {
-      if (message.toString() === "Ping") {
+      if (message.toString().toLocaleLowerCase("en-GB") === "ping") {
         this.logger?.debug({ hub, connectionId }, `${hubName(hub)} ping from: ${connectionId}`);
         socket.send(JSON.stringify({ type: "Pong" }));
       }
