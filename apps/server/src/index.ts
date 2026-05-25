@@ -1,15 +1,8 @@
-import { useAzureMonitor } from "@azure/monitor-opentelemetry";
-import { loadConfig } from "./config.js";
-import { startApp } from "./server.js";
+import { configureTelemetry } from "./telemetry.js";
+
+configureTelemetry();
+
+const [{ loadConfig }, { startApp }] = await Promise.all([import("./config.js"), import("./server.js")]);
 
 const config = loadConfig();
-
-if (config.applicationInsightsConnectionString) {
-  useAzureMonitor({
-    azureMonitorExporterOptions: {
-      connectionString: config.applicationInsightsConnectionString
-    }
-  });
-}
-
 await startApp(config);

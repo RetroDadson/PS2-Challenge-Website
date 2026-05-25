@@ -2,6 +2,7 @@ import fs from "node:fs";
 import crypto from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { resolveApplicationInsightsConnectionString } from "./telemetryConfig.js";
 
 export type AppConfig = {
   nodeEnv: string;
@@ -67,9 +68,7 @@ export function loadConfig(validate = true): AppConfig {
     twitchClientSecret,
     publicBaseUrl,
     cookieSecret: configuredCookieSecret ?? crypto.randomBytes(32).toString("hex"),
-    applicationInsightsConnectionString:
-      process.env.APPLICATIONINSIGHTS_CONNECTION_STRING ??
-      (process.env.APPINSIGHTS_INSTRUMENTATIONKEY ? `InstrumentationKey=${process.env.APPINSIGHTS_INSTRUMENTATIONKEY}` : undefined)
+    applicationInsightsConnectionString: resolveApplicationInsightsConnectionString()
   };
 
   if (shouldValidateConfig(validate, normalizedNodeEnv)) {
@@ -178,7 +177,15 @@ function mergeSettingsSection<T extends object>(left: T | undefined, right: T | 
 
 export function normalizePostgresConnectionString(value: string): string {
   const trimmed = value.trim();
-  if (!trimmed || trimmed.includes("://") || !trimmed.includes("=")) {
+  if (!trimmed) {
+    return trimmed;
+  }
+
+  if (trimmed.includes("://")) {
+    return normalizePostgresUrlConnectionString(trimmed);
+  }
+
+  if (!trimmed.includes("=")) {
     return trimmed;
   }
 
@@ -206,8 +213,36 @@ export function normalizePostgresConnectionString(value: string): string {
   const port = parts.port ? `:${parts.port}` : "";
   const encodedPassword = password ? `:${encodeURIComponent(password)}` : "";
   const credentials = username ? `${encodeURIComponent(username)}${encodedPassword}@` : "";
-  const normalizedSslMode = parts.sslmode?.toLocaleLowerCase("en-GB");
+  const normalizedSslMode = normalizePostgresSslMode(parts.sslmode, host);
   const sslMode = normalizedSslMode ? `?sslmode=${encodeURIComponent(normalizedSslMode)}` : "";
 
   return `postgresql://${credentials}${host}${port}/${encodeURIComponent(database)}${sslMode}`;
+}
+
+function normalizePostgresUrlConnectionString(value: string): string {
+  try {
+    const url = new URL(value);
+    const sslMode = normalizePostgresSslMode(url.searchParams.get("sslmode") ?? undefined, url.hostname);
+    if (sslMode) {
+      url.searchParams.set("sslmode", sslMode);
+    }
+    return url.toString();
+  } catch {
+    return value;
+  }
+}
+
+function normalizePostgresSslMode(value: string | undefined, host: string): string | undefined {
+  const mode = value?.trim().toLocaleLowerCase("en-GB").replace(/\s+/g, "-");
+  if (mode === "require" || mode === "verifyfull" || mode === "verify-full") {
+    return "verify-full";
+  }
+  if (mode) {
+    return mode;
+  }
+  return isAzurePostgresHost(host) ? "verify-full" : undefined;
+}
+
+function isAzurePostgresHost(host: string): boolean {
+  return host.toLocaleLowerCase("en-GB").endsWith(".postgres.database.azure.com");
 }

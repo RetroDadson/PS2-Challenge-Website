@@ -19,9 +19,23 @@ describe("config", () => {
     ).toBe("postgresql://ps2_challenge:SuperSecurePassword123@localhost/dadsons_ps2_challenge");
     expect(normalizePostgresConnectionString("postgresql://user:pass@localhost/db")).toBe("postgresql://user:pass@localhost/db");
     expect(normalizePostgresConnectionString("Server=db;Database=challenge;User Id=dadson;Pwd=p a s s;Port=5433;Ssl Mode=Require")).toBe(
-      "postgresql://dadson:p%20a%20s%20s@db:5433/challenge?sslmode=require"
+      "postgresql://dadson:p%20a%20s%20s@db:5433/challenge?sslmode=verify-full"
     );
     expect(normalizePostgresConnectionString("Host=localhost;Username=user")).toBe("Host=localhost;Username=user");
+  });
+
+  it("normalizes Azure Postgres SSL settings without pg SSL-mode warnings", () => {
+    expect(
+      normalizePostgresConnectionString(
+        "Host=pg-retrodadson-prod.postgres.database.azure.com;Port=5432;Database=dadsons_ps2_challenge;Username=ps2_challenge;Password=secret"
+      )
+    ).toBe("postgresql://ps2_challenge:secret@pg-retrodadson-prod.postgres.database.azure.com:5432/dadsons_ps2_challenge?sslmode=verify-full");
+    expect(normalizePostgresConnectionString("postgresql://app:secret@pg-retrodadson-prod.postgres.database.azure.com/ps2?sslmode=require")).toBe(
+      "postgresql://app:secret@pg-retrodadson-prod.postgres.database.azure.com/ps2?sslmode=verify-full"
+    );
+    expect(normalizePostgresConnectionString("Host=db;Database=challenge;Ssl Mode=Verify Full")).toBe(
+      "postgresql://db/challenge?sslmode=verify-full"
+    );
   });
 
   it("loads appsettings files using the ASP.NET environment name and lets env vars win", () => {
