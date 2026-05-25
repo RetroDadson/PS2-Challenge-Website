@@ -29,7 +29,8 @@ async function main() {
       twitchClientId: "playwright-client",
       twitchClientSecret: "playwright-secret",
       publicBaseUrl: `http://127.0.0.1:${port}`,
-      cookieSecret
+      cookieSecret,
+      logLevel: "silent"
     },
     { dbClient }
   );
