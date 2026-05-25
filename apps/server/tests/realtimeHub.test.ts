@@ -14,6 +14,16 @@ describe("realtime hub logging", () => {
     expect(logger.debug).toHaveBeenCalledWith(expect.objectContaining({ hub: "votes", connectionId: "votes-1" }), "VotesHub ping from: votes-1");
     expect(socket.sent).toEqual([JSON.stringify({ type: "Pong" })]);
   });
+
+  it("accepts lowercase pings from older overlay clients", () => {
+    const socket = fakeSocket();
+    const hub = new RealtimeHub();
+
+    hub.register("games", socket);
+    socket.emit("message", "ping");
+
+    expect(socket.sent).toEqual([JSON.stringify({ type: "Pong" })]);
+  });
 });
 
 function fakeSocket() {
