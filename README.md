@@ -2,141 +2,81 @@
 [![CI Build and Test](https://github.com/RobinDadswell/PS2-Challenge-Website/actions/workflows/build.yml/badge.svg)](https://github.com/RobinDadswell/PS2-Challenge-Website/actions/workflows/build.yml)
 [![CI Deploy](https://github.com/RobinDadswell/PS2-Challenge-Website/actions/workflows/deploy.yml/badge.svg)](https://github.com/RobinDadswell/PS2-Challenge-Website/actions/workflows/deploy.yml)
 
+A TypeScript web app for tracking progress through the PS2 challenge, managing the game library, showing voting pages and stream overlays, and exposing API/health endpoints for the site.
+
 ## Architecture
 
-- **React + Vite** frontend with WebSocket updates
-- **Fastify TypeScript API** for admin and app endpoints
+- **React + Vite** frontend served by Fastify in production
+- **Fastify TypeScript API** for REST, auth, health checks, Swagger UI, sitemap, and static assets
 - **PostgreSQL** for persistence
-- **Twitch OAuth** for authentication
+- **WebSocket hubs** at `/votesHub` and `/gamesHub` for realtime updates
+- **Twitch OAuth** for authentication and `.PS2Challenge.Auth` cookies
 
-## Prerequisites
+## Quick Start
+
+Prerequisites:
 
 - Node.js **24.x LTS**
 - npm **10+**
-- Docker + Docker Compose (for containerized setup)
+- Docker, if running PostgreSQL locally through compose or running integration/e2e tests
 
-## First-Time Setup
-
-1. Copy `.env.example` to `.env`.
-2. Set required values:
-  - `DB_PASSWORD`
-  - `TWITCH_CLIENT_ID`
-  - `TWITCH_CLIENT_SECRET`
-  - `ADMIN_API_KEY`
-  - `COOKIE_SECRET`
-3. Optional telemetry values (Azure Application Insights):
-  - `APPLICATIONINSIGHTS_CONNECTION_STRING` (preferred)
-  - `APPINSIGHTS_INSTRUMENTATIONKEY` (legacy fallback)
-4. Create local mount-point folders if they do not already exist:
-  - `mounts/postgres-data`
-  - `mounts/app-logs`
-  - `mounts/dev/postgres-data`
-  - `mounts/dev/pgadmin-data`
-  - `mounts/dev/seq-data`
-  - `mounts/dev/redis-data`
-
-## Local Development
-
-Run from the repository root:
+From the repository root:
 
 ```bash
-npm install
-npm run dev
+npm ci
 ```
 
-Development URLs:
+Then copy the local appsettings template.
 
-- Live frontend with Vite hot reload: `http://localhost:5173`
-- API and rebuilt static frontend snapshot: `http://localhost:5001`
+PowerShell:
 
-`npm run dev` rebuilds the client once before starting the Fastify server, waits for the API readiness ping, then starts Vite. Use `http://localhost:5173` while editing the React app; it proxies API and websocket traffic to the Fastify server.
+```powershell
+Copy-Item apps/server/appsettings.Development.example.json apps/server/appsettings.Development.json
+```
 
-For local TypeScript appsettings, copy the template and fill in your own values:
+bash:
 
 ```bash
 cp apps/server/appsettings.Development.example.json apps/server/appsettings.Development.json
 ```
 
-`apps/server/appsettings.Development.json` is ignored by git. The TypeScript server reads `apps/server/appsettings.json` plus `apps/server/appsettings.{NODE_ENV}.json`; environment variables still take precedence.
-
-Useful commands:
+Start the app:
 
 ```bash
+npm run dev
+```
+
+Fill in the copied `apps/server/appsettings.Development.json` with local Postgres and Twitch values. Environment variables can be used instead and take precedence over appsettings files.
+
+Development URLs:
+
+- Frontend with Vite hot reload: `http://localhost:5173`
+- Fastify API and static frontend snapshot: `http://localhost:5001`
+- Swagger UI: `http://localhost:5001/swagger`
+- Health: `http://localhost:5001/health`
+
+## Useful Commands
+
+```bash
+npm run lint
 npm run typecheck
 npm test
 npm run build
 npm run test:integration
 npm run test:e2e
+npm run coverage
 ```
 
-## Docker
+## Documentation
 
-### Configure environment
+- [Development guide](docs/development.md)
+- [Deployment notes](docs/deployment.md)
 
-Copy `.env.example` to `.env` and set at least:
+## Runtime Paths
 
-- `DB_PASSWORD`
-- `TWITCH_CLIENT_ID`
-- `TWITCH_CLIENT_SECRET`
-- `ADMIN_API_KEY`
-- `COOKIE_SECRET`
-- `APPLICATIONINSIGHTS_CONNECTION_STRING` (optional)
-
-The app resolves the database connection string in this order:
-
-- Azure App Service connection-string variables (`POSTGRESQLCONNSTR_DefaultConnection`, then any `POSTGRESQLCONNSTR_*`)
-- `DATABASE_CONNECTION_STRING` (recommended fallback for Docker/local environment variables)
-- `ConnectionStrings:DefaultConnection` from `apps/server/appsettings*.json` or `ConnectionStrings__DefaultConnection`
-
-Twitch values are loaded from `TWITCH_CLIENT_ID` and `TWITCH_CLIENT_SECRET`. OAuth callbacks are built from the incoming host/protocol headers so the app can work across the App Service URL and vanity domains; `PUBLIC_BASE_URL` is only used as a fallback when those headers are unavailable. If `APPLICATIONINSIGHTS_CONNECTION_STRING` (or legacy `APPINSIGHTS_INSTRUMENTATIONKEY`) is present, Application Insights telemetry is enabled automatically.
-
-### Production-style compose
-
-```bash
-docker compose -f docker/docker-compose.yml up -d
-```
-
-- App: `http://localhost:5001`
-- Postgres data mount: `./mounts/postgres-data`
-- App logs mount: `./mounts/app-logs`
-
-### Development compose
-
-```bash
-docker compose -f docker/docker-compose.dev.yml up -d
-```
-
-- Uses `tsx watch` for the app service
-- Mounts the repository for hot reload
-- Includes optional tooling/services: pgAdmin, Seq, Redis
-- Development mounts are under `./mounts/dev/*`
-
-## CI/CD
-
-- **CI Build and Test** (`build.yml`)
-  - Runs TypeScript typecheck, tests, and build
-  - Runs coverage gates, Playwright journeys, and prepares the Node publish artifact
-  - Publishes a Node App Service artifact
-- **CI Deploy** (`deploy.yml`)
-  - Runs only when CI Build and Test succeeds for a `push` on `main`
-  - Deploys the Node artifact generated by CI
-
-## Database Migration Notes
-
-- The TypeScript app lives under `apps/server`, `apps/client`, and `packages/shared`.
-- The migration runner creates the current v13 PostgreSQL schema for fresh databases. For non-empty databases, it first asserts the expected legacy v13 tables, columns, indexes, and constraints, then records a `ts_migration_baseline` row without applying schema changes.
-- REST routes, page URLs, cookie name, API-key auth headers, health checks, and user-visible realtime events are preserved.
-
-## Project Layout Notes
-
-- Docker-related runtime files are under `docker/`:
-  - `docker/Dockerfile`
-  - `docker/docker-compose.yml`
-  - `docker/docker-compose.dev.yml`
-- `.dockerignore` remains at repository root because Docker applies ignore rules from the build context root.
-
-## Troubleshooting
-
-- Check `/health` for container/application health checks
-- Ensure PostgreSQL is reachable from the app container (`Host=postgres;Port=5432` in compose)
-- Verify Twitch credentials are set when running non-test environments
+- App: `/`
+- Health checks: `/health` and `/api/health`
+- Swagger UI: `/swagger`
+- OpenAPI JSON: `/swagger/json`
+- Robots and sitemap: `/robots.txt` and `/sitemap.xml`
+- Realtime WebSocket endpoints: `/votesHub` and `/gamesHub`
