@@ -48,6 +48,16 @@ jobs:
       - name: Coverage gates
         run: npm run coverage
 
+      - name: Upload coverage reports
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-reports
+          path: |
+            apps/client/coverage/lcov.info
+            apps/server/coverage/lcov.info
+            packages/shared/coverage/lcov.info
+          if-no-files-found: error
+
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium firefox webkit
 
@@ -99,19 +109,12 @@ jobs:
           echo "Skipping SonarQube analysis."
           echo "Required: SONAR_TOKEN secret."
 
-      - name: Set up Node.js
+      - name: Download coverage reports
         if: env.SONAR_TOKEN != ''
-        uses: actions/setup-node@v5
+        uses: actions/download-artifact@v7
         with:
-          node-version: '24'
-          cache: npm
-
-      - name: Prepare analysis reports
-        if: env.SONAR_TOKEN != ''
-        run: |
-          npm ci
-          npm run typecheck
-          npm run coverage
+          name: coverage-reports
+          path: .
 
       - name: SonarQube Scan
         if: env.SONAR_TOKEN != ''
