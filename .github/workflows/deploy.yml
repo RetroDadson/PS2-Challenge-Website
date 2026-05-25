@@ -18,7 +18,7 @@ jobs:
     steps:
       - name: Check if relevant paths changed
         id: check
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
         with:
           script: |
             const headSha = context.payload.workflow_run.head_sha;
@@ -28,7 +28,11 @@ jobs:
               ref: headSha,
             });
             const relevant = commit.files.some(f =>
-              f.filename.startsWith('src/') ||
+              f.filename.startsWith('apps/') ||
+              f.filename.startsWith('packages/') ||
+              f.filename.startsWith('docker/') ||
+              f.filename === 'package.json' ||
+              f.filename === 'package-lock.json' ||
               f.filename.startsWith('.github/workflows/')
             );
             core.setOutput('relevant', String(relevant));
@@ -43,24 +47,23 @@ jobs:
       contents: read
 
     steps:
-      - name: Download publish artifact
+      - name: Download Node publish artifact
         uses: actions/download-artifact@v8
         with:
-          name: .net-app
+          name: node-app
           path: ./publish
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Login to Azure
-        uses: azure/login@1384c340ab2dda50fed2bee3041d1d87018aa5e8 # v2
+        uses: azure/login@1384c340ab2dda50fed2bee3041d1d87018aa5e8
         with:
           client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_30B7FC53F3174B04A2793DE2BC7D0F35 }}
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_96A01072E1974D40A7C1E976C9CEB756 }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_EF4C4F434B07428E812445CDFC335E13 }}
 
       - name: Deploy to Azure Web App
-        id: deploy-to-webapp
-        uses: azure/webapps-deploy@2e64e04aaaeeec4396edcb982544dbd30f8e9ddf # v3
+        uses: azure/webapps-deploy@2e64e04aaaeeec4396edcb982544dbd30f8e9ddf
         with:
           app-name: 'retrodadsonchallenge'
           slot-name: 'Production'

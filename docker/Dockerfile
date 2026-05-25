@@ -1,48 +1,43 @@
-# Build stage
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
-WORKDIR /src
+# syntax=docker/dockerfile:1
 
-# Copy solution and project files
-COPY ["src/PS2Challenge.sln", "./"]
-COPY ["src/PS2Challenge.Main/PS2Challenge.Main.csproj", "src/PS2Challenge.Main/"]
-COPY ["src/PS2Challenge.Backend/PS2Challenge.Backend.csproj", "src/PS2Challenge.Backend/"]
-
-# Restore dependencies
-RUN dotnet restore "src/PS2Challenge.Main/PS2Challenge.Main.csproj"
-
-# Copy source files
-COPY src/ ./src/
-
-# Build and publish the application
-WORKDIR "/src/src/PS2Challenge.Main"
-RUN dotnet build "PS2Challenge.Main.csproj" -c Release -o /app/build
-RUN dotnet publish "PS2Challenge.Main.csproj" -c Release -o /app/publish /p:UseAppHost=false
-
-# Runtime stage
-FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
+FROM node:24-bookworm-slim AS build
 WORKDIR /app
 
-# Install curl for health checks
-RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+COPY package.json package-lock.json ./
+COPY packages/shared/package.json packages/shared/package.json
+COPY apps/server/package.json apps/server/package.json
+COPY apps/client/package.json apps/client/package.json
 
-# Copy published application
-COPY --from=build /app/publish .
+RUN npm ci
 
-# Create a non-root user
-RUN useradd -m appuser && chown -R appuser:appuser /app
-USER appuser
+COPY . .
+RUN npm run build
 
-# Expose port
-EXPOSE 5001
+FROM build AS production-deps
+RUN npm prune --omit=dev
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-  CMD curl --fail http://localhost:5001/health || exit 1
+FROM node:24-bookworm-slim AS runtime
+WORKDIR /app
 
-# Set environment variables
-ENV ASPNETCORE_URLS=http://+:5001
-ENV ASPNETCORE_ENVIRONMENT=Production
+ENV NODE_ENV=Production
 ENV PORT=5001
 
-# Run the application
-ENTRYPOINT ["dotnet", "PS2Challenge.Main.dll"]
+RUN useradd -m appuser
+
+COPY --from=build --chown=appuser:appuser /app/package.json /app/package-lock.json ./
+COPY --from=production-deps --chown=appuser:appuser /app/node_modules ./node_modules
+COPY --from=build --chown=appuser:appuser /app/packages/shared/package.json ./packages/shared/package.json
+COPY --from=build --chown=appuser:appuser /app/packages/shared/dist ./packages/shared/dist
+COPY --from=build --chown=appuser:appuser /app/apps/server/package.json ./apps/server/package.json
+COPY --from=build --chown=appuser:appuser /app/apps/server/dist ./apps/server/dist
+COPY --from=build --chown=appuser:appuser /app/apps/client/package.json ./apps/client/package.json
+COPY --from=build --chown=appuser:appuser /app/apps/client/dist ./apps/client/dist
+
+USER appuser
+
+EXPOSE 5001
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:5001/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+
+CMD ["node", "apps/server/dist/index.js"]

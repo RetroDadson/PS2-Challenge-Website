@@ -13,24 +13,28 @@
 *.user
 *.suo
 *.cache
+.dotnet
+.dotnet-cli-home
 
 # Build outputs
-**/bin/
-**/obj/
 **/out/
 **/publish/
+**/dist/
+node_modules/
+**/node_modules/
 
-# NuGet
-*.nupkg
-*.snupkg
-.nuget/
-packages/
+# Node
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+playwright-report/
+test-results/
+*.tsbuildinfo
 
 # Test results
 **/TestResults/
 **/coverage/
-**/*.trx
-**/*.coverage
 
 # Documentation
 *.md
