@@ -1,0 +1,77 @@
+{
+  "name": "ps2-challenge-website",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "node scripts-ts/dev.mjs",
+    "dev:server": "npm run dev -w @ps2-challenge/server",
+    "dev:client": "npm run dev -w @ps2-challenge/client",
+    "build": "npm run build -w @ps2-challenge/shared && npm run build -w @ps2-challenge/client && npm run build -w @ps2-challenge/server",
+    "lint": "npm run lint --workspaces && eslint tests --ext .ts",
+    "typecheck": "npm run build -w @ps2-challenge/shared && npm run typecheck -w @ps2-challenge/client && npm run typecheck -w @ps2-challenge/server && npm run typecheck -w @ps2-challenge/shared && tsc -p tsconfig.scripts.json --noEmit && tsc -p tests/e2e/tsconfig.json --noEmit",
+    "test": "npm run build -w @ps2-challenge/shared && npm run test --workspaces --if-present",
+    "coverage": "npm run build -w @ps2-challenge/shared && npm run coverage --workspaces --if-present",
+    "test:integration": "npm run test:integration -w @ps2-challenge/server",
+    "test:e2e": "npm run build -w @ps2-challenge/shared && playwright test -c tests/e2e/playwright.config.ts",
+    "migrate": "npm run migrate -w @ps2-challenge/server",
+    "start": "npm run start -w @ps2-challenge/server",
+    "import:serials": "tsx scripts-ts/import-serial-numbers.ts",
+    "import:alternate-titles": "tsx scripts-ts/import-alternate-titles.ts",
+    "import:wiki-serials": "tsx scripts-ts/import-wiki-serials.ts"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@playwright/test": "^1.56.1",
+    "@testcontainers/postgresql": "^11.7.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.0",
+    "@types/node": "^24.9.2",
+    "@types/pg": "^8.15.5",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "@vitejs/plugin-react": "^5.1.0",
+    "@vitest/coverage-v8": "^3.2.4",
+    "eslint": "^9.39.1",
+    "globals": "^16.5.0",
+    "jsdom": "^27.1.0",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.3",
+    "vite": "^7.1.12",
+    "vitest": "^3.2.4"
+  },
+  "dependencies": {
+    "@azure/monitor-opentelemetry": "^1.18.0",
+    "@fastify/cookie": "^11.0.2",
+    "@fastify/formbody": "^8.0.2",
+    "@fastify/helmet": "^13.0.2",
+    "@fastify/static": "^9.1.3",
+    "@fastify/swagger": "^9.5.2",
+    "@fastify/swagger-ui": "^5.2.3",
+    "@fastify/websocket": "^11.2.0",
+    "@opentelemetry/api": "^1.9.0",
+    "chart.js": "^4.5.1",
+    "fastify": "^5.6.1",
+    "kysely": "^0.29.0",
+    "lucide-react": "^0.545.0",
+    "pg": "^8.16.3",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-router-dom": "^7.9.4",
+    "zod": "^4.1.12"
+  },
+  "overrides": {
+    "@opentelemetry/otlp-transformer": {
+      "protobufjs": "8.4.0"
+    },
+    "ws": "8.20.1"
+  }
+}

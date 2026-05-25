@@ -54,7 +54,7 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile
-      target: build  # Use build stage for development
+      target: build
     container_name: ps2challenge-app-dev
     restart: unless-stopped
     depends_on:
@@ -62,7 +62,7 @@ services:
         condition: service_healthy
     ports:
       - "5001:5001"
-    command: ["dotnet", "watch", "run", "--project", "/src/PS2Challenge.Main/PS2Challenge.Main.csproj", "--no-launch-profile", "--urls", "http://0.0.0.0:5001"]
+    command: ["npm", "run", "dev", "-w", "@ps2-challenge/server"]
     environment:
       # Database Configuration
       DATABASE_CONNECTION_STRING: "Host=postgres;Port=5432;Database=ps2challenge;Username=postgres;Password=${DB_PASSWORD:-devpassword};Include Error Detail=true"
@@ -74,26 +74,23 @@ services:
       # Admin API Key
       ADMIN_API_KEY: ${ADMIN_API_KEY:-dev-admin-key}
 
-      # ASP.NET Core Configuration
-      ASPNETCORE_ENVIRONMENT: Development
-      ASPNETCORE_URLS: http://+:5001
+      # Node/Fastify Configuration
+      NODE_ENV: Development
       PORT: 5001
+      PUBLIC_BASE_URL: http://localhost:5001
 
       # Logging Configuration
-      Logging__LogLevel__Default: Debug
-      Logging__LogLevel__Microsoft: Information
-      Logging__LogLevel__Microsoft.AspNetCore: Warning
+      LOG_LEVEL: debug
 
       # Azure Application Insights (Optional)
       APPLICATIONINSIGHTS_CONNECTION_STRING: ${APPLICATIONINSIGHTS_CONNECTION_STRING:-}
       APPINSIGHTS_INSTRUMENTATIONKEY: ${APPINSIGHTS_INSTRUMENTATIONKEY:-}
 
       # Development Settings
-      DOTNET_USE_POLLING_FILE_WATCHER: 'true'
-      DOTNET_WATCH_RESTART_ON_RUDE_EDIT: 'true'
+      CHOKIDAR_USEPOLLING: 'true'
     volumes:
-      - ../src:/src:cached  # Mount source code for hot reload
-      - ../mounts/dev/nuget-cache:/root/.nuget/packages
+      - ..:/app:cached
+      - /app/node_modules
     networks:
       - ps2challenge-dev-network
 

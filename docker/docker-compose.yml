@@ -50,15 +50,13 @@ services:
       # Admin API Key
       ADMIN_API_KEY: ${ADMIN_API_KEY}
 
-      # ASP.NET Core Configuration
-      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
-      ASPNETCORE_URLS: http://+:5001
+      # Node/Fastify Configuration
+      NODE_ENV: ${NODE_ENV:-Production}
       PORT: 5001
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:5001}
 
       # Logging Configuration
-      Logging__LogLevel__Default: ${LOG_LEVEL:-Information}
-      Logging__LogLevel__Microsoft: Warning
-      Logging__LogLevel__Microsoft.AspNetCore: Warning
+      LOG_LEVEL: ${LOG_LEVEL:-info}
 
       # Azure Application Insights (Optional)
       APPLICATIONINSIGHTS_CONNECTION_STRING: ${APPLICATIONINSIGHTS_CONNECTION_STRING:-}
@@ -68,7 +66,7 @@ services:
     networks:
       - ps2challenge-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5001/health"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5001/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 30s
       timeout: 10s
       retries: 3

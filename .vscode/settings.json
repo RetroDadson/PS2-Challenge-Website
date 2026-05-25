@@ -1,13 +1,6 @@
 {
-    "dotnet.defaultSolution": "src/PS2Challenge.sln",
     "sonarlint.connectedMode.project": {
         "connectionId": "retrodadson",
         "projectKey": "RobinDadswell_PS2-Challenge-Website"
-    },
-    "chat.tools.terminal.autoApprove": {
-        "dotnet test": true,
-        "dotnet build": true
-    },
-    "chat.plugins.enabled": true,
-    "chat.plugins.marketplaces": ["dotnet/skills"]
+    }
 }
