@@ -94,42 +94,6 @@ services:
     networks:
       - ps2challenge-dev-network
 
-  # ============================================================================
-  # Seq - Log Aggregation and Analysis
-  # ============================================================================
-  seq:
-    image: datalust/seq:latest
-    container_name: ps2challenge-seq
-    restart: unless-stopped
-    environment:
-      ACCEPT_EULA: 'Y'
-    volumes:
-      - ../mounts/dev/seq-data:/data
-    ports:
-      - "5341:80"
-    networks:
-      - ps2challenge-dev-network
-
-  # ============================================================================
-  # Redis - Caching (Optional)
-  # ============================================================================
-  redis:
-    image: redis:7-alpine
-    container_name: ps2challenge-redis
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
-    volumes:
-      - ../mounts/dev/redis-data:/data
-    command: redis-server --appendonly yes
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-    networks:
-      - ps2challenge-dev-network
-
 # ============================================================================
 # Networks
 # ============================================================================

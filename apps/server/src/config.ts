@@ -12,6 +12,7 @@ export type AppConfig = {
   twitchClientSecret: string;
   publicBaseUrl: string;
   cookieSecret: string;
+  logLevel: string;
   applicationInsightsConnectionString?: string | undefined;
 };
 
@@ -59,6 +60,7 @@ export function loadConfig(validate = true): AppConfig {
   const publicBaseUrl =
     process.env.PUBLIC_BASE_URL ?? settings.PublicBaseUrl ?? settings.ApiBaseUrl ?? fallbackPublicBaseUrl;
   const configuredCookieSecret = process.env.COOKIE_SECRET ?? process.env.ADMIN_API_KEY;
+  const logLevel = process.env.LOG_LEVEL ?? "info";
 
   const config: AppConfig = {
     nodeEnv,
@@ -68,6 +70,7 @@ export function loadConfig(validate = true): AppConfig {
     twitchClientSecret,
     publicBaseUrl,
     cookieSecret: configuredCookieSecret ?? crypto.randomBytes(32).toString("hex"),
+    logLevel,
     applicationInsightsConnectionString: resolveApplicationInsightsConnectionString()
   };
 

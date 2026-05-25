@@ -77,6 +77,7 @@ describe("config", () => {
       TWITCH_CLIENT_ID: "env-client",
       TWITCH_CLIENT_SECRET: "env-secret",
       PUBLIC_BASE_URL: "https://ps2.example",
+      LOG_LEVEL: "debug",
       ADMIN_API_KEY: "legacy-cookie-secret",
       APPINSIGHTS_INSTRUMENTATIONKEY: "instrumentation-key"
     };
@@ -86,6 +87,7 @@ describe("config", () => {
     expect(config.port).toBe(5001);
     expect(config.databaseConnectionString).toBe("postgresql://app:secret@azure/ps2");
     expect(config.publicBaseUrl).toBe("https://ps2.example");
+    expect(config.logLevel).toBe("debug");
     expect(config.cookieSecret).toBe("legacy-cookie-secret");
     expect(config.applicationInsightsConnectionString).toBe("InstrumentationKey=instrumentation-key");
   });

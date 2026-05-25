@@ -46,7 +46,7 @@ type CoverRefreshSchedulerOptions = {
 
 export async function buildApp(config: AppConfig, dependencies: AppDependencies = {}): Promise<FastifyInstance> {
   const app = fastify({
-    logger: config.nodeEnv !== "Testing" && config.nodeEnv !== "test",
+    logger: config.nodeEnv !== "Testing" && config.nodeEnv !== "test" ? { level: config.logLevel } : false,
     trustProxy: true
   });
 
