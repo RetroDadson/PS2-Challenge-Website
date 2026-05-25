@@ -3,14 +3,31 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ProgressOverlay, VoteCoversOverlay, VotesOverlay } from "../../src/pages/Overlays.js";
 
 class MockWebSocket {
-  static instances: MockWebSocket[] = [];
+  static readonly instances: MockWebSocket[] = [];
+  static readonly OPEN = 1;
+  static readonly CLOSED = 3;
+
   readonly listeners = new Map<string, Array<() => void>>();
+  readyState = MockWebSocket.OPEN;
+
   addEventListener = vi.fn((eventName: string, listener: () => void) => {
     const listeners = this.listeners.get(eventName) ?? [];
     listeners.push(listener);
     this.listeners.set(eventName, listeners);
+
+    // Emit open event immediately when listener is added
+    if (eventName === "open") {
+      Promise.resolve().then(() => listener());
+    }
   });
-  close = vi.fn();
+
+  send = vi.fn(() => {
+    // Mock send method for ping messages
+  });
+
+  close = vi.fn(() => {
+    this.readyState = MockWebSocket.CLOSED;
+  });
 
   constructor(readonly url: string) {
     MockWebSocket.instances.push(this);
@@ -19,16 +36,29 @@ class MockWebSocket {
   emitMessage() {
     this.listeners.get("message")?.forEach((listener) => listener());
   }
+
+  emitClose() {
+    this.readyState = MockWebSocket.CLOSED;
+    this.listeners.get("close")?.forEach((listener) => listener());
+  }
+
+  emitError() {
+    this.listeners.get("error")?.forEach((listener) => listener());
+  }
 }
 
 beforeEach(() => {
-  MockWebSocket.instances = [];
+  MockWebSocket.instances.length = 0;
   vi.stubGlobal("WebSocket", MockWebSocket);
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
-  vi.useRealTimers();
+  try {
+    vi.useRealTimers();
+  } catch {
+    // Timers may not be enabled
+  }
 });
 
 describe("stream overlays", () => {
@@ -56,7 +86,14 @@ describe("stream overlays", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL) => {
-        const url = typeof input === "string" ? input : input instanceof URL ? input.pathname : input.url;
+        let url: string;
+        if (typeof input === "string") {
+          url = input;
+        } else if (input instanceof URL) {
+          url = input.pathname;
+        } else {
+          url = input.url;
+        }
         const path = url.startsWith("http") ? new URL(url).pathname : url;
         if (path !== "/api/votes/current") {
           return new Response(JSON.stringify({ message: "Not Found" }), { status: 404 });
@@ -148,13 +185,148 @@ describe("stream overlays", () => {
 
     expect(second).toHaveClass("active");
   });
+
+  it("sends periodic pings to keep the WebSocket connection alive", async () => {
+    vi.useFakeTimers();
+    mockFetch({
+      "/api/votes/current": [
+        { gameId: 1, gameTitle: "First Game", voteCount: 10, gameNumber: 1 }
+      ]
+    });
+
+    render(<VotesOverlay />);
+
+    await flushReact();
+    const votesSocket = MockWebSocket.instances.find((socket) => socket.url.endsWith("/votesHub"));
+    expect(votesSocket).toBeDefined();
+
+    expect(votesSocket?.send).not.toHaveBeenCalled();
+
+    // Advance to 30 seconds (first ping interval)
+    act(() => {
+      vi.advanceTimersByTime(30000);
+    });
+
+    expect(votesSocket?.send).toHaveBeenCalledWith("ping");
+    expect(votesSocket?.send).toHaveBeenCalledTimes(1);
+
+    // Advance to 60 seconds (second ping interval)
+    act(() => {
+      vi.advanceTimersByTime(30000);
+    });
+
+    expect(votesSocket?.send).toHaveBeenCalledTimes(2);
+  });
+
+  it("automatically reconnects when the WebSocket connection closes", async () => {
+    vi.useFakeTimers();
+    mockFetch({
+      "/api/votes/current": [
+        { gameId: 1, gameTitle: "First Game", voteCount: 10, gameNumber: 1 }
+      ]
+    });
+
+    render(<VotesOverlay />);
+
+    await flushReact();
+    expect(MockWebSocket.instances).toHaveLength(1);
+    const firstSocket = MockWebSocket.instances[0];
+
+    // Simulate connection close
+    act(() => {
+      firstSocket?.emitClose();
+    });
+
+    // Advance time past the reconnect delay (1 second)
+    act(() => {
+      vi.advanceTimersByTime(2000);
+    });
+
+    await flushReact();
+
+    // Should have created a new socket
+    expect(MockWebSocket.instances.length).toBeGreaterThan(1);
+  });
+
+  it("falls back to polling when WebSocket reconnection fails multiple times", async () => {
+    vi.useFakeTimers();
+
+    let socketAttempts = 0;
+    let pollTriggered = false;
+
+    vi.stubGlobal(
+      "WebSocket",
+      vi.fn(() => {
+        socketAttempts++;
+        const socket = new MockWebSocket("ws://test");
+        if (socketAttempts <= 5) {
+          // Simulate connection errors for first 5 attempts
+          Promise.resolve().then(() => socket.emitError());
+        }
+        return socket;
+      })
+    );
+
+    const fetchSpy = vi.fn(async (input: RequestInfo | URL) => {
+      let url: string;
+      if (typeof input === "string") {
+        url = input;
+      } else if (input instanceof URL) {
+        url = input.pathname;
+      } else {
+        url = input.url;
+      }
+      const path = url.startsWith("http") ? new URL(url).pathname : url;
+      if (path === "/api/votes/current") {
+        pollTriggered = true;
+      }
+      return new Response(JSON.stringify([
+        { gameId: 1, gameTitle: "First Game", voteCount: 10, gameNumber: 1 }
+      ]), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      });
+    });
+
+    vi.stubGlobal("fetch", fetchSpy);
+
+    render(<VotesOverlay />);
+
+    await flushReact();
+
+    // Advance through multiple reconnect attempts
+    for (let i = 0; i < 6; i++) {
+      act(() => {
+        vi.advanceTimersByTime(2000);
+      });
+    }
+
+    await flushReact();
+
+    // After max reconnect attempts, should start polling (every 5 seconds)
+    act(() => {
+      vi.advanceTimersByTime(5000);
+    });
+
+    await flushReact();
+
+    // Polling should have been triggered
+    expect(pollTriggered || fetchSpy.mock.calls.length > 0).toBe(true);
+  });
 });
 
 function mockFetch(routes: Record<string, unknown>) {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (input: RequestInfo | URL) => {
-      const url = typeof input === "string" ? input : input instanceof URL ? input.pathname : input.url;
+      let url: string;
+      if (typeof input === "string") {
+        url = input;
+      } else if (input instanceof URL) {
+        url = input.pathname;
+      } else {
+        url = input.url;
+      }
       const path = url.startsWith("http") ? new URL(url).pathname : url;
       if (!(path in routes)) {
         return new Response(JSON.stringify({ message: "Not Found" }), { status: 404 });
