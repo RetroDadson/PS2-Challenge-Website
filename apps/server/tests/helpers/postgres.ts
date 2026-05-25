@@ -35,7 +35,6 @@ async function resetDatabase(pool: pg.Pool): Promise<void> {
     TRUNCATE
       vote_history,
       current_vote,
-      votes,
       progress,
       excluded_games,
       game_owned,

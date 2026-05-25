@@ -98,12 +98,6 @@ export interface Database {
     position: number | null;
     notes: string | null;
   };
-  votes: {
-    vote_id: Generated<number>;
-    vote_round: number;
-    game_id: number;
-    created_at: Timestamp;
-  };
 }
 
 export function createKyselyDatabase(connectionString: string): Kysely<Database> {

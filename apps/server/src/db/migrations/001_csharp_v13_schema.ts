@@ -93,15 +93,6 @@ export async function up(db: Kysely<any>): Promise<void> {
   await db.schema.createIndex("idx_users_api_key").ifNotExists().unique().on("users").column("api_key").execute();
 
   await db.schema
-    .createTable("votes")
-    .addColumn("vote_id", "integer", (col) => col.generatedByDefaultAsIdentity().notNull().primaryKey())
-    .addColumn("vote_round", "integer", (col) => col.notNull())
-    .addColumn("game_id", "integer", (col) => col.notNull().references("games.game_id").onDelete("cascade"))
-    .addColumn("created_at", "timestamp", (col) => col.notNull().defaultTo(sql`CURRENT_TIMESTAMP`))
-    .execute();
-  await db.schema.createIndex("idx_votes_round").ifNotExists().on("votes").column("vote_round").execute();
-
-  await db.schema
     .createTable("vote_history")
     .addColumn("history_id", "integer", (col) => col.generatedByDefaultAsIdentity().notNull().primaryKey())
     .addColumn("game_id", "integer", (col) => col.notNull().references("games.game_id").onDelete("cascade"))
@@ -162,7 +153,6 @@ export async function down(db: Kysely<any>): Promise<void> {
     "game_serial_numbers",
     "current_vote",
     "vote_history",
-    "votes",
     "users",
     "roles",
     "excluded_games",
