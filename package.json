@@ -28,7 +28,7 @@
     "import:wiki-serials": "tsx scripts-ts/import-wiki-serials.ts"
   },
   "devDependencies": {
-    "@eslint/js": "^9.39.1",
+    "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.56.1",
     "@testcontainers/postgresql": "^11.7.1",
     "@testing-library/jest-dom": "^6.9.1",
