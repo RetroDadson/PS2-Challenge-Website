@@ -11,12 +11,12 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref == 'refs/heads/main' }}
+  cancel-in-progress: true
 
 jobs:
   typescript:
     name: TypeScript Build and Test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       checks: write
@@ -58,10 +58,11 @@ jobs:
             packages/shared/coverage/lcov.info
           if-no-files-found: error
 
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium firefox webkit
+      - name: Verify system Chrome
+        run: google-chrome --version
 
       - name: End-to-end tests
+        timeout-minutes: 20
         run: npm run test:e2e
 
       - name: Build
@@ -91,7 +92,7 @@ jobs:
     name: SonarQube
     needs:
       - typescript
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       pull-requests: read
