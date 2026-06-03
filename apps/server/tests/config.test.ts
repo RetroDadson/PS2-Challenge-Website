@@ -44,14 +44,14 @@ describe("config", () => {
       path.join(settingsDir, "appsettings.json"),
       JSON.stringify({
         ConnectionStrings: { DefaultConnection: "Host=base;Database=base_db;Username=base_user;Password=base_password" },
-        Twitch: { ClientId: "base-client", ClientSecret: "base-secret" }
+        Twitch: { ClientId: "base-client", ClientSecret: "base-secret", ChannelLogin: "base-channel" }
       })
     );
     fs.writeFileSync(
       path.join(settingsDir, "appsettings.Development.json"),
       JSON.stringify({
         ConnectionStrings: { DefaultConnection: "Host=dev;Database=dev_db;Username=dev_user;Password=dev_password" },
-        Twitch: { ClientId: "dev-client", ClientSecret: "dev-secret" }
+        Twitch: { ClientId: "dev-client", ClientSecret: "dev-secret", ChannelLogin: "dev-channel" }
       })
     );
 
@@ -67,6 +67,7 @@ describe("config", () => {
     expect(config.databaseConnectionString).toBe("postgresql://dev_user:dev_password@dev/dev_db");
     expect(config.twitchClientId).toBe("dev-client");
     expect(config.twitchClientSecret).toBe("env-secret");
+    expect(config.twitchChannelLogin).toBe("dev-channel");
   });
 
   it("resolves Azure-style connection strings, public base URLs, cookie secrets, and App Insights keys", () => {
@@ -76,6 +77,7 @@ describe("config", () => {
       POSTGRESQLCONNSTR_Main: "Host=azure;Database=ps2;Username=app;Password=secret",
       TWITCH_CLIENT_ID: "env-client",
       TWITCH_CLIENT_SECRET: "env-secret",
+      TWITCH_CHANNEL_LOGIN: "env-channel",
       PUBLIC_BASE_URL: "https://ps2.example",
       LOG_LEVEL: "debug",
       ADMIN_API_KEY: "legacy-cookie-secret",
@@ -87,6 +89,7 @@ describe("config", () => {
     expect(config.port).toBe(5001);
     expect(config.databaseConnectionString).toBe("postgresql://app:secret@azure/ps2");
     expect(config.publicBaseUrl).toBe("https://ps2.example");
+    expect(config.twitchChannelLogin).toBe("env-channel");
     expect(config.logLevel).toBe("debug");
     expect(config.cookieSecret).toBe("legacy-cookie-secret");
     expect(config.applicationInsightsConnectionString).toBe("InstrumentationKey=instrumentation-key");

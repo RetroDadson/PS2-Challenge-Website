@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { refreshCoverImagesAndBroadcast, scheduleCoverImageRefresh } from "../src/server.js";
+import { refreshCoverImagesAndBroadcast, scheduleCoverImageRefresh, scheduleTwitchStreamStatsSync } from "../src/server.js";
 import type { CoverImageRefreshProgress } from "../src/services/coverImageService.js";
 
 describe("cover image refresh scheduler", () => {
@@ -99,5 +99,38 @@ describe("cover image refresh scheduler", () => {
     expect(realtimeHub.broadcastGamesUpdated).toHaveBeenCalledTimes(1);
 
     scheduler.stop();
+  });
+
+  it("runs Twitch stream stats sync on a repeating schedule", async () => {
+    vi.useFakeTimers();
+    const twitchStats = {
+      syncRecentStreams: vi.fn(async () => ({ channelLogin: "retrodadson", checked: 3, upserted: 2, skipped: 1 }))
+    };
+    const logger = { info: vi.fn(), error: vi.fn() };
+
+    const scheduler = scheduleTwitchStreamStatsSync({
+      twitchStats,
+      logger,
+      initialDelayMs: 1_000,
+      intervalMs: 5_000
+    });
+
+    await vi.advanceTimersByTimeAsync(999);
+    expect(twitchStats.syncRecentStreams).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(twitchStats.syncRecentStreams).toHaveBeenCalledTimes(1);
+    expect(logger.info).toHaveBeenCalledWith("Twitch stream stats sync service is starting");
+    expect(logger.info).toHaveBeenCalledWith("Starting Twitch stream stats sync");
+    expect(logger.info).toHaveBeenCalledWith(
+      { channelLogin: "retrodadson", checked: 3, upserted: 2, skipped: 1 },
+      "Twitch stream stats sync completed"
+    );
+
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(twitchStats.syncRecentStreams).toHaveBeenCalledTimes(2);
+
+    scheduler.stop();
+    expect(logger.info).toHaveBeenCalledWith("Twitch stream stats sync service is stopping");
   });
 });

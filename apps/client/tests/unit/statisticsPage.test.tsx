@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Statistics } from "../../src/pages/Statistics.js";
 
@@ -48,6 +48,15 @@ describe("Statistics page", () => {
         1: "CIB",
         2: "Loose",
         4: "CIB"
+      },
+      "GET /api/twitch/stream-stats": {
+        channelLogin: "retrodadson",
+        rangeStart: "2026-04-08T00:00:00.000Z",
+        rangeEnd: "2026-06-03T00:00:00.000Z",
+        rangeWeeks: 8,
+        totalStreamSeconds: 125_424,
+        averageWeeklyStreamSeconds: 14_400,
+        vodCount: 12
       }
     });
 
@@ -59,7 +68,9 @@ describe("Statistics page", () => {
     expect(statValue("Games Remaining")).toBe("1");
     expect(statValue("Challenge Complete")).toBe("66.67%");
     expect(statValue("Average Game Duration")).toBe("8h");
-    expect(statValue("Estimated Time Remaining")).toBe("8h");
+    expect(statValue("Estimated Game Time Remaining")).toBe("8h");
+    await waitFor(() => expect(statValue("Average Weekly Stream Time")).toBe("4h"));
+    expect(statValue("Estimated Streaming Time Remaining")).toBe("2 weeks");
 
     const durationChart = screen.getByRole("heading", { name: "Game Duration (hours)" }).closest(".duration-chart-card") as HTMLElement;
     expect(durationChart).toBeInTheDocument();
@@ -104,6 +115,43 @@ describe("Statistics page", () => {
     expect(within(ownershipSection).getByText("Loose")).toBeInTheDocument();
     expect(within(ownershipSection).getByText("1 (33.3%)")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "More Statistics Coming Soon" })).toBeInTheDocument();
+  });
+
+  it("formats long streaming time estimates as years and weeks", async () => {
+    mockFetch({
+      "GET /api/games": [
+        { id: 1, title: "Long Game", isExcluded: false, isOwned: true },
+        { id: 2, title: "Longer Game", isExcluded: false, isOwned: false }
+      ],
+      "GET /api/games/progress": [
+        {
+          progressId: 1,
+          gameId: 1,
+          gameTitle: "Long Game",
+          dateStarted: "2025-01-01",
+          dateFinished: "2025-01-10",
+          completionTime: "105:00:00",
+          platform: "Physical"
+        }
+      ],
+      "GET /api/games/owned-types": {
+        1: "CIB"
+      },
+      "GET /api/twitch/stream-stats": {
+        channelLogin: "retrodadson",
+        rangeStart: "2026-04-08T00:00:00.000Z",
+        rangeEnd: "2026-06-03T00:00:00.000Z",
+        rangeWeeks: 8,
+        totalStreamSeconds: 28_800,
+        averageWeeklyStreamSeconds: 3_600,
+        vodCount: 8
+      }
+    });
+
+    render(<Statistics />);
+
+    expect(await screen.findByRole("heading", { name: "Challenge Status" })).toBeInTheDocument();
+    await waitFor(() => expect(statValue("Estimated Streaming Time Remaining")).toBe("2 years 1 week"));
   });
 });
 

@@ -6,6 +6,7 @@ import { registerAdminRoutes } from "../src/routes/adminRoutes.js";
 import { registerAuthRoutes } from "../src/routes/authRoutes.js";
 import { registerGamesRoutes } from "../src/routes/gamesRoutes.js";
 import { registerHealthRoutes } from "../src/routes/healthRoutes.js";
+import { registerTwitchRoutes } from "../src/routes/twitchRoutes.js";
 import { registerUserRoutes } from "../src/routes/userRoutes.js";
 import { registerVotesRoutes } from "../src/routes/votesRoutes.js";
 
@@ -49,6 +50,7 @@ describe("swagger docs", () => {
     await registerUserRoutes(app, userRepository, config);
     await registerAdminRoutes(app, userRepository, config);
     await registerGamesRoutes(app, fakeGameService(), userRepository, config, fakeRealtimeHub());
+    await registerTwitchRoutes(app, fakeTwitchStatsService());
     await registerVotesRoutes(app, fakeVoteService(), userRepository, config, fakeRealtimeHub());
     await registerHealthRoutes(app, async () => undefined);
     await app.ready();
@@ -70,6 +72,7 @@ describe("swagger docs", () => {
     expect(document.paths["/api/games"].post.security).toEqual([{ ApiKey: [] }, { Cookie: [] }]);
     expect(document.paths["/api/games"].post.requestBody).toBeDefined();
     expect(document.paths["/api/votes/current/by-game-number"].put.requestBody).toBeDefined();
+    expect(document.paths["/api/twitch/stream-stats"].get.responses["200"]).toBeDefined();
     expect(document.paths["/api/admin/users/{userId}/role"].put.security).toEqual([{ ApiKey: [] }, { Cookie: [] }]);
     expect(document.paths["/api/health"].get.responses["503"]).toBeDefined();
 
@@ -98,6 +101,10 @@ function fakeGameService() {
 }
 
 function fakeVoteService() {
+  return {} as never;
+}
+
+function fakeTwitchStatsService() {
   return {} as never;
 }
 

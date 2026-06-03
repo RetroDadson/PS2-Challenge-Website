@@ -1,6 +1,7 @@
 import {
   Archive,
   Boxes,
+  CalendarClock,
   CheckCircle2,
   Clock3,
   Gamepad2,
@@ -10,6 +11,7 @@ import {
   PackageOpen,
   Percent,
   PieChart,
+  Radio,
   RotateCcw,
   ZoomIn,
   ZoomOut,
@@ -17,6 +19,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { GameDto, GameProgressDto } from "@ps2-challenge/shared";
+import type { TwitchStreamStatsDto } from "../api.js";
 import { api } from "../api.js";
 import { Empty, ErrorMessage, Loading } from "../components/Status.js";
 import { useAsync } from "../hooks.js";
@@ -56,10 +59,11 @@ export function Statistics() {
   const progress = useAsync(() => api.progress(), []);
   const games = useAsync(() => api.games(), []);
   const ownedTypes = useAsync(() => api.ownedTypes(), []);
+  const twitchStreamStats = useAsync(() => api.twitchStreamStats(), []);
 
   const stats = useMemo(
-    () => calculateStatistics(games.data ?? [], progress.data ?? [], ownedTypes.data ?? {}),
-    [games.data, ownedTypes.data, progress.data]
+    () => calculateStatistics(games.data ?? [], progress.data ?? [], ownedTypes.data ?? {}, twitchStreamStats.data),
+    [games.data, ownedTypes.data, progress.data, twitchStreamStats.data]
   );
 
   if (progress.loading || games.loading || ownedTypes.loading) return <Loading />;
@@ -77,7 +81,9 @@ export function Statistics() {
           <Stat tone="remaining-games" icon={ListTodo} label="Games Remaining" value={stats.gamesRemainingCount} />
           <Stat tone="progress" icon={LineChartIcon} label="Challenge Complete" value={`${stats.percentageComplete.toFixed(2)}%`} progress={stats.percentageComplete} />
           <Stat tone="duration" icon={Clock3} label="Average Game Duration" value={formatAverageDuration(stats.averageDurationSeconds)} />
-          <Stat tone="remaining-time" icon={Hourglass} label="Estimated Time Remaining" value={formatEstimatedTimeRemaining(stats.estimatedRemainingSeconds)} />
+          <Stat tone="remaining-time" icon={Hourglass} label="Estimated Game Time Remaining" value={formatEstimatedTimeRemaining(stats.estimatedRemainingSeconds)} />
+          <Stat tone="twitch-average" icon={Radio} label="Average Weekly Stream Time" value={formatAverageDuration(stats.averageWeeklyStreamSeconds)} />
+          <Stat tone="streaming-weeks" icon={CalendarClock} label="Estimated Streaming Time Remaining" value={formatStreamingTimeRemaining(stats.estimatedStreamingWeeks)} />
         </div>
         {stats.durationRows.length ? <DurationChart rows={stats.durationRows} /> : <p className="muted">No completed games with duration data yet.</p>}
       </section>
@@ -356,7 +362,7 @@ function ThermometerCard({
   );
 }
 
-function calculateStatistics(games: GameDto[], progress: GameProgressDto[], ownedTypes: Record<string, string>) {
+function calculateStatistics(games: GameDto[], progress: GameProgressDto[], ownedTypes: Record<string, string>, twitchStreamStats: TwitchStreamStatsDto | null) {
   const gamesInChallengeCount = games.filter((game) => !game.isExcluded).length;
   const gamesCompletedCount = progress.filter((game) => !!game.dateFinished).length;
   const gamesRemainingCount = gamesInChallengeCount - gamesCompletedCount;
@@ -368,6 +374,8 @@ function calculateStatistics(games: GameDto[], progress: GameProgressDto[], owne
     .filter((entry): entry is { progress: GameProgressDto; seconds: number } => entry.seconds !== null);
   const averageDurationSeconds = durations.length ? durations.reduce((sum, entry) => sum + entry.seconds, 0) / durations.length : null;
   const estimatedRemainingSeconds = averageDurationSeconds === null ? null : averageDurationSeconds * Math.max(0, gamesRemainingCount);
+  const averageWeeklyStreamSeconds = twitchStreamStats?.averageWeeklyStreamSeconds ?? null;
+  const estimatedStreamingWeeks = calculateEstimatedStreamingWeeks(estimatedRemainingSeconds, averageWeeklyStreamSeconds);
 
   const totalGamesOwned = games.filter((game) => game.isOwned).length;
   const gamesCollectedInChallenge = games.filter((game) => game.isOwned && !game.isExcluded).length;
@@ -393,6 +401,8 @@ function calculateStatistics(games: GameDto[], progress: GameProgressDto[], owne
     percentageComplete,
     averageDurationSeconds,
     estimatedRemainingSeconds,
+    averageWeeklyStreamSeconds,
+    estimatedStreamingWeeks,
     totalGamesOwned,
     gamesCollectedInChallenge,
     gamesCollectedButExcluded,
@@ -402,6 +412,16 @@ function calculateStatistics(games: GameDto[], progress: GameProgressDto[], owne
     durationRows,
     ownershipSlices: buildOwnershipSlices(ownedTypes)
   };
+}
+
+function calculateEstimatedStreamingWeeks(estimatedRemainingSeconds: number | null, averageWeeklyStreamSeconds: number | null) {
+  if (estimatedRemainingSeconds === 0) {
+    return 0;
+  }
+  if (estimatedRemainingSeconds === null || averageWeeklyStreamSeconds === null || averageWeeklyStreamSeconds <= 0) {
+    return null;
+  }
+  return estimatedRemainingSeconds / averageWeeklyStreamSeconds;
 }
 
 function calculateYearlyStatistics(progress: GameProgressDto[], gamesInChallengeCount: number): YearlyStatistic[] {
@@ -533,6 +553,23 @@ function formatEstimatedTimeRemaining(seconds: number | null) {
   if (minutes > 0) parts.push(`${minutes}m`);
   if (secs > 0 || parts.length === 0) parts.push(`${secs}s`);
   return parts.join(" ");
+}
+
+function formatStreamingTimeRemaining(weeks: number | null) {
+  if (weeks === null) return "N/A";
+  if (weeks === 0) return "Complete!";
+  if (weeks >= 52) {
+    const roundedWeeks = Math.round(weeks);
+    const years = Math.floor(roundedWeeks / 52);
+    const remainingWeeks = roundedWeeks % 52;
+    const parts = [`${years.toLocaleString("en-GB")} ${years === 1 ? "year" : "years"}`];
+    if (remainingWeeks > 0) {
+      parts.push(`${remainingWeeks} ${remainingWeeks === 1 ? "week" : "weeks"}`);
+    }
+    return parts.join(" ");
+  }
+  const rounded = weeks < 10 ? Math.round(weeks * 10) / 10 : Math.round(weeks);
+  return `${rounded.toLocaleString("en-GB")} ${rounded === 1 ? "week" : "weeks"}`;
 }
 
 function buildOwnershipSlices(ownedTypes: Record<string, string>): OwnershipSlice[] {

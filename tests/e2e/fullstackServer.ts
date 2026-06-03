@@ -28,6 +28,7 @@ async function main() {
       databaseConnectionString: connectionString,
       twitchClientId: "playwright-client",
       twitchClientSecret: "playwright-secret",
+      twitchChannelLogin: "retrodadson",
       publicBaseUrl: `http://127.0.0.1:${port}`,
       cookieSecret,
       logLevel: "silent"

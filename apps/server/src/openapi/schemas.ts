@@ -547,6 +547,20 @@ const openApiSchemas = [
     }
   },
   {
+    $id: "TwitchStreamStats",
+    type: "object",
+    required: ["channelLogin", "rangeStart", "rangeEnd", "rangeWeeks", "totalStreamSeconds", "averageWeeklyStreamSeconds", "vodCount"],
+    properties: {
+      channelLogin: { type: "string" },
+      rangeStart: dateTime,
+      rangeEnd: dateTime,
+      rangeWeeks: { type: "number", minimum: 0, description: "Fixed 8-week aggregation window." },
+      totalStreamSeconds: { type: "number", minimum: 0 },
+      averageWeeklyStreamSeconds: { type: "number", minimum: 0, description: "Average weekly stream time over the last 8 weeks, excluding VODs shorter than 20 minutes." },
+      vodCount: { ...count, description: "Number of VODs included in the aggregate after excluding streams shorter than 20 minutes." }
+    }
+  },
+  {
     $id: "HealthCheckEntry",
     type: "object",
     required: ["name", "status", "duration"],
@@ -850,6 +864,15 @@ export const authRouteSchemas = {
     summary: "Get current auth status",
     operationId: "getAuthUser",
     response: { 200: ref("UserProfile"), ...serverError }
+  })
+} as const;
+
+export const twitchRouteSchemas = {
+  streamStats: route({
+    tags: ["Twitch"],
+    summary: "Get recent Twitch stream time statistics",
+    operationId: "getTwitchStreamStats",
+    response: { 200: ref("TwitchStreamStats"), 502: ref("ErrorResponse") }
   })
 } as const;
 

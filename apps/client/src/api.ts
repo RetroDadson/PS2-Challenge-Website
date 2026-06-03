@@ -33,6 +33,16 @@ export type CoverRefreshProgress = CoverRefreshResult & {
   error?: string;
 };
 
+export type TwitchStreamStatsDto = {
+  channelLogin: string;
+  rangeStart: string;
+  rangeEnd: string;
+  rangeWeeks: number;
+  totalStreamSeconds: number;
+  averageWeeklyStreamSeconds: number;
+  vodCount: number;
+};
+
 type CoverRefreshStreamEvent =
   | ({ type: "progress" } & CoverRefreshProgress)
   | ({ type: "complete" } & CoverRefreshResult)
@@ -90,6 +100,7 @@ export const api = {
   updateOwnership: (id: number, ownPhysicalCopy: boolean, typeOwned: string) =>
     request<{ message: string }>(`/api/games/${id}/ownership`, { method: "PUT", body: JSON.stringify({ ownPhysicalCopy, typeOwned }) }),
   progress: () => request<GameProgressDto[]>("/api/games/progress"),
+  twitchStreamStats: () => request<TwitchStreamStatsDto>("/api/twitch/stream-stats"),
   updateProgress: (payload: Record<string, unknown>) => request("/api/games/progress", { method: "POST", body: JSON.stringify(payload) }),
   ownedTypes: () => request<Record<string, string>>("/api/games/owned-types"),
   serialNumbers: (id: number) => request<SerialNumberDto[]>(`/api/games/${id}/serial-numbers`),

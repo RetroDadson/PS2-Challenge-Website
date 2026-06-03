@@ -14,16 +14,19 @@ import { closeDbClient, createDbClient, type DbClient } from "./db/client.js";
 import { migrateDatabase } from "./db/migrate.js";
 import { openApiRefResolver, openApiTransform, registerOpenApiSchemas } from "./openapi/schemas.js";
 import { RealtimeHub } from "./realtime/hub.js";
+import { TwitchStreamRepository } from "./repositories/twitchStreamRepository.js";
 import { UserRepository } from "./repositories/userRepository.js";
 import { registerAdminRoutes } from "./routes/adminRoutes.js";
 import { registerAuthRoutes } from "./routes/authRoutes.js";
 import { registerGamesRoutes } from "./routes/gamesRoutes.js";
 import { registerHealthRoutes } from "./routes/healthRoutes.js";
 import { registerPublicSiteRoutes } from "./routes/publicSiteRoutes.js";
+import { registerTwitchRoutes } from "./routes/twitchRoutes.js";
 import { registerUserRoutes } from "./routes/userRoutes.js";
 import { registerVotesRoutes } from "./routes/votesRoutes.js";
 import { CoverImageRefreshService, type CoverImageRefreshResult } from "./services/coverImageService.js";
 import { GameService } from "./services/gameService.js";
+import { TwitchStreamStatsService } from "./services/twitchStreamStatsService.js";
 import { VoteService } from "./services/voteService.js";
 
 export type AppDependencies = {
@@ -35,6 +38,7 @@ type CoverRefreshLogger = Pick<FastifyBaseLogger, "error" | "info">;
 
 type CoverRefreshJob = Pick<CoverImageRefreshService, "refreshCoverImages"> & Partial<Pick<CoverImageRefreshService, "refreshCoverImagesDetailed">>;
 type CoverRefreshSummary = Pick<CoverImageRefreshResult, "updated"> & Partial<Omit<CoverImageRefreshResult, "updated">>;
+type TwitchStreamStatsJob = Pick<TwitchStreamStatsService, "syncRecentStreams">;
 
 type CoverRefreshSchedulerOptions = {
   coverRefresh: CoverRefreshJob;
@@ -42,6 +46,23 @@ type CoverRefreshSchedulerOptions = {
   logger?: CoverRefreshLogger;
   initialDelayMs?: number;
   intervalMs?: number;
+};
+
+type TwitchStreamStatsSchedulerOptions = {
+  twitchStats: TwitchStreamStatsJob;
+  logger?: CoverRefreshLogger;
+  initialDelayMs?: number;
+  intervalMs?: number;
+};
+
+type RecurringJobOptions = {
+  logger: CoverRefreshLogger | undefined;
+  initialDelayMs: number;
+  intervalMs: number;
+  startMessage: string;
+  stopMessage: string;
+  run: () => Promise<void>;
+  onError: (error: unknown) => void;
 };
 
 export async function buildApp(config: AppConfig, dependencies: AppDependencies = {}): Promise<FastifyInstance> {
@@ -93,6 +114,8 @@ export async function buildApp(config: AppConfig, dependencies: AppDependencies 
   realtimeHub.setLogger(app.log);
   const userRepository = new UserRepository(dbClient.db);
   const gameService = new GameService(pool, dbClient.db);
+  const twitchStatsRepository = new TwitchStreamRepository(dbClient.db);
+  const twitchStatsService = new TwitchStreamStatsService(config, twitchStatsRepository);
   const voteService = new VoteService(pool, dbClient.db);
 
   app.get("/votesHub", { websocket: true }, (socket) => realtimeHub.register("votes", socket));
@@ -103,6 +126,7 @@ export async function buildApp(config: AppConfig, dependencies: AppDependencies 
   await registerUserRoutes(app, userRepository, config);
   await registerAdminRoutes(app, userRepository, config);
   await registerGamesRoutes(app, gameService, userRepository, config, realtimeHub);
+  await registerTwitchRoutes(app, twitchStatsService);
   await registerVotesRoutes(app, voteService, userRepository, config, realtimeHub);
   await registerPublicSiteRoutes(app, config);
 
@@ -138,9 +162,12 @@ export async function startApp(config: AppConfig): Promise<FastifyInstance> {
   const realtimeHub = new RealtimeHub();
   const app = await buildApp(config, { dbClient, realtimeHub });
   const coverRefresh = new CoverImageRefreshService(dbClient.pool, undefined, dbClient.db);
+  const twitchStats = new TwitchStreamStatsService(config, new TwitchStreamRepository(dbClient.db));
   const coverRefreshScheduler = scheduleCoverImageRefresh({ coverRefresh, realtimeHub, logger: app.log });
+  const twitchStatsScheduler = scheduleTwitchStreamStatsSync({ twitchStats, logger: app.log });
   app.addHook("onClose", async () => {
     coverRefreshScheduler.stop();
+    twitchStatsScheduler.stop();
   });
 
   await app.listen({ port: config.port, host: "0.0.0.0" });
@@ -165,23 +192,13 @@ export function scheduleCoverImageRefresh({
   initialDelayMs = 60 * 1000,
   intervalMs = 24 * 60 * 60 * 1000
 }: CoverRefreshSchedulerOptions): { stop: () => void } {
-  let stopped = false;
-  let timeout: ReturnType<typeof setTimeout> | undefined;
-
-  const scheduleNext = (delayMs: number) => {
-    timeout = setTimeout(() => {
-      void run();
-    }, delayMs);
-    timeout.unref?.();
-  };
-
-  logger?.info("Cover Image Update Service Wrapper is starting");
-
-  const run = async () => {
-    if (stopped) {
-      return;
-    }
-    try {
+  return scheduleRecurringJob({
+    logger,
+    initialDelayMs,
+    intervalMs,
+    startMessage: "Cover Image Update Service Wrapper is starting",
+    stopMessage: "Cover Image Update Service Wrapper is stopping",
+    run: async () => {
       logger?.info("Starting cover image update process");
       const summary = await refreshCoverImagesWithSummary(coverRefresh, realtimeHub, logger);
       if (summary.total === undefined) {
@@ -195,8 +212,64 @@ export function scheduleCoverImageRefresh({
       if (summary.updated > 0) {
         logger?.info({ updated: summary.updated }, "Sent GamesUpdated notification to connected clients");
       }
-    } catch (error) {
+    },
+    onError: (error) => {
       logger?.error(error, "Failed to update cover images");
+    }
+  });
+}
+
+export function scheduleTwitchStreamStatsSync({
+  twitchStats,
+  logger,
+  initialDelayMs = 2 * 60 * 1000,
+  intervalMs = 6 * 60 * 60 * 1000
+}: TwitchStreamStatsSchedulerOptions): { stop: () => void } {
+  return scheduleRecurringJob({
+    logger,
+    initialDelayMs,
+    intervalMs,
+    startMessage: "Twitch stream stats sync service is starting",
+    stopMessage: "Twitch stream stats sync service is stopping",
+    run: async () => {
+      logger?.info("Starting Twitch stream stats sync");
+      const result = await twitchStats.syncRecentStreams();
+      logger?.info(
+        {
+          channelLogin: result.channelLogin,
+          checked: result.checked,
+          upserted: result.upserted,
+          skipped: result.skipped
+        },
+        "Twitch stream stats sync completed"
+      );
+    },
+    onError: (error) => {
+      logger?.error(error, "Failed to sync Twitch stream stats");
+    }
+  });
+}
+
+function scheduleRecurringJob({
+  logger,
+  initialDelayMs,
+  intervalMs,
+  startMessage,
+  stopMessage,
+  run,
+  onError
+}: RecurringJobOptions): { stop: () => void } {
+  let stopped = false;
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+
+  const runScheduledJob = async () => {
+    if (stopped) {
+      return;
+    }
+    try {
+      await run();
+    } catch (error) {
+      onError(error);
     } finally {
       if (!stopped) {
         scheduleNext(intervalMs);
@@ -204,11 +277,19 @@ export function scheduleCoverImageRefresh({
     }
   };
 
+  const scheduleNext = (delayMs: number) => {
+    timeout = setTimeout(() => {
+      void runScheduledJob();
+    }, delayMs);
+    timeout.unref?.();
+  };
+
+  logger?.info(startMessage);
   scheduleNext(initialDelayMs);
 
   return {
     stop: () => {
-      logger?.info("Cover Image Update Service Wrapper is stopping");
+      logger?.info(stopMessage);
       stopped = true;
       if (timeout) {
         clearTimeout(timeout);

@@ -80,6 +80,15 @@ export interface Database {
     baseline_name: string;
     applied_at: Timestamp;
   };
+  twitch_stream_vods: {
+    vod_id: string;
+    channel_login: string;
+    title: string | null;
+    url: string | null;
+    created_at: Timestamp;
+    duration_seconds: number;
+    fetched_at: Timestamp;
+  };
   users: {
     id: Generated<number>;
     twitch_id: string;
