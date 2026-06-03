@@ -120,49 +120,63 @@ export function Games() {
         </div>
       </section>
       {filtered.length ? (
-        <table>
-          <thead>
-            <tr>
-              {isAdmin ? <th>Actions</th> : null}
-              <th>Cover</th>
-              <th><SortButton column="Title" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Title</SortButton></th>
-              <th><SortButton column="Developer" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Developer</SortButton></th>
-              <th><SortButton column="Publisher" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Publisher</SortButton></th>
-              <th><SortButton column="FirstReleased" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Release Date</SortButton></th>
-              <th><SortButton column="RegionFirstReleasedIn" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Region First Released In</SortButton></th>
-              <th><SortButton column="IsExcluded" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Excluded</SortButton></th>
-              <th><SortButton column="IsOwned" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Owned</SortButton></th>
-              <th><SortButton column="CompletionStatus" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Status</SortButton></th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((game) => {
-              const status = getCompletionStatus(completionStatus, game.id);
-              return (
-                <tr key={game.id} className={gameRowClass(game)}>
-                  {isAdmin ? <td><button className="icon-button" onClick={() => setEditing(game)} aria-label={`Edit ${game.title}`}><Edit3 /></button></td> : null}
-                  <td className="cover-cell"><CoverImage src={game.imageUrl} alt={`${game.title} cover`} /></td>
-                  <td><GameTitle game={game} alternateTitles={alternateTitles[String(game.id)] ?? []} /></td>
-                  <td>{game.developer}</td>
-                  <td>{game.publisher}</td>
-                  <td>{formatDateOnly(game.firstReleased, "Unknown")}</td>
-                  <td>{game.regionFirstReleasedIn}</td>
-                  <td>
-                    {game.isExcluded
-                      ? <span className="badge excluded-badge" title={exclusionReasons[String(game.id)] ?? "No reason provided"}>Excluded</span>
-                      : <span className="badge included-badge">Included</span>}
-                  </td>
-                  <td>
-                    {game.isOwned
-                      ? <span className="badge owned-badge" title={ownedTypes[String(game.id)] ?? "Owned"}>{ownedTypes[String(game.id)] || "Owned"}</span>
-                      : <span className="badge not-owned-badge">To Purchase</span>}
-                  </td>
-                  <td><span className={`badge ${statusClass(status)}`}>{status}</span></td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        <div className="table-scroll">
+          <table className="data-table games-table">
+            <colgroup>
+              {isAdmin ? <col className="col-games-actions" /> : null}
+              <col className="col-games-cover" />
+              <col className="col-games-title" />
+              <col className="col-games-developer" />
+              <col className="col-games-publisher" />
+              <col className="col-games-release" />
+              <col className="col-games-region" />
+              <col className="col-games-excluded" />
+              <col className="col-games-owned" />
+              <col className="col-games-status" />
+            </colgroup>
+            <thead>
+              <tr>
+                {isAdmin ? <th>Actions</th> : null}
+                <th>Cover</th>
+                <th><SortButton column="Title" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Title</SortButton></th>
+                <th><SortButton column="Developer" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Developer</SortButton></th>
+                <th><SortButton column="Publisher" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Publisher</SortButton></th>
+                <th><SortButton column="FirstReleased" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Release Date</SortButton></th>
+                <th><SortButton column="RegionFirstReleasedIn" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Region First Released In</SortButton></th>
+                <th><SortButton column="IsExcluded" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Excluded</SortButton></th>
+                <th><SortButton column="IsOwned" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Owned</SortButton></th>
+                <th><SortButton column="CompletionStatus" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Status</SortButton></th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((game) => {
+                const status = getCompletionStatus(completionStatus, game.id);
+                return (
+                  <tr key={game.id} className={gameRowClass(game)}>
+                    {isAdmin ? <td data-label="Actions"><button className="icon-button" onClick={() => setEditing(game)} aria-label={`Edit ${game.title}`}><Edit3 /></button></td> : null}
+                    <td className="cover-cell" data-label="Cover"><CoverImage src={game.imageUrl} alt={`${game.title} cover`} /></td>
+                    <td data-label="Title"><GameTitle game={game} alternateTitles={alternateTitles[String(game.id)] ?? []} /></td>
+                    <td data-label="Developer">{game.developer}</td>
+                    <td data-label="Publisher">{game.publisher}</td>
+                    <td data-label="Release Date">{formatDateOnly(game.firstReleased, "Unknown")}</td>
+                    <td data-label="Region">{game.regionFirstReleasedIn}</td>
+                    <td data-label="Excluded">
+                      {game.isExcluded
+                        ? <span className="badge excluded-badge" title={exclusionReasons[String(game.id)] ?? "No reason provided"}>Excluded</span>
+                        : <span className="badge included-badge">Included</span>}
+                    </td>
+                    <td data-label="Owned">
+                      {game.isOwned
+                        ? <span className="badge owned-badge" title={ownedTypes[String(game.id)] ?? "Owned"}>{ownedTypes[String(game.id)] || "Owned"}</span>
+                        : <span className="badge not-owned-badge">To Purchase</span>}
+                    </td>
+                    <td data-label="Status"><span className={`badge ${statusClass(status)}`}>{status}</span></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       ) : <Empty>No games found.</Empty>}
       <EditingGameModal
         editing={editing}

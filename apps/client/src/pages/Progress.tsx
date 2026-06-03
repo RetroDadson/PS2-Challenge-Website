@@ -105,40 +105,55 @@ export function Progress() {
         </div>
       </section>
       {filtered.length ? (
-        <table>
-          <thead>
-            <tr>
-              <th><SortButton column="ProgressId" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Game Number</SortButton></th>
-              <th><SortButton column="Status" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Status</SortButton></th>
-              <th>Cover</th>
-              <th><SortButton column="GameTitle" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Title</SortButton></th>
-              <th><SortButton column="DateStarted" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Started</SortButton></th>
-              <th><SortButton column="DateFinished" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Finished</SortButton></th>
-              <th><SortButton column="CompletionTime" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Time</SortButton></th>
-              <th><SortButton column="Platform" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Platform</SortButton></th>
-              <th>Criteria</th>
-              <th>Review</th>
-              {isAdmin ? <th>Actions</th> : null}
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map((game) => (
-              <tr key={game.progressId} className={game.dateFinished ? "completed" : "in-progress"}>
-                <td>{game.progressId}</td>
-                <td><span className={`status-badge ${game.dateFinished ? "status-completed" : "status-inprogress"}`}>{game.dateFinished ? "Completed" : "In Progress"}</span></td>
-                <td className="cover-cell"><CoverImage src={game.imageUrl} alt={`${game.gameTitle} cover`} /></td>
-                <td><ProgressTitle game={game} alternateTitles={alternateTitles[String(game.gameId)] ?? []} /></td>
-                <td>{formatDateOnly(game.dateStarted)}</td>
-                <td>{game.dateFinished ? formatDateOnly(game.dateFinished) : "-"}</td>
-                <td>{formatCompletionTime(game.completionTime)}</td>
-                <td><span className={`platform-badge platform-${game.platform.toLocaleLowerCase("en-GB")}`}>{game.platform}</span></td>
-                <td>{game.beatenCriteria ?? "-"}</td>
-                <td>{game.review ?? "-"}</td>
-                {isAdmin ? <td><button className="icon-text-button" onClick={() => openEditModal(game)} aria-label={`Edit ${game.gameTitle}`}><Edit3 />Edit</button></td> : null}
+        <div className="table-scroll">
+          <table className="data-table progress-table">
+            <colgroup>
+              <col className="col-progress-number" />
+              <col className="col-progress-status" />
+              <col className="col-progress-cover" />
+              <col className="col-progress-title" />
+              <col className="col-progress-date" />
+              <col className="col-progress-date" />
+              <col className="col-progress-time" />
+              <col className="col-progress-platform" />
+              <col className="col-progress-criteria" />
+              <col className="col-progress-review" />
+              {isAdmin ? <col className="col-progress-actions" /> : null}
+            </colgroup>
+            <thead>
+              <tr>
+                <th><SortButton column="ProgressId" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Game Number</SortButton></th>
+                <th><SortButton column="Status" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Status</SortButton></th>
+                <th>Cover</th>
+                <th><SortButton column="GameTitle" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Title</SortButton></th>
+                <th><SortButton column="DateStarted" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Started</SortButton></th>
+                <th><SortButton column="DateFinished" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Finished</SortButton></th>
+                <th><SortButton column="CompletionTime" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Time</SortButton></th>
+                <th><SortButton column="Platform" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Platform</SortButton></th>
+                <th>Criteria</th>
+                <th>Review</th>
+                {isAdmin ? <th>Actions</th> : null}
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {filtered.map((game) => (
+                <tr key={game.progressId} className={game.dateFinished ? "completed" : "in-progress"}>
+                  <td data-label="Game Number">{game.progressId}</td>
+                  <td data-label="Status"><span className={`status-badge ${game.dateFinished ? "status-completed" : "status-inprogress"}`}>{game.dateFinished ? "Completed" : "In Progress"}</span></td>
+                  <td className="cover-cell" data-label="Cover"><CoverImage src={game.imageUrl} alt={`${game.gameTitle} cover`} /></td>
+                  <td data-label="Title"><ProgressTitle game={game} alternateTitles={alternateTitles[String(game.gameId)] ?? []} /></td>
+                  <td data-label="Started">{formatDateOnly(game.dateStarted)}</td>
+                  <td data-label="Finished">{game.dateFinished ? formatDateOnly(game.dateFinished) : "-"}</td>
+                  <td data-label="Time">{formatCompletionTime(game.completionTime)}</td>
+                  <td data-label="Platform"><span className={`platform-badge platform-${game.platform.toLocaleLowerCase("en-GB")}`}>{game.platform}</span></td>
+                  <td data-label="Criteria">{game.beatenCriteria ?? "-"}</td>
+                  <td data-label="Review">{game.review ?? "-"}</td>
+                  {isAdmin ? <td data-label="Actions"><button className="icon-text-button" onClick={() => openEditModal(game)} aria-label={`Edit ${game.gameTitle}`}><Edit3 />Edit</button></td> : null}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       ) : <Empty>No games in progress found.</Empty>}
       {modalOpen ? (
         <ProgressModal
