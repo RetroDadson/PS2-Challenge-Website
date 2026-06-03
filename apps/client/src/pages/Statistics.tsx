@@ -176,6 +176,7 @@ function DurationChart({ rows }: Readonly<{ rows: DurationRow[] }>) {
   const [scrollLeft, setScrollLeft] = useState(0);
   const [activeProgressId, setActiveProgressId] = useState<number | null>(null);
   const chart = buildDurationChart(rows, containerWidth, zoomLevel);
+  const chartRenderWidth = zoomLevel <= 1 ? "100%" : `${chart.width}px`;
   const activePoint = chart.points.find((point) => point.row.progressId === activeProgressId);
   const activePointVisibleX = activePoint ? activePoint.x - scrollLeft : 0;
   const tooltipX = activePoint ? Math.max(12, Math.min(activePointVisibleX, containerWidth - 12)) : 0;
@@ -232,7 +233,7 @@ function DurationChart({ rows }: Readonly<{ rows: DurationRow[] }>) {
           </button>
         </div>
         <div className="duration-chart-scroll" ref={scrollRef} onScroll={(event) => setScrollLeft(event.currentTarget.scrollLeft)}>
-          <div className="duration-chart-plot" style={{ width: `${chart.width}px` }}>
+          <div className="duration-chart-plot" style={{ width: chartRenderWidth }}>
             <svg className="duration-line-chart" viewBox={`0 0 ${chart.width} ${chart.height}`} role="img" aria-label="Game duration line chart" style={{ height: `${chart.height}px` }}>
               <defs>
                 <linearGradient id="duration-fill" x1="0" x2="0" y1="0" y2="1">

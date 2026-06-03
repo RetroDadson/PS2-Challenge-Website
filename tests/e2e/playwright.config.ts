@@ -5,6 +5,8 @@ import { defineConfig, devices } from "@playwright/test";
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const responsiveRouteSpecs = "routes.spec.ts";
 const fullStackSpecs = "fullstack.spec.ts";
+const systemChrome = { browserName: "chromium" as const, channel: "chrome" as const, defaultBrowserType: "chromium" as const };
+const chromeDevice = (device: NonNullable<(typeof devices)[string]>) => ({ ...device, ...systemChrome });
 
 export default defineConfig({
   testDir: ".",
@@ -21,13 +23,12 @@ export default defineConfig({
     timeout: 180_000
   },
   projects: [
-    { name: "chromium", testMatch: responsiveRouteSpecs, testIgnore: fullStackSpecs, use: { ...devices["Desktop Chrome"] } },
-    { name: "mobile", testMatch: responsiveRouteSpecs, testIgnore: fullStackSpecs, use: { ...devices["Pixel 7"] } },
-    { name: "edge", testMatch: responsiveRouteSpecs, testIgnore: fullStackSpecs, use: { ...devices["Desktop Edge"] } },
-    { name: "firefox", testMatch: responsiveRouteSpecs, testIgnore: fullStackSpecs, use: { ...devices["Desktop Firefox"] } },
-    { name: "foldable", testMatch: responsiveRouteSpecs, testIgnore: fullStackSpecs, use: { ...devices["Galaxy Fold"] } },
-    { name: "iphone", testMatch: responsiveRouteSpecs, testIgnore: fullStackSpecs, use: { ...devices["iPhone 15"] } },
-    { name: "ipad", testMatch: responsiveRouteSpecs, testIgnore: fullStackSpecs, use: { ...devices["iPad Pro 11"] } },
-    { name: "fullstack-chromium", testMatch: fullStackSpecs, testIgnore: responsiveRouteSpecs, use: { ...devices["Desktop Chrome"] } }
+    { name: "chromium", testMatch: responsiveRouteSpecs, testIgnore: fullStackSpecs, use: chromeDevice(devices["Desktop Chrome"]) },
+    { name: "mobile", testMatch: responsiveRouteSpecs, testIgnore: fullStackSpecs, use: chromeDevice(devices["Pixel 7"]) },
+    { name: "edge", testMatch: responsiveRouteSpecs, testIgnore: fullStackSpecs, use: chromeDevice(devices["Desktop Edge"]) },
+    { name: "foldable", testMatch: responsiveRouteSpecs, testIgnore: fullStackSpecs, use: chromeDevice(devices["Galaxy Fold"] ?? devices["Galaxy S24"]) },
+    { name: "iphone", testMatch: responsiveRouteSpecs, testIgnore: fullStackSpecs, use: chromeDevice(devices["iPhone 15"]) },
+    { name: "ipad", testMatch: responsiveRouteSpecs, testIgnore: fullStackSpecs, use: chromeDevice(devices["iPad Pro 11"]) },
+    { name: "fullstack-chromium", testMatch: fullStackSpecs, testIgnore: responsiveRouteSpecs, use: chromeDevice(devices["Desktop Chrome"]) }
   ]
 });

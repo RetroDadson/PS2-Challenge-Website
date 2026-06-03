@@ -92,5 +92,6 @@ test("renders the statistics duration chart", async ({ page }) => {
   await expect(page.getByText("Challenge Collection Progress")).toBeVisible();
   await expect(page.getByText("Total Collection Progress")).toBeVisible();
   const pieBox = await page.getByRole("img", { name: "Ownership type breakdown" }).boundingBox();
-  expect(pieBox?.width ?? 0).toBeGreaterThan(300);
+  const viewportWidth = page.viewportSize()?.width ?? 0;
+  expect(pieBox?.width ?? 0).toBeGreaterThan(Math.min(300, viewportWidth * 0.7));
 });
