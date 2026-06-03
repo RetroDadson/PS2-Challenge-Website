@@ -568,6 +568,8 @@ th { color: var(--heading-accent); font-size: .82rem; text-transform: uppercase;
 .stat-total-collection-rate { --stat-accent: var(--brand-secondary); }
 .stat-duration { --stat-accent: var(--brand-twitch); }
 .stat-remaining-time { --stat-accent: #00bcd4; }
+.stat-twitch-average { --stat-accent: var(--brand-twitch); }
+.stat-streaming-weeks { --stat-accent: #03c9a9; }
 .progress-bar-container {
   width: 100%;
   height: .45rem;

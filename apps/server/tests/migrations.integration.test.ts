@@ -4,6 +4,7 @@ import pg from "pg";
 import { migrateDatabase } from "../src/db/migrate.js";
 
 const { Pool } = pg;
+const expectedMigrationRecords = ["001_csharp_v13_schema", "002_record_typescript_baseline", "003_add_twitch_stream_vods"];
 
 describe("database migrations", () => {
   let container: Awaited<ReturnType<PostgreSqlContainer["start"]>>;
@@ -33,6 +34,7 @@ describe("database migrations", () => {
       expect(tables.rows.map((row) => row.table_name)).toContain("games");
       expect(tables.rows.map((row) => row.table_name)).toContain("current_vote");
       expect(tables.rows.map((row) => row.table_name)).toContain("ts_migration_baseline");
+      expect(tables.rows.map((row) => row.table_name)).toContain("twitch_stream_vods");
 
       const apiKeyColumn = await pool.query<{ is_nullable: string; character_maximum_length: number }>(
         `
@@ -58,7 +60,7 @@ describe("database migrations", () => {
       expect(constraints.rows.map((row) => row.conname).sort()).toEqual(["chk_current_vote_game_number", "chk_vote_history_position"]);
 
       const migrationRecords = await pool.query<{ name: string }>("SELECT name FROM kysely_migration ORDER BY name");
-      expect(migrationRecords.rows.map((row) => row.name)).toEqual(["001_csharp_v13_schema", "002_record_typescript_baseline"]);
+      expect(migrationRecords.rows.map((row) => row.name)).toEqual(expectedMigrationRecords);
     } finally {
       await pool.end();
     }
@@ -81,7 +83,7 @@ describe("database migrations", () => {
       expect(baseline.rows[0]?.baseline_name).toBe("csharp-v13-schema");
 
       const migrationRecords = await verifiedPool.query<{ name: string }>("SELECT name FROM kysely_migration ORDER BY name");
-      expect(migrationRecords.rows.map((row) => row.name)).toEqual(["001_csharp_v13_schema", "002_record_typescript_baseline"]);
+      expect(migrationRecords.rows.map((row) => row.name)).toEqual(expectedMigrationRecords);
     } finally {
       await verifiedPool.end();
     }

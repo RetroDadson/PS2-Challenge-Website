@@ -10,6 +10,7 @@ export type AppConfig = {
   databaseConnectionString: string;
   twitchClientId: string;
   twitchClientSecret: string;
+  twitchChannelLogin: string;
   publicBaseUrl: string;
   cookieSecret: string;
   logLevel: string;
@@ -23,6 +24,7 @@ type AppSettings = {
   Twitch?: {
     ClientId?: string;
     ClientSecret?: string;
+    ChannelLogin?: string;
   };
   ApiBaseUrl?: string;
   PublicBaseUrl?: string;
@@ -55,6 +57,7 @@ export function loadConfig(validate = true): AppConfig {
   const databaseConnectionString = resolveConnectionString(settings);
   const twitchClientId = process.env.TWITCH_CLIENT_ID ?? process.env.Twitch__ClientId ?? settings.Twitch?.ClientId ?? "";
   const twitchClientSecret = process.env.TWITCH_CLIENT_SECRET ?? process.env.Twitch__ClientSecret ?? settings.Twitch?.ClientSecret ?? "";
+  const twitchChannelLogin = process.env.TWITCH_CHANNEL_LOGIN ?? process.env.Twitch__ChannelLogin ?? settings.Twitch?.ChannelLogin ?? "retrodadson";
   const configuredPort = Number.isFinite(port) ? port : 5001;
   const fallbackPublicBaseUrl = new URL(`http://localhost:${configuredPort}`).toString().replace(/\/$/, "");
   const publicBaseUrl =
@@ -68,6 +71,7 @@ export function loadConfig(validate = true): AppConfig {
     databaseConnectionString,
     twitchClientId,
     twitchClientSecret,
+    twitchChannelLogin,
     publicBaseUrl,
     cookieSecret: configuredCookieSecret ?? crypto.randomBytes(32).toString("hex"),
     logLevel,
