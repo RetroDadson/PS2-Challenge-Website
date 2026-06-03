@@ -207,7 +207,7 @@ svg { width: 1.1rem; height: 1.1rem; flex: 0 0 auto; }
   object-fit: contain;
 }
 main { min-width: 0; }
-.page { padding: 1.5rem; }
+.page { min-width: 0; padding: 1.5rem; }
 .page-header { display: flex; justify-content: space-between; gap: 1rem; align-items: center; margin-bottom: 1rem; }
 .page-header p, .hero p:first-child { margin: 0 0 .25rem; color: var(--heading-accent); text-transform: uppercase; letter-spacing: 0; font-weight: 700; font-size: .78rem; }
 h1, h2 { margin: 0; letter-spacing: 0; }
@@ -275,7 +275,7 @@ h1, h2 { margin: 0; letter-spacing: 0; }
   object-fit: contain;
 }
 .actions, .toolbar { display: flex; gap: .75rem; flex-wrap: wrap; align-items: center; margin: 1rem 0; }
-.panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; margin-bottom: 1rem; }
+.panel { min-width: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; margin-bottom: 1rem; }
 .panel.narrow { max-width: 34rem; margin: 4rem auto; }
 .section-header, .maintenance-panel header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
 .section-header h2, .maintenance-panel h2 { display: inline-flex; align-items: center; gap: .5rem; }
@@ -285,11 +285,69 @@ h1, h2 { margin: 0; letter-spacing: 0; }
 label { display: inline-grid; gap: .35rem; color: var(--muted); }
 label.checkbox, .toolbar label { display: inline-flex; align-items: center; gap: .45rem; }
 input, select, textarea { background: var(--input); border: 1px solid var(--border-strong); color: var(--text); border-radius: 6px; min-height: 2.3rem; padding: .45rem .6rem; }
-.search { display: flex; align-items: center; grid-template-columns: auto 1fr; background: var(--input); border: 1px solid var(--border-strong); border-radius: 6px; padding-left: .5rem; }
-.search input { border: 0; background: transparent; }
+.toolbar > * { min-width: 0; }
+.search { display: flex; flex: 1 1 20rem; max-width: 100%; align-items: center; grid-template-columns: auto 1fr; background: var(--input); border: 1px solid var(--border-strong); border-radius: 6px; padding-left: .5rem; }
+.search input { width: 100%; min-width: 0; border: 0; background: transparent; }
 table { width: 100%; border-collapse: collapse; background: var(--surface); border-radius: 8px; overflow: hidden; }
 th, td { text-align: left; padding: .7rem .8rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
 th { color: var(--heading-accent); font-size: .82rem; text-transform: uppercase; letter-spacing: 0; }
+.table-scroll {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow: visible;
+  border-radius: 8px;
+}
+.data-table {
+  min-width: 0;
+  table-layout: fixed;
+}
+.data-table td {
+  overflow-wrap: normal;
+}
+.data-table .cover-cell {
+  overflow-wrap: normal;
+}
+.data-table td[data-label="Actions"],
+.data-table td[data-label="Game Number"],
+.data-table td[data-label="Status"],
+.data-table td[data-label="Started"],
+.data-table td[data-label="Finished"],
+.data-table td[data-label="Time"],
+.data-table td[data-label="Platform"],
+.data-table td[data-label="Release Date"],
+.data-table td[data-label="Excluded"],
+.data-table td[data-label="Owned"] {
+  white-space: nowrap;
+}
+.data-table td[data-label="Title"],
+.data-table td[data-label="Developer"],
+.data-table td[data-label="Publisher"],
+.data-table td[data-label="Region"],
+.data-table td[data-label="Criteria"],
+.data-table td[data-label="Review"] {
+  overflow-wrap: break-word;
+}
+.progress-table .col-progress-number { width: 4%; }
+.progress-table .col-progress-status { width: 10%; }
+.progress-table .col-progress-cover { width: 7%; }
+.progress-table .col-progress-title { width: 12%; }
+.progress-table .col-progress-date { width: 9%; }
+.progress-table .col-progress-time { width: 7%; }
+.progress-table .col-progress-platform { width: 8%; }
+.progress-table .col-progress-criteria { width: 11%; }
+.progress-table .col-progress-review { width: 16%; }
+.progress-table .col-progress-actions { width: 5%; }
+.games-table .col-games-actions { width: 5%; }
+.games-table .col-games-cover { width: 7%; }
+.games-table .col-games-title { width: 17%; }
+.games-table .col-games-developer { width: 11%; }
+.games-table .col-games-publisher { width: 11%; }
+.games-table .col-games-release { width: 10%; }
+.games-table .col-games-region { width: 12%; }
+.games-table .col-games-excluded { width: 8%; }
+.games-table .col-games-owned { width: 12%; }
+.games-table .col-games-status { width: 10%; }
 .table-sort-button {
   min-height: 0;
   padding: 0;
@@ -364,6 +422,7 @@ th { color: var(--heading-accent); font-size: .82rem; text-transform: uppercase;
   border-radius: 999px;
   font-weight: 800;
   font-size: .78rem;
+  white-space: nowrap;
 }
 .status-completed { background: var(--success-bg); color: var(--success-text); }
 .status-inprogress { background: var(--warning-bg); color: var(--warning-text); }
@@ -1149,10 +1208,34 @@ th { color: var(--heading-accent); font-size: .82rem; text-transform: uppercase;
   0%, 100% { opacity: 1; }
   50% { opacity: .5; }
 }
-@media (max-width: 820px) {
+@media (max-width: 1300px) {
+  .data-table th,
+  .data-table td {
+    padding: .62rem .45rem;
+    font-size: .92rem;
+  }
+  .cover-wrapper,
+  .game-cover-thumb,
+  .no-cover {
+    width: 4rem;
+  }
+  .progress-table .icon-text-button {
+    width: 2.35rem;
+    padding: 0;
+    justify-content: center;
+    gap: 0;
+    font-size: 0;
+  }
+}
+@media (max-width: 1100px) {
   .app-shell { grid-template-columns: 1fr; }
-  .sidebar { position: static; height: auto; }
-  .sidebar nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sidebar {
+    position: static;
+    height: auto;
+  }
+  .sidebar nav {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
   .sidebar-lower {
     margin-top: 0;
   }
@@ -1160,9 +1243,41 @@ th { color: var(--heading-accent); font-size: .82rem; text-transform: uppercase;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
   }
+}
+@media (max-width: 820px) {
+  .sidebar nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .page-header, .current-votes article { grid-template-columns: 1fr; display: grid; }
   .home-actions, .current-votes-dashboard, .ownership-breakdown, .collection-visuals { grid-template-columns: 1fr; }
   table { display: block; overflow-x: auto; }
+  .table-scroll table { display: table; overflow: hidden; }
+  .data-table th, .data-table td {
+    padding: .55rem .35rem;
+    font-size: .86rem;
+  }
+  .cover-wrapper,
+  .game-cover-thumb,
+  .no-cover {
+    width: 3.4rem;
+  }
+  .status-badge,
+  .platform-badge,
+  .badge {
+    padding: .16rem .36rem;
+    font-size: .68rem;
+  }
+  .data-table td[data-label="Status"],
+  .data-table td[data-label="Started"],
+  .data-table td[data-label="Finished"],
+  .data-table td[data-label="Time"],
+  .data-table td[data-label="Platform"],
+  .data-table td[data-label="Release Date"],
+  .data-table td[data-label="Excluded"],
+  .data-table td[data-label="Owned"],
+  .status-badge,
+  .platform-badge,
+  .badge {
+    white-space: normal;
+  }
 }
 
 @media (max-width: 1100px) {
