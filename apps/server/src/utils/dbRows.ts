@@ -11,6 +11,10 @@ export type GameRow = {
   image_url: string | null;
   is_excluded?: boolean | null;
   is_owned?: boolean | null;
+  howlongtobeat_id?: number | null;
+  howlongtobeat_main_story_seconds?: number | null;
+  howlongtobeat_main_extra_seconds?: number | null;
+  howlongtobeat_completionist_seconds?: number | null;
 };
 
 export type ProgressRow = {
@@ -44,7 +48,11 @@ export function mapGame(row: GameRow): GameDto {
     releasedInEuPalOrNa: row.released_in_eu_or_na ?? false,
     imageUrl: row.image_url,
     isExcluded: row.is_excluded ?? false,
-    isOwned: row.is_owned ?? false
+    isOwned: row.is_owned ?? false,
+    howLongToBeatId: row.howlongtobeat_id ?? null,
+    howLongToBeatMainStorySeconds: row.howlongtobeat_main_story_seconds ?? null,
+    howLongToBeatMainExtraSeconds: row.howlongtobeat_main_extra_seconds ?? null,
+    howLongToBeatCompletionistSeconds: row.howlongtobeat_completionist_seconds ?? null
   };
 }
 

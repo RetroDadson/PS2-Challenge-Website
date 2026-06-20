@@ -102,6 +102,7 @@ describe("client API requests", () => {
     await api.roles();
     await api.updateRole(9, 1);
     await api.refreshCovers();
+    await api.refreshHowLongToBeat();
 
     expect(calls).toEqual(
       expect.arrayContaining([
@@ -112,7 +113,8 @@ describe("client API requests", () => {
         { method: "DELETE", path: "/api/votes/current/Game%20%2F%20One", body: null },
         { method: "POST", path: "/api/votes/archive", body: { notes: "Done", manualPositions: { 1: 1 } } },
         { method: "PUT", path: "/api/admin/users/9/role", body: { roleId: 1 } },
-        { method: "POST", path: "/api/admin/update-cover-images", body: {} }
+        { method: "POST", path: "/api/admin/update-cover-images", body: {} },
+        { method: "POST", path: "/api/admin/update-howlongtobeat", body: {} }
       ])
     );
   });
@@ -208,5 +210,30 @@ describe("client API requests", () => {
 
     await expect(api.refreshCoversWithProgress(() => undefined)).rejects.toThrow("Cover failure");
     await expect(api.refreshCoversWithProgress(() => undefined)).rejects.toThrow("Cover image update did not complete");
+  });
+
+  it("streams HowLongToBeat refresh progress and returns the completion payload", async () => {
+    const progress: unknown[] = [];
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(
+          encoder.encode(
+            [
+              JSON.stringify({ type: "progress", status: "searching", processed: 1, total: 2, updated: 0, skipped: 0, errors: 0 }),
+              JSON.stringify({ type: "complete", total: 2, updated: 1, skipped: 1, errors: 0, message: "Done" }),
+              ""
+            ].join("\n")
+          )
+        );
+        controller.close();
+      }
+    });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(stream, { status: 200 })));
+
+    const result = await api.refreshHowLongToBeatWithProgress((event) => progress.push(event));
+
+    expect(progress).toEqual([{ type: "progress", status: "searching", processed: 1, total: 2, updated: 0, skipped: 0, errors: 0 }]);
+    expect(result).toEqual({ type: "complete", total: 2, updated: 1, skipped: 1, errors: 0, message: "Done" });
   });
 });

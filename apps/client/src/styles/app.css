@@ -314,6 +314,7 @@ th { color: var(--heading-accent); font-size: .82rem; text-transform: uppercase;
 .data-table td[data-label="Started"],
 .data-table td[data-label="Finished"],
 .data-table td[data-label="Time"],
+.data-table td[data-label="How Long To Beat Time"],
 .data-table td[data-label="Platform"],
 .data-table td[data-label="Release Date"],
 .data-table td[data-label="Excluded"],
@@ -338,22 +339,26 @@ th { color: var(--heading-accent); font-size: .82rem; text-transform: uppercase;
 .progress-table .col-progress-criteria { width: 11%; }
 .progress-table .col-progress-review { width: 16%; }
 .progress-table .col-progress-actions { width: 5%; }
-.games-table .col-games-actions { width: 5%; }
-.games-table .col-games-cover { width: 7%; }
-.games-table .col-games-title { width: 17%; }
-.games-table .col-games-developer { width: 11%; }
-.games-table .col-games-publisher { width: 11%; }
-.games-table .col-games-release { width: 10%; }
-.games-table .col-games-region { width: 12%; }
+.games-table .col-games-actions { width: 4%; }
+.games-table .col-games-cover { width: 6%; }
+.games-table .col-games-title { width: 15%; }
+.games-table .col-games-hltb { width: 10%; }
+.games-table .col-games-developer { width: 9%; }
+.games-table .col-games-publisher { width: 9%; }
+.games-table .col-games-release { width: 9%; }
+.games-table .col-games-region { width: 11%; }
 .games-table .col-games-excluded { width: 8%; }
-.games-table .col-games-owned { width: 12%; }
-.games-table .col-games-status { width: 10%; }
+.games-table .col-games-owned { width: 10%; }
+.games-table .col-games-status { width: 9%; }
 .table-sort-button {
   min-height: 0;
   padding: 0;
   background: transparent;
   color: var(--heading-accent);
   text-transform: uppercase;
+  line-height: 1.2;
+  text-align: left;
+  white-space: normal;
 }
 .table-sort-button:hover { color: var(--text); }
 .results-count { color: var(--muted); font-weight: 700; }
@@ -362,6 +367,15 @@ th { color: var(--heading-accent); font-size: .82rem; text-transform: uppercase;
   border-bottom: 1px dotted var(--accent);
   cursor: help;
 }
+.hltb-link {
+  color: var(--text);
+  font-weight: 800;
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-underline-offset: .25rem;
+}
+.hltb-link:hover { color: var(--accent); }
+.muted-cell { color: var(--muted); }
 .cover-cell { width: 6.5rem; }
 .cover-wrapper {
   position: relative;
@@ -1271,6 +1285,7 @@ th { color: var(--heading-accent); font-size: .82rem; text-transform: uppercase;
   .data-table td[data-label="Started"],
   .data-table td[data-label="Finished"],
   .data-table td[data-label="Time"],
+  .data-table td[data-label="How Long To Beat Time"],
   .data-table td[data-label="Platform"],
   .data-table td[data-label="Release Date"],
   .data-table td[data-label="Excluded"],

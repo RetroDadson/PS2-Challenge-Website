@@ -11,7 +11,11 @@ export const gameSchema = z.object({
   releasedInEuPalOrNa: z.boolean().default(false),
   imageUrl: z.string().nullable().optional(),
   isExcluded: z.boolean().default(false),
-  isOwned: z.boolean().default(false)
+  isOwned: z.boolean().default(false),
+  howLongToBeatId: z.number().int().nullable().optional(),
+  howLongToBeatMainStorySeconds: z.number().int().nullable().optional(),
+  howLongToBeatMainExtraSeconds: z.number().int().nullable().optional(),
+  howLongToBeatCompletionistSeconds: z.number().int().nullable().optional()
 });
 
 export const createGameSchema = z.object({

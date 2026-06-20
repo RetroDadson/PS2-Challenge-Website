@@ -4,7 +4,12 @@ import pg from "pg";
 import { migrateDatabase } from "../src/db/migrate.js";
 
 const { Pool } = pg;
-const expectedMigrationRecords = ["001_csharp_v13_schema", "002_record_typescript_baseline", "003_add_twitch_stream_vods"];
+const expectedMigrationRecords = [
+  "001_csharp_v13_schema",
+  "002_record_typescript_baseline",
+  "003_add_twitch_stream_vods",
+  "004_add_howlongtobeat_games"
+];
 
 describe("database migrations", () => {
   let container: Awaited<ReturnType<PostgreSqlContainer["start"]>>;
@@ -35,6 +40,7 @@ describe("database migrations", () => {
       expect(tables.rows.map((row) => row.table_name)).toContain("current_vote");
       expect(tables.rows.map((row) => row.table_name)).toContain("ts_migration_baseline");
       expect(tables.rows.map((row) => row.table_name)).toContain("twitch_stream_vods");
+      expect(tables.rows.map((row) => row.table_name)).toContain("game_howlongtobeat");
 
       const apiKeyColumn = await pool.query<{ is_nullable: string; character_maximum_length: number }>(
         `
@@ -53,6 +59,23 @@ describe("database migrations", () => {
         `
       );
       expect(imageUrlColumn.rows[0]).toEqual({ data_type: "character varying", character_maximum_length: 500 });
+
+      const howLongToBeatColumns = await pool.query<{ column_name: string; data_type: string; is_nullable: string }>(
+        `
+        SELECT column_name, data_type, is_nullable
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'game_howlongtobeat'
+        ORDER BY ordinal_position
+        `
+      );
+      expect(howLongToBeatColumns.rows).toEqual([
+        { column_name: "game_id", data_type: "integer", is_nullable: "NO" },
+        { column_name: "howlongtobeat_id", data_type: "integer", is_nullable: "NO" },
+        { column_name: "main_story_seconds", data_type: "integer", is_nullable: "YES" },
+        { column_name: "main_extra_seconds", data_type: "integer", is_nullable: "YES" },
+        { column_name: "completionist_seconds", data_type: "integer", is_nullable: "YES" },
+        { column_name: "last_synced_at", data_type: "timestamp without time zone", is_nullable: "NO" }
+      ]);
 
       const constraints = await pool.query<{ conname: string }>(
         "SELECT conname FROM pg_constraint WHERE conname IN ('chk_current_vote_game_number', 'chk_vote_history_position')"

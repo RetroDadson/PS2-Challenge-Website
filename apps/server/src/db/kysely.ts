@@ -36,6 +36,14 @@ export interface Database {
     own_physical_copy: boolean | null;
     type_owned: string | null;
   };
+  game_howlongtobeat: {
+    game_id: number;
+    howlongtobeat_id: number;
+    main_story_seconds: number | null;
+    main_extra_seconds: number | null;
+    completionist_seconds: number | null;
+    last_synced_at: Timestamp;
+  };
   game_serial_numbers: {
     serial_id: Generated<number>;
     game_id: number;

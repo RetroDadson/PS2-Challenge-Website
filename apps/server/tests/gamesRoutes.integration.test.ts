@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDbClient } from "../src/db/client.js";
 import { buildApp } from "../src/server.js";
 import { seedGame, seedUser, startIntegrationDatabase, type IntegrationDatabase } from "./helpers/postgres.js";
@@ -31,6 +31,10 @@ describe("games API contract parity", () => {
     await db?.stop();
   });
 
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   beforeEach(async () => {
     await db.reset();
     await seedUser(db.pool, "Admin", adminApiKey);
@@ -45,6 +49,74 @@ describe("games API contract parity", () => {
 
     const write = await app.inject({ method: "POST", url: "/api/games", payload: validGamePayload("Blocked Game") });
     expect(write.statusCode).toBe(401);
+  });
+
+  it("refreshes and returns cached HowLongToBeat metadata for games", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        if (String(input).includes("/api/bleed/init")) {
+          return new Response(JSON.stringify({ token: "auth-token", hpKey: "ign_test", hpVal: "hidden-value" }), {
+            status: 200,
+            headers: { "content-type": "application/json" }
+          });
+        }
+        return new Response(
+          JSON.stringify({
+            data: [
+              {
+                game_id: 12345,
+                game_name: "Readable Game",
+                comp_main: 5400,
+                comp_plus: 7200,
+                comp_100: 10_800,
+                similarity: 1
+              }
+            ]
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      })
+    );
+    await seedGame(db.pool, 1, "Readable Game");
+
+    const refresh = await app.inject({
+      method: "POST",
+      url: "/api/admin/update-howlongtobeat",
+      headers: adminHeaders(),
+      payload: {}
+    });
+    expect(refresh.statusCode).toBe(200);
+    expect(refresh.json()).toEqual({ message: "HowLongToBeat update completed", total: 1, updated: 1, skipped: 0, errors: 0 });
+
+    const cached = await db.pool.query<{
+      game_id: number;
+      howlongtobeat_id: number;
+      main_story_seconds: number;
+      main_extra_seconds: number;
+      completionist_seconds: number;
+    }>("SELECT game_id, howlongtobeat_id, main_story_seconds, main_extra_seconds, completionist_seconds FROM game_howlongtobeat");
+    expect(cached.rows).toEqual([
+      {
+        game_id: 1,
+        howlongtobeat_id: 12345,
+        main_story_seconds: 5400,
+        main_extra_seconds: 7200,
+        completionist_seconds: 10_800
+      }
+    ]);
+
+    const read = await app.inject({ method: "GET", url: "/api/games" });
+    expect(read.json()).toEqual([
+      expect.objectContaining({
+        id: 1,
+        title: "Readable Game",
+        howLongToBeatId: 12345,
+        howLongToBeatMainStorySeconds: 5400,
+        howLongToBeatMainExtraSeconds: 7200,
+        howLongToBeatCompletionistSeconds: 10_800
+      })
+    ]);
   });
 
   it("returns C#-style validation errors for invalid game creation", async () => {
