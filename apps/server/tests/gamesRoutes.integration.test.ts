@@ -52,32 +52,7 @@ describe("games API contract parity", () => {
   });
 
   it("refreshes and returns cached HowLongToBeat metadata for games", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (input: string | URL | Request) => {
-        if (String(input).includes("/api/bleed/init")) {
-          return new Response(JSON.stringify({ token: "auth-token", hpKey: "ign_test", hpVal: "hidden-value" }), {
-            status: 200,
-            headers: { "content-type": "application/json" }
-          });
-        }
-        return new Response(
-          JSON.stringify({
-            data: [
-              {
-                game_id: 12345,
-                game_name: "Readable Game",
-                comp_main: 5400,
-                comp_plus: 7200,
-                comp_100: 10_800,
-                similarity: 1
-              }
-            ]
-          }),
-          { status: 200, headers: { "content-type": "application/json" } }
-        );
-      })
-    );
+    stubHowLongToBeatFetch();
     await seedGame(db.pool, 1, "Readable Game");
 
     const refresh = await app.inject({
@@ -117,6 +92,32 @@ describe("games API contract parity", () => {
         howLongToBeatCompletionistSeconds: 10_800
       })
     ]);
+  });
+
+  it("streams HowLongToBeat refresh progress for the admin page", async () => {
+    stubHowLongToBeatFetch();
+    await seedGame(db.pool, 1, "Readable Game");
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/admin/update-howlongtobeat/stream",
+      headers: adminHeaders(),
+      payload: {}
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["content-type"]).toContain("application/x-ndjson");
+    const events = response.body
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as { type: string; status?: string; total?: number; processed?: number; updated?: number });
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "progress", status: "starting", total: 1, processed: 0 }),
+        expect.objectContaining({ type: "progress", status: "updated", total: 1, processed: 1, updated: 1 }),
+        expect.objectContaining({ type: "complete", total: 1, updated: 1 })
+      ])
+    );
   });
 
   it("returns C#-style validation errors for invalid game creation", async () => {
@@ -650,6 +651,35 @@ function adminHeaders() {
   return {
     "x-api-key": adminApiKey
   };
+}
+
+function stubHowLongToBeatFetch(): void {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: string | URL | Request) => {
+      if (String(input).includes("/api/bleed/init")) {
+        return new Response(JSON.stringify({ token: "auth-token", hpKey: "ign_test", hpVal: "hidden-value" }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        });
+      }
+      return new Response(
+        JSON.stringify({
+          data: [
+            {
+              game_id: 12345,
+              game_name: "Readable Game",
+              comp_main: 5400,
+              comp_plus: 7200,
+              comp_100: 10_800,
+              similarity: 1
+            }
+          ]
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    })
+  );
 }
 
 function validGamePayload(title: string) {
