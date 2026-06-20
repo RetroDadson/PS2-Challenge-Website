@@ -362,6 +362,39 @@ th { color: var(--heading-accent); font-size: .82rem; text-transform: uppercase;
 }
 .table-sort-button:hover { color: var(--text); }
 .results-count { color: var(--muted); font-weight: 700; }
+.column-settings-help { margin: 0; }
+.column-settings-list {
+  display: grid;
+  gap: .45rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.column-settings-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+  min-height: 3rem;
+  padding: .4rem .55rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-3);
+}
+.column-settings-list li.column-drop-target { border-color: var(--accent); background: var(--surface-2); }
+.column-name { display: inline-flex; flex: 1; align-items: center; gap: .45rem; min-height: 2rem; }
+.column-name-pinned { padding-left: 1.55rem; font-weight: 800; }
+.column-drag-handle {
+  justify-content: flex-start;
+  padding: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: grab;
+}
+.column-drag-handle:active { cursor: grabbing; }
+.column-preferences-error { display: inline-flex; align-items: center; gap: .55rem; color: var(--danger); }
+.column-preferences-error button { min-height: 2rem; padding: .3rem .55rem; }
 .progress-toolbar input[type="text"], .progress-toolbar > input { min-width: min(24rem, 100%); flex: 1; }
 .alternate-title-hint {
   border-bottom: 1px dotted var(--accent);

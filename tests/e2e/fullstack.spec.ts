@@ -20,6 +20,16 @@ test("public pages load seeded data through Fastify and Postgres", async ({ page
   await expect(page.getByText("Excluded", { exact: true }).first()).toBeVisible();
   await expect(page).toHaveScreenshot("games-seeded.png", { animations: "disabled", fullPage: false, maxDiffPixelRatio: 0.08 });
 
+  await page.getByRole("button", { name: "Customise Columns" }).click();
+  const columnDialog = page.getByRole("dialog", { name: "Customise Game Columns" });
+  await columnDialog.getByLabel("Drag Status column").dragTo(columnDialog.getByLabel("Drag How Long To Beat Time column"));
+  await columnDialog.getByRole("button", { name: "Done" }).click();
+  await expect(page.locator(".games-table thead th").nth(0)).toHaveText("Cover");
+  await expect(page.locator(".games-table thead th").nth(1)).toContainText("Title");
+  await expect(page.locator(".games-table thead th").nth(2)).toHaveText("Status");
+  await page.reload();
+  await expect(page.locator(".games-table thead th").nth(2)).toHaveText("Status");
+
   await page.goto("/statistics");
   await expect(page.getByRole("heading", { name: "Challenge Statistics" })).toBeVisible();
   await expect(page.getByText("Challenge Collection Progress")).toBeVisible();
@@ -99,6 +109,18 @@ test("permissions protect admin screens and mutations for anonymous and non-admi
 
   await page.goto("/games");
   await expect(page.getByRole("button", { name: "Add New Game" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Customise Columns" }).click();
+  const columnDialog = page.getByRole("dialog", { name: "Customise Game Columns" });
+  await columnDialog.getByLabel("Drag Status column").dragTo(columnDialog.getByLabel("Drag How Long To Beat Time column"));
+  await columnDialog.getByRole("button", { name: "Done" }).click();
+  await expect.poll(async () => {
+    const response = await page.request.get("/api/user/preferences/game-table-columns");
+    const body = await response.json() as { preferences?: { order?: string[] } };
+    return body.preferences?.order?.slice(0, 3);
+  }).toEqual(["cover", "title", "status"]);
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+  await expect(page.locator(".games-table thead th").nth(2)).toHaveText("Status");
 
   await page.goto("/votes");
   await expect(page.getByRole("button", { name: "Add" })).toHaveCount(0);

@@ -12,7 +12,8 @@ const expectedMigrationRecords = [
   "002_record_typescript_baseline",
   "003_add_twitch_stream_vods",
   "004_add_howlongtobeat_games",
-  "005_add_howlongtobeat_sync_state"
+  "005_add_howlongtobeat_sync_state",
+  "006_add_user_game_table_preferences"
 ];
 
 describe("database migrations", () => {
@@ -55,6 +56,15 @@ describe("database migrations", () => {
         `
       );
       expect(apiKeyColumn.rows[0]).toEqual({ is_nullable: "NO", character_maximum_length: 64 });
+
+      const gameTablePreferencesColumn = await pool.query<{ data_type: string; is_nullable: string }>(
+        `
+        SELECT data_type, is_nullable
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'game_table_preferences'
+        `
+      );
+      expect(gameTablePreferencesColumn.rows[0]).toEqual({ data_type: "jsonb", is_nullable: "YES" });
 
       const imageUrlColumn = await pool.query<{ data_type: string; character_maximum_length: number }>(
         `

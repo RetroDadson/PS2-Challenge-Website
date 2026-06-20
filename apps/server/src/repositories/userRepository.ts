@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import type { AdminUserDto, RoleDto } from "@ps2-challenge/shared";
+import type { AdminUserDto, GameTablePreferencesDto, RoleDto } from "@ps2-challenge/shared";
 import { sql, type Kysely } from "kysely";
 import type { Database } from "../db/kysely.js";
 
@@ -92,7 +92,11 @@ export class UserRepository {
       .returning("id")
       .executeTakeFirstOrThrow();
 
-    return (await this.getById(inserted.id))!;
+    const user = await this.getById(inserted.id);
+    if (!user) {
+      throw new Error(`Created user with ID ${inserted.id} could not be loaded`);
+    }
+    return user;
   }
 
   async updateLastLogin(userId: number): Promise<void> {
@@ -115,6 +119,27 @@ export class UserRepository {
       throw new Error(`User with ID ${userId} not found`);
     }
     return rawApiKey;
+  }
+
+  async getGameTablePreferences(userId: number): Promise<GameTablePreferencesDto | null> {
+    const row = await this.db
+      .selectFrom("users")
+      .select("game_table_preferences")
+      .where("id", "=", userId)
+      .executeTakeFirst();
+    return row?.game_table_preferences ?? null;
+  }
+
+  async updateGameTablePreferences(userId: number, preferences: GameTablePreferencesDto): Promise<void> {
+    const updated = await this.db
+      .updateTable("users")
+      .set({ game_table_preferences: preferences })
+      .where("id", "=", userId)
+      .returning("id")
+      .executeTakeFirst();
+    if (!updated) {
+      throw new Error(`User with ID ${userId} not found`);
+    }
   }
 
   async getAllUsers(): Promise<AdminUserDto[]> {

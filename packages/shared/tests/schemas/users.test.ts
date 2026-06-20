@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { adminUserSchema, roleSchema, updateRoleRequestSchema, userProfileSchema } from "../../src/schemas/users.js";
+import {
+  adminUserSchema,
+  gameTablePreferencesSchema,
+  roleSchema,
+  updateRoleRequestSchema,
+  userProfileSchema
+} from "../../src/schemas/users.js";
 
 describe("user schemas", () => {
   it("accepts authenticated and anonymous profile payloads", () => {
@@ -43,5 +49,19 @@ describe("user schemas", () => {
         lastLoginAt: "2024-01-02T00:00:00.000Z"
       })
     ).toMatchObject({ id: 1, username: "Dadson", role: "Admin" });
+  });
+
+  it("validates ordered game table preferences", () => {
+    expect(
+      gameTablePreferencesSchema.parse({
+        order: ["cover", "title", "status", "developer"],
+        hidden: ["developer"]
+      })
+    ).toEqual({ order: ["cover", "title", "status", "developer"], hidden: ["developer"] });
+
+    expect(gameTablePreferencesSchema.safeParse({ order: ["title", "cover"], hidden: [] }).success).toBe(false);
+    expect(gameTablePreferencesSchema.safeParse({ order: ["cover", "title"], hidden: ["cover"] }).success).toBe(false);
+    expect(gameTablePreferencesSchema.safeParse({ order: ["cover", "title", "status", "status"], hidden: [] }).success).toBe(false);
+    expect(gameTablePreferencesSchema.safeParse({ order: ["cover", "title"], hidden: ["status"] }).success).toBe(false);
   });
 });

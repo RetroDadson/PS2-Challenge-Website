@@ -248,6 +248,44 @@ describe("auth, admin, and user API contract parity", () => {
       })
     );
   });
+
+  it("persists validated game table preferences for authenticated users", async () => {
+    const headers = { authorization: `Bearer ${userApiKey}` };
+    const preferences = {
+      order: ["cover", "title", "status", "developer", "publisher"],
+      hidden: ["publisher"]
+    };
+
+    const initial = await app.inject({ method: "GET", url: "/api/user/preferences/game-table-columns", headers });
+    expect(initial.statusCode).toBe(200);
+    expect(initial.json()).toEqual({ preferences: null });
+
+    const updated = await app.inject({
+      method: "PUT",
+      url: "/api/user/preferences/game-table-columns",
+      headers,
+      payload: preferences
+    });
+    expect(updated.statusCode).toBe(200);
+    expect(updated.json()).toEqual({ preferences });
+
+    const stored = await db.pool.query<{ game_table_preferences: unknown }>(
+      "SELECT game_table_preferences FROM users WHERE id = $1",
+      [normalUserId]
+    );
+    expect(stored.rows[0]?.game_table_preferences).toEqual(preferences);
+
+    const loaded = await app.inject({ method: "GET", url: "/api/user/preferences/game-table-columns", headers });
+    expect(loaded.json()).toEqual({ preferences });
+
+    const invalid = await app.inject({
+      method: "PUT",
+      url: "/api/user/preferences/game-table-columns",
+      headers,
+      payload: { order: ["title", "cover"], hidden: [] }
+    });
+    expect(invalid.statusCode).toBe(400);
+  });
 });
 
 function adminHeaders() {
