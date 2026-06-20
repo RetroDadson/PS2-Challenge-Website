@@ -1,3 +1,4 @@
+import { setTimeout as wait } from "node:timers/promises";
 import type { GameDto } from "@ps2-challenge/shared";
 import { normalizeTitle } from "@ps2-challenge/shared";
 import type { Kysely } from "kysely";
@@ -9,6 +10,10 @@ type FetchHowLongToBeat = (input: string, init?: RequestInit) => Promise<Respons
 const howLongToBeatOrigin = "https://howlongtobeat.com";
 const howLongToBeatSearchEndpoint = `${howLongToBeatOrigin}/api/bleed`;
 const abortedHowLongToBeatRefresh = Symbol("abortedHowLongToBeatRefresh");
+const haltedHowLongToBeatRefresh = Symbol("haltedHowLongToBeatRefresh");
+const howLongToBeatRefreshLockKey = 710_621_846;
+const defaultMatchedRefreshIntervalMs = 30 * 24 * 60 * 60 * 1000;
+const defaultNotFoundRetryIntervalMs = 30 * 24 * 60 * 60 * 1000;
 const howLongToBeatAuthHeaderNames = new Map<string, string>([
   ["token", "x-auth-token"],
   ["hpKey", "x-hp-key"],
@@ -32,11 +37,12 @@ export type HowLongToBeatGame = {
 };
 
 export type HowLongToBeatRefreshProgress = {
-  status: "starting" | "searching" | "updated" | "skipped" | "error" | "completed";
+  status: "starting" | "searching" | "updated" | "unchanged" | "notFound" | "error" | "completed";
   total: number;
   processed: number;
   updated: number;
-  skipped: number;
+  unchanged: number;
+  notFound: number;
   errors: number;
   currentGameId?: number;
   currentGameTitle?: string;
@@ -46,16 +52,33 @@ export type HowLongToBeatRefreshProgress = {
 export type HowLongToBeatRefreshResult = {
   total: number;
   updated: number;
-  skipped: number;
+  unchanged: number;
+  notFound: number;
   errors: number;
+};
+
+export type HowLongToBeatDueRefreshResult = HowLongToBeatRefreshResult & {
+  remainingDue: number;
+  halted: boolean;
+};
+
+export type HowLongToBeatRefreshOptions = {
+  requestDelayMs?: number;
+  useAdvisoryLock?: boolean;
+  matchedRefreshIntervalMs?: number;
+  notFoundRetryIntervalMs?: number;
 };
 
 export type HowLongToBeatRefreshProgressHandler = (progress: HowLongToBeatRefreshProgress) => void | Promise<void>;
 
 export class HowLongToBeatClient {
   private auth: HowLongToBeatAuth | null = null;
+  private nextRequestAt = 0;
 
-  constructor(private readonly fetchHowLongToBeat: FetchHowLongToBeat = globalThis.fetch.bind(globalThis)) {}
+  constructor(
+    private readonly fetchHowLongToBeat: FetchHowLongToBeat = globalThis.fetch.bind(globalThis),
+    private readonly requestDelayMs = 0
+  ) {}
 
   async search(title: string, signal?: AbortSignal): Promise<HowLongToBeatGame[]> {
     const payload = searchPayload(title);
@@ -73,7 +96,10 @@ export class HowLongToBeatClient {
       return [];
     }
     if (!response.ok) {
-      throw new Error(`HowLongToBeat search returned HTTP ${response.status}`);
+      throw new HowLongToBeatRequestError(
+        `HowLongToBeat search returned HTTP ${response.status}`,
+        response.status === 403 || response.status === 429 || response.status >= 500
+      );
     }
 
     return parseHowLongToBeatResults(await response.json());
@@ -88,21 +114,21 @@ export class HowLongToBeatClient {
     if (signal) {
       init.signal = signal;
     }
-    const response = await this.fetchHowLongToBeat(`${howLongToBeatSearchEndpoint}/init?t=${Date.now()}`, init);
+    const response = await this.request(`${howLongToBeatSearchEndpoint}/init?t=${Date.now()}`, init, signal);
     if (!response.ok) {
-      throw new Error(`HowLongToBeat auth init returned HTTP ${response.status}`);
+      throw new HowLongToBeatRequestError(`HowLongToBeat auth init returned HTTP ${response.status}`, true);
     }
 
     const body: unknown = await response.json();
     if (!isRecord(body)) {
-      throw new Error("HowLongToBeat auth init returned an invalid payload");
+      throw new HowLongToBeatRequestError("HowLongToBeat auth init returned an invalid payload", true);
     }
 
     const token = stringField(body, ["token"]);
     const hpKey = stringField(body, ["hpKey"]);
     const hpVal = stringField(body, ["hpVal"]);
     if (!token || !hpKey || !hpVal) {
-      throw new Error("HowLongToBeat auth init did not include the expected token values");
+      throw new HowLongToBeatRequestError("HowLongToBeat auth init did not include the expected token values", true);
     }
 
     const headers: Record<string, string> = {};
@@ -126,7 +152,26 @@ export class HowLongToBeatClient {
     if (signal) {
       init.signal = signal;
     }
-    return this.fetchHowLongToBeat(howLongToBeatSearchEndpoint, init);
+    return this.request(howLongToBeatSearchEndpoint, init, signal);
+  }
+
+  private async request(input: string, init: RequestInit, signal?: AbortSignal): Promise<Response> {
+    const delayMs = Math.max(0, this.nextRequestAt - Date.now());
+    if (delayMs > 0) {
+      await wait(delayMs, undefined, { signal });
+    }
+    this.nextRequestAt = Date.now() + Math.max(0, this.requestDelayMs);
+    return this.fetchHowLongToBeat(input, init);
+  }
+}
+
+class HowLongToBeatRequestError extends Error {
+  constructor(
+    message: string,
+    readonly haltBatch: boolean
+  ) {
+    super(message);
+    this.name = "HowLongToBeatRequestError";
   }
 }
 
@@ -141,11 +186,23 @@ function isSupportedHeaderValue(value: unknown): value is string | number | bool
 export class HowLongToBeatRefreshService {
   private readonly repository: GameRepository;
   private readonly client: HowLongToBeatClient;
+  private readonly options: Required<HowLongToBeatRefreshOptions>;
 
-  constructor(pool: pg.Pool, fetchHowLongToBeat?: FetchHowLongToBeat, db?: Kysely<Database>) {
+  constructor(
+    private readonly pool: pg.Pool,
+    fetchHowLongToBeat?: FetchHowLongToBeat,
+    db?: Kysely<Database>,
+    options: HowLongToBeatRefreshOptions = {}
+  ) {
     const database = db ?? createKyselyFromPool(pool);
+    this.options = {
+      requestDelayMs: options.requestDelayMs ?? 0,
+      useAdvisoryLock: options.useAdvisoryLock ?? true,
+      matchedRefreshIntervalMs: options.matchedRefreshIntervalMs ?? defaultMatchedRefreshIntervalMs,
+      notFoundRetryIntervalMs: options.notFoundRetryIntervalMs ?? defaultNotFoundRetryIntervalMs
+    };
     this.repository = new GameRepository(database);
-    this.client = new HowLongToBeatClient(fetchHowLongToBeat);
+    this.client = new HowLongToBeatClient(fetchHowLongToBeat, this.options.requestDelayMs);
   }
 
   async refreshHowLongToBeatData(signal?: AbortSignal): Promise<number> {
@@ -156,18 +213,47 @@ export class HowLongToBeatRefreshService {
     signal?: AbortSignal,
     onProgress?: HowLongToBeatRefreshProgressHandler
   ): Promise<HowLongToBeatRefreshResult> {
-    const games = await this.repository.list();
+    return this.withRefreshLock(async () => {
+      await this.repository.ensureHowLongToBeatSyncStates();
+      const games = await this.repository.list();
+      return (await this.refreshGames(games, signal, onProgress)).result;
+    });
+  }
+
+  async refreshDueHowLongToBeatDataDetailed(
+    batchSize = 100,
+    signal?: AbortSignal,
+    onProgress?: HowLongToBeatRefreshProgressHandler
+  ): Promise<HowLongToBeatDueRefreshResult> {
+    return this.withRefreshLock(async () => {
+      const games = await this.repository.listDueHowLongToBeatGames(batchSize);
+      const refresh = await this.refreshGames(games, signal, onProgress);
+      return {
+        ...refresh.result,
+        remainingDue: await this.repository.countDueHowLongToBeatGames(),
+        halted: refresh.halted
+      };
+    });
+  }
+
+  private async refreshGames(
+    games: GameDto[],
+    signal?: AbortSignal,
+    onProgress?: HowLongToBeatRefreshProgressHandler
+  ): Promise<{ result: HowLongToBeatRefreshResult; halted: boolean }> {
     const alternateTitles = await this.alternateTitlesByGameId();
     const progress: HowLongToBeatRefreshProgress = {
       status: "starting",
       total: games.length,
       processed: 0,
       updated: 0,
-      skipped: 0,
+      unchanged: 0,
+      notFound: 0,
       errors: 0
     };
     await emitProgress(onProgress, progress);
 
+    let halted = false;
     for (const game of games) {
       if (signal?.aborted) {
         break;
@@ -178,15 +264,23 @@ export class HowLongToBeatRefreshService {
         break;
       }
       await emitProgress(onProgress, progress);
+      if (outcome === haltedHowLongToBeatRefresh) {
+        halted = true;
+        break;
+      }
     }
 
     this.markCompleted(progress);
     await emitProgress(onProgress, progress);
     return {
-      total: progress.total,
-      updated: progress.updated,
-      skipped: progress.skipped,
-      errors: progress.errors
+      result: {
+        total: progress.total,
+        updated: progress.updated,
+        unchanged: progress.unchanged,
+        notFound: progress.notFound,
+        errors: progress.errors
+      },
+      halted
     };
   }
 
@@ -216,33 +310,41 @@ export class HowLongToBeatRefreshService {
     alternateTitles: string[],
     progress: HowLongToBeatRefreshProgress,
     signal?: AbortSignal
-  ): Promise<"processed" | typeof abortedHowLongToBeatRefresh> {
+  ): Promise<"processed" | typeof abortedHowLongToBeatRefresh | typeof haltedHowLongToBeatRefresh> {
     try {
       const match = await this.findMatch(game.title, alternateTitles, signal);
       if (signal?.aborted) {
         return abortedHowLongToBeatRefresh;
       }
       if (!match) {
-        this.markSkipped(progress);
+        await this.repository.recordHowLongToBeatNotFound(game.id, this.nextSyncTiming(this.options.notFoundRetryIntervalMs));
+        this.markNotFound(progress);
         return "processed";
       }
-      const changed = await this.repository.upsertHowLongToBeatEntry({
-        gameId: game.id,
-        howLongToBeatId: match.id,
-        mainStorySeconds: match.mainStorySeconds,
-        mainExtraSeconds: match.mainExtraSeconds,
-        completionistSeconds: match.completionistSeconds
-      });
+      const changed = await this.repository.upsertHowLongToBeatEntry(
+        {
+          gameId: game.id,
+          howLongToBeatId: match.id,
+          mainStorySeconds: match.mainStorySeconds,
+          mainExtraSeconds: match.mainExtraSeconds,
+          completionistSeconds: match.completionistSeconds
+        },
+        this.nextSyncTiming(this.options.matchedRefreshIntervalMs)
+      );
       if (changed) {
         this.markUpdated(progress);
       } else {
-        this.markSkipped(progress);
+        this.markUnchanged(progress);
       }
     } catch (error) {
       if (signal?.aborted) {
         return abortedHowLongToBeatRefresh;
       }
+      await this.repository.recordHowLongToBeatError(game.id, errorMessage(error));
       this.markError(progress, error);
+      if (error instanceof HowLongToBeatRequestError && error.haltBatch) {
+        return haltedHowLongToBeatRefresh;
+      }
     }
     return "processed";
   }
@@ -265,10 +367,16 @@ export class HowLongToBeatRefreshService {
     progress.status = "updated";
   }
 
-  private markSkipped(progress: HowLongToBeatRefreshProgress): void {
+  private markUnchanged(progress: HowLongToBeatRefreshProgress): void {
     progress.processed++;
-    progress.skipped++;
-    progress.status = "skipped";
+    progress.unchanged++;
+    progress.status = "unchanged";
+  }
+
+  private markNotFound(progress: HowLongToBeatRefreshProgress): void {
+    progress.processed++;
+    progress.notFound++;
+    progress.status = "notFound";
   }
 
   private markError(progress: HowLongToBeatRefreshProgress, error: unknown): void {
@@ -284,6 +392,37 @@ export class HowLongToBeatRefreshService {
     delete progress.currentGameTitle;
     delete progress.error;
   }
+
+  private nextSyncTiming(intervalMs: number): { attemptedAt: Date; nextAttemptAt: Date } {
+    const attemptedAt = new Date();
+    return { attemptedAt, nextAttemptAt: new Date(attemptedAt.getTime() + intervalMs) };
+  }
+
+  private async withRefreshLock<T>(refresh: () => Promise<T>): Promise<T> {
+    if (!this.options.useAdvisoryLock) {
+      return refresh();
+    }
+
+    const connection = await this.pool.connect();
+    let acquired = false;
+    try {
+      const lock = await connection.query<{ acquired: boolean }>("SELECT pg_try_advisory_lock($1) AS acquired", [howLongToBeatRefreshLockKey]);
+      acquired = lock.rows[0]?.acquired === true;
+      if (!acquired) {
+        throw new Error("A HowLongToBeat refresh is already running");
+      }
+      return await refresh();
+    } finally {
+      if (acquired) {
+        await connection.query("SELECT pg_advisory_unlock($1)", [howLongToBeatRefreshLockKey]);
+      }
+      connection.release();
+    }
+  }
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 export function selectBestHowLongToBeatResult(title: string, results: HowLongToBeatGame[]): HowLongToBeatGame | null {

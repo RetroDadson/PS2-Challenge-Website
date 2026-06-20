@@ -1,6 +1,6 @@
 import type { GameDto } from "@ps2-challenge/shared";
 import { normalizeTitle } from "@ps2-challenge/shared";
-import type { Kysely } from "kysely";
+import { sql, type Kysely } from "kysely";
 import type { Database } from "../db/kysely.js";
 import { mapAlternateTitle, mapGame, sortGames, type AlternateTitleRow } from "../utils/dbRows.js";
 
@@ -11,6 +11,14 @@ export type HowLongToBeatGameEntry = {
   mainExtraSeconds: number | null;
   completionistSeconds: number | null;
 };
+
+export type HowLongToBeatSyncTiming = {
+  attemptedAt: Date;
+  nextAttemptAt: Date;
+};
+
+const initialHowLongToBeatRetryMs = 30 * 60 * 1000;
+const maximumHowLongToBeatRetryMs = 24 * 60 * 60 * 1000;
 
 export class GameRepository {
   constructor(private readonly db: Kysely<Database>) {}
@@ -89,47 +97,159 @@ export class GameRepository {
     }
   }
 
-  async upsertHowLongToBeatEntry(entry: HowLongToBeatGameEntry): Promise<boolean> {
-    const existing = await this.db
-      .selectFrom("game_howlongtobeat")
-      .select(["howlongtobeat_id", "main_story_seconds", "main_extra_seconds", "completionist_seconds"])
-      .where("game_id", "=", entry.gameId)
-      .executeTakeFirst();
-
-    if (
-      existing?.howlongtobeat_id === entry.howLongToBeatId &&
-      existing.main_story_seconds === entry.mainStorySeconds &&
-      existing.main_extra_seconds === entry.mainExtraSeconds &&
-      existing.completionist_seconds === entry.completionistSeconds
-    ) {
-      await this.db
-        .updateTable("game_howlongtobeat")
-        .set({ last_synced_at: new Date() })
+  async upsertHowLongToBeatEntry(entry: HowLongToBeatGameEntry, timing: HowLongToBeatSyncTiming): Promise<boolean> {
+    return this.db.transaction().execute(async (transaction) => {
+      const existing = await transaction
+        .selectFrom("game_howlongtobeat")
+        .select(["howlongtobeat_id", "main_story_seconds", "main_extra_seconds", "completionist_seconds"])
         .where("game_id", "=", entry.gameId)
-        .execute();
-      return false;
-    }
+        .executeTakeFirst();
+      const changed =
+        existing?.howlongtobeat_id !== entry.howLongToBeatId ||
+        existing.main_story_seconds !== entry.mainStorySeconds ||
+        existing.main_extra_seconds !== entry.mainExtraSeconds ||
+        existing.completionist_seconds !== entry.completionistSeconds;
 
-    await this.db
-      .insertInto("game_howlongtobeat")
-      .values({
-        game_id: entry.gameId,
-        howlongtobeat_id: entry.howLongToBeatId,
-        main_story_seconds: entry.mainStorySeconds,
-        main_extra_seconds: entry.mainExtraSeconds,
-        completionist_seconds: entry.completionistSeconds
-      })
-      .onConflict((oc) =>
-        oc.column("game_id").doUpdateSet({
+      await transaction
+        .insertInto("game_howlongtobeat")
+        .values({
+          game_id: entry.gameId,
           howlongtobeat_id: entry.howLongToBeatId,
           main_story_seconds: entry.mainStorySeconds,
           main_extra_seconds: entry.mainExtraSeconds,
           completionist_seconds: entry.completionistSeconds,
-          last_synced_at: new Date()
+          last_synced_at: timing.attemptedAt
+        })
+        .onConflict((oc) =>
+          oc.column("game_id").doUpdateSet({
+            howlongtobeat_id: entry.howLongToBeatId,
+            main_story_seconds: entry.mainStorySeconds,
+            main_extra_seconds: entry.mainExtraSeconds,
+            completionist_seconds: entry.completionistSeconds,
+            last_synced_at: timing.attemptedAt
+          })
+        )
+        .execute();
+
+      await transaction
+        .insertInto("game_howlongtobeat_sync_state")
+        .values({
+          game_id: entry.gameId,
+          status: "matched",
+          last_attempted_at: timing.attemptedAt,
+          last_successful_at: timing.attemptedAt,
+          next_attempt_at: timing.nextAttemptAt,
+          failure_count: 0,
+          last_error: null
+        })
+        .onConflict((oc) =>
+          oc.column("game_id").doUpdateSet({
+            status: "matched",
+            last_attempted_at: timing.attemptedAt,
+            last_successful_at: timing.attemptedAt,
+            next_attempt_at: timing.nextAttemptAt,
+            failure_count: 0,
+            last_error: null
+          })
+        )
+        .execute();
+      return changed;
+    });
+  }
+
+  async ensureHowLongToBeatSyncStates(now = new Date()): Promise<void> {
+    await sql`
+      INSERT INTO game_howlongtobeat_sync_state (game_id, status, next_attempt_at, failure_count)
+      SELECT game_id, 'pending', ${now}, 0
+      FROM games
+      ON CONFLICT (game_id) DO NOTHING
+    `.execute(this.db);
+  }
+
+  async listDueHowLongToBeatGames(limit: number, dueAt = new Date()): Promise<GameDto[]> {
+    await this.ensureHowLongToBeatSyncStates(dueAt);
+    const dueRows = await this.db
+      .selectFrom("game_howlongtobeat_sync_state")
+      .select("game_id")
+      .where("next_attempt_at", "<=", dueAt)
+      .orderBy(sql`CASE status WHEN 'pending' THEN 0 WHEN 'error' THEN 1 WHEN 'not_found' THEN 2 ELSE 3 END`)
+      .orderBy("next_attempt_at")
+      .orderBy("game_id")
+      .limit(Math.max(1, limit))
+      .execute();
+    if (dueRows.length === 0) {
+      return [];
+    }
+
+    const ids = dueRows.map((row) => row.game_id);
+    const games = (await this.gameListQuery().where("g.game_id", "in", ids).execute()).map(mapGame);
+    const gamesById = new Map(games.map((game) => [game.id, game]));
+    return ids.flatMap((id) => {
+      const game = gamesById.get(id);
+      return game ? [game] : [];
+    });
+  }
+
+  async countDueHowLongToBeatGames(dueAt = new Date()): Promise<number> {
+    const row = await this.db
+      .selectFrom("game_howlongtobeat_sync_state")
+      .select((eb) => eb.fn.count<number>("game_id").as("count"))
+      .where("next_attempt_at", "<=", dueAt)
+      .executeTakeFirstOrThrow();
+    return Number(row.count);
+  }
+
+  async recordHowLongToBeatNotFound(gameId: number, timing: HowLongToBeatSyncTiming): Promise<void> {
+    await this.db
+      .insertInto("game_howlongtobeat_sync_state")
+      .values({
+        game_id: gameId,
+        status: "not_found",
+        last_attempted_at: timing.attemptedAt,
+        last_successful_at: null,
+        next_attempt_at: timing.nextAttemptAt,
+        failure_count: 0,
+        last_error: null
+      })
+      .onConflict((oc) =>
+        oc.column("game_id").doUpdateSet({
+          status: "not_found",
+          last_attempted_at: timing.attemptedAt,
+          next_attempt_at: timing.nextAttemptAt,
+          failure_count: 0,
+          last_error: null
         })
       )
       .execute();
-    return true;
+  }
+
+  async recordHowLongToBeatError(gameId: number, error: string, attemptedAt = new Date()): Promise<void> {
+    await this.db.transaction().execute(async (transaction) => {
+      await transaction
+        .insertInto("game_howlongtobeat_sync_state")
+        .values({ game_id: gameId, status: "pending", next_attempt_at: attemptedAt, failure_count: 0 })
+        .onConflict((oc) => oc.column("game_id").doNothing())
+        .execute();
+      const current = await transaction
+        .selectFrom("game_howlongtobeat_sync_state")
+        .select("failure_count")
+        .where("game_id", "=", gameId)
+        .executeTakeFirstOrThrow();
+      const failureCount = current.failure_count + 1;
+      const retryMs = Math.min(maximumHowLongToBeatRetryMs, initialHowLongToBeatRetryMs * 2 ** (failureCount - 1));
+
+      await transaction
+        .updateTable("game_howlongtobeat_sync_state")
+        .set({
+          status: "error",
+          last_attempted_at: attemptedAt,
+          next_attempt_at: new Date(attemptedAt.getTime() + retryMs),
+          failure_count: failureCount,
+          last_error: error.slice(0, 2000)
+        })
+        .where("game_id", "=", gameId)
+        .execute();
+    });
   }
 
   async delete(id: number): Promise<boolean> {

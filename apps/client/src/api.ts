@@ -37,12 +37,13 @@ export type HowLongToBeatRefreshResult = {
   message?: string;
   total: number;
   updated: number;
-  skipped: number;
+  unchanged: number;
+  notFound: number;
   errors: number;
 };
 
 export type HowLongToBeatRefreshProgress = HowLongToBeatRefreshResult & {
-  status: "starting" | "searching" | "updated" | "skipped" | "error" | "completed";
+  status: "starting" | "searching" | "updated" | "unchanged" | "notFound" | "error" | "completed";
   processed: number;
   currentGameId?: number;
   currentGameTitle?: string;

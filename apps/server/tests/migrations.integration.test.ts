@@ -1,14 +1,18 @@
 import { PostgreSqlContainer } from "@testcontainers/postgresql";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { sql } from "kysely";
 import pg from "pg";
+import { createKyselyFromPool } from "../src/db/kysely.js";
 import { migrateDatabase } from "../src/db/migrate.js";
+import { up as addHowLongToBeatSyncState } from "../src/db/migrations/005_add_howlongtobeat_sync_state.js";
 
 const { Pool } = pg;
 const expectedMigrationRecords = [
   "001_csharp_v13_schema",
   "002_record_typescript_baseline",
   "003_add_twitch_stream_vods",
-  "004_add_howlongtobeat_games"
+  "004_add_howlongtobeat_games",
+  "005_add_howlongtobeat_sync_state"
 ];
 
 describe("database migrations", () => {
@@ -41,6 +45,7 @@ describe("database migrations", () => {
       expect(tables.rows.map((row) => row.table_name)).toContain("ts_migration_baseline");
       expect(tables.rows.map((row) => row.table_name)).toContain("twitch_stream_vods");
       expect(tables.rows.map((row) => row.table_name)).toContain("game_howlongtobeat");
+      expect(tables.rows.map((row) => row.table_name)).toContain("game_howlongtobeat_sync_state");
 
       const apiKeyColumn = await pool.query<{ is_nullable: string; character_maximum_length: number }>(
         `
@@ -77,6 +82,24 @@ describe("database migrations", () => {
         { column_name: "last_synced_at", data_type: "timestamp without time zone", is_nullable: "NO" }
       ]);
 
+      const syncStateColumns = await pool.query<{ column_name: string; data_type: string; is_nullable: string }>(
+        `
+        SELECT column_name, data_type, is_nullable
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'game_howlongtobeat_sync_state'
+        ORDER BY ordinal_position
+        `
+      );
+      expect(syncStateColumns.rows).toEqual([
+        { column_name: "game_id", data_type: "integer", is_nullable: "NO" },
+        { column_name: "status", data_type: "character varying", is_nullable: "NO" },
+        { column_name: "last_attempted_at", data_type: "timestamp without time zone", is_nullable: "YES" },
+        { column_name: "last_successful_at", data_type: "timestamp without time zone", is_nullable: "YES" },
+        { column_name: "next_attempt_at", data_type: "timestamp without time zone", is_nullable: "NO" },
+        { column_name: "failure_count", data_type: "integer", is_nullable: "NO" },
+        { column_name: "last_error", data_type: "text", is_nullable: "YES" }
+      ]);
+
       const constraints = await pool.query<{ conname: string }>(
         "SELECT conname FROM pg_constraint WHERE conname IN ('chk_current_vote_game_number', 'chk_vote_history_position')"
       );
@@ -86,6 +109,29 @@ describe("database migrations", () => {
       expect(migrationRecords.rows.map((row) => row.name)).toEqual(expectedMigrationRecords);
     } finally {
       await pool.end();
+    }
+  });
+
+  it("seeds every existing game as pending without contacting HowLongToBeat", async () => {
+    const pool = new Pool({ connectionString });
+    const db = createKyselyFromPool(pool);
+    try {
+      await sql`CREATE TABLE games (game_id integer PRIMARY KEY, title varchar(150) NOT NULL)`.execute(db);
+      await sql`INSERT INTO games (game_id, title) VALUES (1, 'First Game'), (2, 'Second Game')`.execute(db);
+
+      await addHowLongToBeatSyncState(db);
+
+      const states = await db
+        .selectFrom("game_howlongtobeat_sync_state")
+        .select(["game_id", "status", "failure_count"])
+        .orderBy("game_id")
+        .execute();
+      expect(states).toEqual([
+        { game_id: 1, status: "pending", failure_count: 0 },
+        { game_id: 2, status: "pending", failure_count: 0 }
+      ]);
+    } finally {
+      await db.destroy();
     }
   });
 

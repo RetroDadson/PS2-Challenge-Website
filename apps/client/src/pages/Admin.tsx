@@ -47,12 +47,12 @@ export function Admin() {
   const refreshHowLongToBeat = async () => {
     setHowLongToBeatUpdating(true);
     setHowLongToBeatStatus(null);
-    setHowLongToBeatProgress({ status: "starting", total: 0, processed: 0, updated: 0, skipped: 0, errors: 0 });
+    setHowLongToBeatProgress({ status: "starting", total: 0, processed: 0, updated: 0, unchanged: 0, notFound: 0, errors: 0 });
     try {
       const result = await api.refreshHowLongToBeatWithProgress(setHowLongToBeatProgress);
       setHowLongToBeatStatus({
         kind: result.errors > 0 ? "error" : "success",
-        message: `Update completed. Updated: ${result.updated}, Skipped: ${result.skipped}, Errors: ${result.errors}`
+        message: `Update completed. Updated: ${result.updated}, Unchanged: ${result.unchanged}, Not found: ${result.notFound}, Errors: ${result.errors}`
       });
     } catch (error) {
       setHowLongToBeatStatus({
@@ -172,7 +172,9 @@ type RefreshProgressShape = {
   total: number;
   processed: number;
   updated: number;
-  skipped: number;
+  skipped?: number;
+  unchanged?: number;
+  notFound?: number;
   errors: number;
   status: string;
   currentGameTitle?: string;
@@ -200,7 +202,8 @@ function RefreshProgress({
       <progress className="cover-progress-track" max={total || 1} value={processed} aria-label={ariaLabel} />
       <div className="cover-progress-counts">
         <span>Updated {progress?.updated ?? 0}</span>
-        <span>Skipped {progress?.skipped ?? 0}</span>
+        {progress?.unchanged === undefined ? <span>Skipped {progress?.skipped ?? 0}</span> : <span>Unchanged {progress.unchanged}</span>}
+        {progress?.notFound === undefined ? null : <span>Not found {progress.notFound}</span>}
         <span>Errors {progress?.errors ?? 0}</span>
       </div>
     </div>

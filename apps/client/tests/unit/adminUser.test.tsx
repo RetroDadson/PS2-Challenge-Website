@@ -56,10 +56,30 @@ describe("Admin page", () => {
         { type: "complete", message: "Cover image update completed", total: 2, updated: 1, skipped: 1, errors: 0 }
       ]),
       "POST /api/admin/update-howlongtobeat/stream": streamResponse([
-        { type: "progress", status: "starting", total: 2, processed: 0, updated: 0, skipped: 0, errors: 0 },
-        { type: "progress", status: "updated", total: 2, processed: 1, updated: 1, skipped: 0, errors: 0, currentGameTitle: "Game One" },
-        { type: "progress", status: "updated", total: 2, processed: 2, updated: 2, skipped: 0, errors: 0, currentGameTitle: "Game Two" },
-        { type: "complete", message: "HowLongToBeat update completed", total: 2, updated: 2, skipped: 0, errors: 0 }
+        { type: "progress", status: "starting", total: 2, processed: 0, updated: 0, unchanged: 0, notFound: 0, errors: 0 },
+        {
+          type: "progress",
+          status: "updated",
+          total: 2,
+          processed: 1,
+          updated: 1,
+          unchanged: 0,
+          notFound: 0,
+          errors: 0,
+          currentGameTitle: "Game One"
+        },
+        {
+          type: "progress",
+          status: "updated",
+          total: 2,
+          processed: 2,
+          updated: 2,
+          unchanged: 0,
+          notFound: 0,
+          errors: 0,
+          currentGameTitle: "Game Two"
+        },
+        { type: "complete", message: "HowLongToBeat update completed", total: 2, updated: 2, unchanged: 0, notFound: 0, errors: 0 }
       ]),
       "PUT /api/admin/users/2/role": { id: 2, username: "NormalUser", role: "Admin", message: "User role updated to Admin" }
     });
@@ -80,7 +100,7 @@ describe("Admin page", () => {
     expect(screen.getByLabelText("Cover refresh progress")).toHaveAttribute("max", "2");
 
     fireEvent.click(screen.getByRole("button", { name: /Update Times Now/i }));
-    expect(await screen.findByText("Update completed. Updated: 2, Skipped: 0, Errors: 0")).toBeInTheDocument();
+    expect(await screen.findByText("Update completed. Updated: 2, Unchanged: 0, Not found: 0, Errors: 0")).toBeInTheDocument();
     expect(screen.getByLabelText("HowLongToBeat refresh progress")).toHaveAttribute("value", "2");
     expect(screen.getByLabelText("HowLongToBeat refresh progress")).toHaveAttribute("max", "2");
 

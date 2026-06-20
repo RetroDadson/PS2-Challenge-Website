@@ -506,7 +506,7 @@ export async function registerGamesRoutes(
     const user = await requireAdminOrStop(request, reply);
     if (!user) return;
     auditInfo(request.log, user, `AUDIT: Admin ${user.username} started HowLongToBeat refresh`);
-    const refresh = new HowLongToBeatRefreshService(gameService.getPool(), undefined, gameService.getDatabase());
+    const refresh = new HowLongToBeatRefreshService(gameService.getPool(), undefined, gameService.getDatabase(), { requestDelayMs: 1000 });
     const result = await refresh.refreshHowLongToBeatDataDetailed(undefined, (progress) =>
       logHowLongToBeatRefreshProgressError(request.log, user, progress)
     );
@@ -516,7 +516,8 @@ export async function registerGamesRoutes(
     auditInfo(request.log, user, `AUDIT: Admin ${user.username} completed HowLongToBeat refresh`, {
       checked: result.total,
       updated: result.updated,
-      skipped: result.skipped,
+      unchanged: result.unchanged,
+      notFound: result.notFound,
       errors: result.errors
     });
     return { message: "HowLongToBeat update completed", ...result };
@@ -530,7 +531,7 @@ export async function registerGamesRoutes(
     const stream = startNdjsonStream(request, reply);
 
     try {
-      const refresh = new HowLongToBeatRefreshService(gameService.getPool(), undefined, gameService.getDatabase());
+      const refresh = new HowLongToBeatRefreshService(gameService.getPool(), undefined, gameService.getDatabase(), { requestDelayMs: 1000 });
       const result = await refresh.refreshHowLongToBeatDataDetailed(stream.signal, (progress) => {
         logHowLongToBeatRefreshProgressError(request.log, user, progress);
         stream.writeEvent({ type: "progress", ...progress });
@@ -541,7 +542,8 @@ export async function registerGamesRoutes(
       auditInfo(request.log, user, `AUDIT: Admin ${user.username} completed streamed HowLongToBeat refresh`, {
         checked: result.total,
         updated: result.updated,
-        skipped: result.skipped,
+        unchanged: result.unchanged,
+        notFound: result.notFound,
         errors: result.errors
       });
       stream.writeEvent({ type: "complete", message: "HowLongToBeat update completed", ...result });
