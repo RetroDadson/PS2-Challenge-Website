@@ -553,12 +553,13 @@ const openApiSchemas = [
   {
     $id: "HowLongToBeatRefreshResult",
     type: "object",
-    required: ["message", "total", "updated", "skipped", "errors"],
+    required: ["message", "total", "updated", "unchanged", "notFound", "errors"],
     properties: {
       message: { type: "string" },
       total: { type: "integer" },
       updated: { type: "integer" },
-      skipped: { type: "integer" },
+      unchanged: { type: "integer" },
+      notFound: { type: "integer" },
       errors: { type: "integer" }
     }
   },

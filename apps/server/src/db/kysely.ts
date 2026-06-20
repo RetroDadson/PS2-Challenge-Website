@@ -4,6 +4,7 @@ import pg from "pg";
 const { Pool } = pg;
 
 type Timestamp = ColumnType<Date, Date | string | undefined, Date | string>;
+type NullableTimestamp = ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
 type DateOnly = ColumnType<string, string | Date, string | Date | null>;
 type Interval = ColumnType<unknown, unknown, unknown>;
 
@@ -43,6 +44,15 @@ export interface Database {
     main_extra_seconds: number | null;
     completionist_seconds: number | null;
     last_synced_at: Timestamp;
+  };
+  game_howlongtobeat_sync_state: {
+    game_id: number;
+    status: "pending" | "matched" | "not_found" | "error";
+    last_attempted_at: NullableTimestamp;
+    last_successful_at: NullableTimestamp;
+    next_attempt_at: Timestamp;
+    failure_count: number;
+    last_error: string | null;
   };
   game_serial_numbers: {
     serial_id: Generated<number>;

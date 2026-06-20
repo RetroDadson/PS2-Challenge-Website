@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { refreshCoverImagesAndBroadcast, scheduleCoverImageRefresh, scheduleTwitchStreamStatsSync } from "../src/server.js";
+import {
+  refreshCoverImagesAndBroadcast,
+  scheduleCoverImageRefresh,
+  scheduleHowLongToBeatRefresh,
+  scheduleTwitchStreamStatsSync
+} from "../src/server.js";
 import type { CoverImageRefreshProgress } from "../src/services/coverImageService.js";
 
 describe("cover image refresh scheduler", () => {
@@ -132,5 +137,87 @@ describe("cover image refresh scheduler", () => {
 
     scheduler.stop();
     expect(logger.info).toHaveBeenCalledWith("Twitch stream stats sync service is stopping");
+  });
+
+  it("drains HowLongToBeat backlog batches before switching to the maintenance interval", async () => {
+    vi.useFakeTimers();
+    const howLongToBeatRefresh = {
+      refreshDueHowLongToBeatDataDetailed: vi
+        .fn()
+        .mockResolvedValueOnce({
+          total: 2,
+          updated: 1,
+          unchanged: 0,
+          notFound: 1,
+          errors: 0,
+          remainingDue: 10,
+          halted: false
+        })
+        .mockResolvedValue({
+          total: 2,
+          updated: 0,
+          unchanged: 2,
+          notFound: 0,
+          errors: 0,
+          remainingDue: 0,
+          halted: false
+        })
+    };
+    const realtimeHub = { broadcastGamesUpdated: vi.fn() };
+
+    const scheduler = scheduleHowLongToBeatRefresh({
+      howLongToBeatRefresh,
+      realtimeHub,
+      initialDelayMs: 1,
+      backlogIntervalMs: 5,
+      intervalMs: 20,
+      batchSize: 2
+    });
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(howLongToBeatRefresh.refreshDueHowLongToBeatDataDetailed).toHaveBeenCalledWith(2);
+    expect(realtimeHub.broadcastGamesUpdated).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(5);
+    expect(howLongToBeatRefresh.refreshDueHowLongToBeatDataDetailed).toHaveBeenCalledTimes(2);
+
+    await vi.advanceTimersByTimeAsync(19);
+    expect(howLongToBeatRefresh.refreshDueHowLongToBeatDataDetailed).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(howLongToBeatRefresh.refreshDueHowLongToBeatDataDetailed).toHaveBeenCalledTimes(3);
+
+    scheduler.stop();
+  });
+
+  it("backs off scheduled HowLongToBeat work after a global failure", async () => {
+    vi.useFakeTimers();
+    const howLongToBeatRefresh = {
+      refreshDueHowLongToBeatDataDetailed: vi.fn().mockResolvedValue({
+        total: 1,
+        updated: 0,
+        unchanged: 0,
+        notFound: 0,
+        errors: 1,
+        remainingDue: 10,
+        halted: true
+      })
+    };
+
+    const scheduler = scheduleHowLongToBeatRefresh({
+      howLongToBeatRefresh,
+      realtimeHub: { broadcastGamesUpdated: vi.fn() },
+      initialDelayMs: 1,
+      backlogIntervalMs: 5,
+      intervalMs: 20,
+      haltedIntervalMs: 30
+    });
+
+    await vi.advanceTimersByTimeAsync(1);
+    await vi.advanceTimersByTimeAsync(29);
+    expect(howLongToBeatRefresh.refreshDueHowLongToBeatDataDetailed).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(howLongToBeatRefresh.refreshDueHowLongToBeatDataDetailed).toHaveBeenCalledTimes(2);
+
+    scheduler.stop();
   });
 });

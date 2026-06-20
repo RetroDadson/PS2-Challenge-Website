@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { GameRepository } from "../src/repositories/gameRepository.js";
 import {
   HowLongToBeatClient,
@@ -8,6 +8,10 @@ import {
 } from "../src/services/howLongToBeatService.js";
 
 describe("HowLongToBeat metadata", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("parses current HowLongToBeat API result rows into cached seconds", () => {
     expect(
       parseHowLongToBeatResults({
@@ -130,6 +134,25 @@ describe("HowLongToBeat metadata", () => {
     expect(JSON.parse(String(searchInit?.body))).toEqual(expect.objectContaining({ searchTerms: ["Rez"], ign_test: "hidden-value" }));
   });
 
+  it("paces consecutive HowLongToBeat requests", async () => {
+    vi.useFakeTimers();
+    const fetchHowLongToBeat = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ token: "auth-token", hpKey: "ign_test", hpVal: "hidden-value" }))
+      .mockResolvedValueOnce(jsonResponse({ games: [] }));
+
+    const search = new HowLongToBeatClient(fetchHowLongToBeat, 20).search("Rez");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchHowLongToBeat).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(19);
+    expect(fetchHowLongToBeat).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+
+    await expect(search).resolves.toEqual([]);
+    expect(fetchHowLongToBeat).toHaveBeenCalledTimes(2);
+  });
+
   it("reports auth initialization failures clearly", async () => {
     const fetchHowLongToBeat = vi.fn().mockResolvedValueOnce(new Response(null, { status: 404 }));
 
@@ -175,7 +198,8 @@ describe("HowLongToBeat metadata", () => {
     ).rejects.toThrow("HowLongToBeat auth init did not include the expected token values");
   });
 
-  it("refreshes matches, alternate titles, skipped games, and errors with progress", async () => {
+  it("refreshes matches, alternate titles, unchanged games, missing games, and errors with progress", async () => {
+    vi.spyOn(GameRepository.prototype, "ensureHowLongToBeatSyncStates").mockResolvedValue();
     vi.spyOn(GameRepository.prototype, "list").mockResolvedValue([
       gameDto(1, "Primary"),
       gameDto(2, "Unchanged"),
@@ -186,6 +210,8 @@ describe("HowLongToBeat metadata", () => {
       { alternate_title_id: 1, game_id: 1, title: "Alternate", notes: null }
     ]);
     const upsert = vi.spyOn(GameRepository.prototype, "upsertHowLongToBeatEntry").mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    const recordNotFound = vi.spyOn(GameRepository.prototype, "recordHowLongToBeatNotFound").mockResolvedValue();
+    const recordError = vi.spyOn(GameRepository.prototype, "recordHowLongToBeatError").mockResolvedValue();
     vi.spyOn(HowLongToBeatClient.prototype, "search")
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([game(11, "Alternate", 0.9)])
@@ -198,23 +224,29 @@ describe("HowLongToBeat metadata", () => {
       progress.push(`${event.status}:${event.processed}`);
     });
 
-    expect(result).toEqual({ total: 4, updated: 1, skipped: 2, errors: 1 });
+    expect(result).toEqual({ total: 4, updated: 1, unchanged: 1, notFound: 1, errors: 1 });
     expect(upsert).toHaveBeenCalledTimes(2);
-    expect(upsert).toHaveBeenNthCalledWith(1, {
-      gameId: 1,
-      howLongToBeatId: 11,
-      mainStorySeconds: 3600,
-      mainExtraSeconds: null,
-      completionistSeconds: null
-    });
+    expect(upsert).toHaveBeenNthCalledWith(
+      1,
+      {
+        gameId: 1,
+        howLongToBeatId: 11,
+        mainStorySeconds: 3600,
+        mainExtraSeconds: null,
+        completionistSeconds: null
+      },
+      { attemptedAt: expect.any(Date), nextAttemptAt: expect.any(Date) }
+    );
+    expect(recordNotFound).toHaveBeenCalledWith(3, { attemptedAt: expect.any(Date), nextAttemptAt: expect.any(Date) });
+    expect(recordError).toHaveBeenCalledWith(4, "request failed");
     expect(progress).toEqual([
       "starting:0",
       "searching:0",
       "updated:1",
       "searching:1",
-      "skipped:2",
+      "unchanged:2",
       "searching:2",
-      "skipped:3",
+      "notFound:3",
       "searching:3",
       "error:4",
       "completed:4"
@@ -222,6 +254,7 @@ describe("HowLongToBeat metadata", () => {
   });
 
   it("returns the updated count and stops cleanly when already aborted", async () => {
+    vi.spyOn(GameRepository.prototype, "ensureHowLongToBeatSyncStates").mockResolvedValue();
     vi.spyOn(GameRepository.prototype, "list").mockResolvedValue([gameDto(1, "Rez")]);
     vi.spyOn(GameRepository.prototype, "listAlternateTitles").mockResolvedValue([]);
     const search = vi.spyOn(HowLongToBeatClient.prototype, "search").mockResolvedValue([game(7, "Rez", 1)]);
@@ -233,10 +266,30 @@ describe("HowLongToBeat metadata", () => {
     await expect(refreshService().refreshHowLongToBeatDataDetailed(controller.signal)).resolves.toEqual({
       total: 1,
       updated: 0,
-      skipped: 0,
+      unchanged: 0,
+      notFound: 0,
       errors: 0
     });
     expect(search).toHaveBeenCalledTimes(1);
+  });
+
+  it("processes a due batch and reports the remaining backlog", async () => {
+    vi.spyOn(GameRepository.prototype, "listDueHowLongToBeatGames").mockResolvedValue([gameDto(1, "Rez")]);
+    vi.spyOn(GameRepository.prototype, "listAlternateTitles").mockResolvedValue([]);
+    vi.spyOn(GameRepository.prototype, "countDueHowLongToBeatGames").mockResolvedValue(42);
+    vi.spyOn(GameRepository.prototype, "upsertHowLongToBeatEntry").mockResolvedValue(true);
+    vi.spyOn(HowLongToBeatClient.prototype, "search").mockResolvedValue([game(7, "Rez", 1)]);
+
+    await expect(refreshService().refreshDueHowLongToBeatDataDetailed(25)).resolves.toEqual({
+      total: 1,
+      updated: 1,
+      unchanged: 0,
+      notFound: 0,
+      errors: 0,
+      remainingDue: 42,
+      halted: false
+    });
+    expect(GameRepository.prototype.listDueHowLongToBeatGames).toHaveBeenCalledWith(25);
   });
 });
 
@@ -267,7 +320,7 @@ function gameDto(id: number, title: string) {
 }
 
 function refreshService() {
-  return new HowLongToBeatRefreshService({} as never, undefined, {} as never);
+  return new HowLongToBeatRefreshService({} as never, undefined, {} as never, { useAdvisoryLock: false });
 }
 
 function jsonResponse(body: unknown) {

@@ -220,8 +220,8 @@ describe("client API requests", () => {
         controller.enqueue(
           encoder.encode(
             [
-              JSON.stringify({ type: "progress", status: "searching", processed: 1, total: 2, updated: 0, skipped: 0, errors: 0 }),
-              JSON.stringify({ type: "complete", total: 2, updated: 1, skipped: 1, errors: 0, message: "Done" }),
+              JSON.stringify({ type: "progress", status: "searching", processed: 1, total: 2, updated: 0, unchanged: 0, notFound: 0, errors: 0 }),
+              JSON.stringify({ type: "complete", total: 2, updated: 1, unchanged: 1, notFound: 0, errors: 0, message: "Done" }),
               ""
             ].join("\n")
           )
@@ -233,7 +233,9 @@ describe("client API requests", () => {
 
     const result = await api.refreshHowLongToBeatWithProgress((event) => progress.push(event));
 
-    expect(progress).toEqual([{ type: "progress", status: "searching", processed: 1, total: 2, updated: 0, skipped: 0, errors: 0 }]);
-    expect(result).toEqual({ type: "complete", total: 2, updated: 1, skipped: 1, errors: 0, message: "Done" });
+    expect(progress).toEqual([
+      { type: "progress", status: "searching", processed: 1, total: 2, updated: 0, unchanged: 0, notFound: 0, errors: 0 }
+    ]);
+    expect(result).toEqual({ type: "complete", total: 2, updated: 1, unchanged: 1, notFound: 0, errors: 0, message: "Done" });
   });
 });

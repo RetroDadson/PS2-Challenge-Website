@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createDbClient } from "../src/db/client.js";
 import { buildApp } from "../src/server.js";
+import { HowLongToBeatRefreshService } from "../src/services/howLongToBeatService.js";
 import { seedGame, seedUser, startIntegrationDatabase, type IntegrationDatabase } from "./helpers/postgres.js";
 
 const adminApiKey = "admin-api-key";
@@ -62,7 +63,14 @@ describe("games API contract parity", () => {
       payload: {}
     });
     expect(refresh.statusCode).toBe(200);
-    expect(refresh.json()).toEqual({ message: "HowLongToBeat update completed", total: 1, updated: 1, skipped: 0, errors: 0 });
+    expect(refresh.json()).toEqual({
+      message: "HowLongToBeat update completed",
+      total: 1,
+      updated: 1,
+      unchanged: 0,
+      notFound: 0,
+      errors: 0
+    });
 
     const cached = await db.pool.query<{
       game_id: number;
@@ -80,6 +88,11 @@ describe("games API contract parity", () => {
         completionist_seconds: 10_800
       }
     ]);
+
+    const syncState = await db.pool.query<{ status: string; failure_count: number; last_error: string | null }>(
+      "SELECT status, failure_count, last_error FROM game_howlongtobeat_sync_state WHERE game_id = 1"
+    );
+    expect(syncState.rows).toEqual([{ status: "matched", failure_count: 0, last_error: null }]);
 
     const read = await app.inject({ method: "GET", url: "/api/games" });
     expect(read.json()).toEqual([
@@ -118,6 +131,97 @@ describe("games API contract parity", () => {
         expect.objectContaining({ type: "complete", total: 1, updated: 1 })
       ])
     );
+  });
+
+  it("backfills an empty HowLongToBeat table in bounded, restart-safe batches", async () => {
+    stubHowLongToBeatFetch();
+    await seedGame(db.pool, 1, "Readable Game");
+    await seedGame(db.pool, 2, "Readable Game");
+    const refresh = new HowLongToBeatRefreshService(db.pool, globalThis.fetch.bind(globalThis));
+
+    const firstBatch = await refresh.refreshDueHowLongToBeatDataDetailed(1);
+
+    expect(firstBatch).toEqual({
+      total: 1,
+      updated: 1,
+      unchanged: 0,
+      notFound: 0,
+      errors: 0,
+      remainingDue: 1,
+      halted: false
+    });
+    const firstStates = await db.pool.query<{ game_id: number; status: string }>(
+      "SELECT game_id, status FROM game_howlongtobeat_sync_state ORDER BY game_id"
+    );
+    expect(firstStates.rows).toEqual([
+      { game_id: 1, status: "matched" },
+      { game_id: 2, status: "pending" }
+    ]);
+
+    const secondBatch = await refresh.refreshDueHowLongToBeatDataDetailed(1);
+
+    expect(secondBatch.remainingDue).toBe(0);
+    expect(secondBatch.updated).toBe(1);
+    const mappings = await db.pool.query<{ game_id: number }>("SELECT game_id FROM game_howlongtobeat ORDER BY game_id");
+    expect(mappings.rows).toEqual([{ game_id: 1 }, { game_id: 2 }]);
+  });
+
+  it("records missing HowLongToBeat matches for a later retry", async () => {
+    stubHowLongToBeatFetch([]);
+    await seedGame(db.pool, 1, "Missing Game");
+    const refresh = new HowLongToBeatRefreshService(db.pool, globalThis.fetch.bind(globalThis));
+
+    await expect(refresh.refreshDueHowLongToBeatDataDetailed(1)).resolves.toEqual({
+      total: 1,
+      updated: 0,
+      unchanged: 0,
+      notFound: 1,
+      errors: 0,
+      remainingDue: 0,
+      halted: false
+    });
+    const state = await db.pool.query<{ status: string; last_attempted_at: Date; next_attempt_at: Date }>(
+      "SELECT status, last_attempted_at, next_attempt_at FROM game_howlongtobeat_sync_state WHERE game_id = 1"
+    );
+    expect(state.rows[0]?.status).toBe("not_found");
+    expect(state.rows[0]!.next_attempt_at.getTime()).toBeGreaterThan(state.rows[0]!.last_attempted_at.getTime());
+  });
+
+  it("backs off and halts a batch after a global HowLongToBeat failure", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(jsonResponse({ token: "auth-token", hpKey: "ign_test", hpVal: "hidden-value" }))
+        .mockResolvedValueOnce(new Response(null, { status: 429 }))
+    );
+    await seedGame(db.pool, 1, "Rate Limited Game");
+    const refresh = new HowLongToBeatRefreshService(db.pool, globalThis.fetch.bind(globalThis));
+
+    const result = await refresh.refreshDueHowLongToBeatDataDetailed(1);
+
+    expect(result).toEqual({
+      total: 1,
+      updated: 0,
+      unchanged: 0,
+      notFound: 0,
+      errors: 1,
+      remainingDue: 0,
+      halted: true
+    });
+    const state = await db.pool.query<{
+      status: string;
+      failure_count: number;
+      last_error: string;
+      last_attempted_at: Date;
+      next_attempt_at: Date;
+    }>(
+      "SELECT status, failure_count, last_error, last_attempted_at, next_attempt_at FROM game_howlongtobeat_sync_state WHERE game_id = 1"
+    );
+    expect(state.rows[0]).toEqual(
+      expect.objectContaining({ status: "error", failure_count: 1, last_error: "HowLongToBeat search returned HTTP 429" })
+    );
+    expect(state.rows[0]!.next_attempt_at.getTime()).toBeGreaterThan(state.rows[0]!.last_attempted_at.getTime());
   });
 
   it("returns C#-style validation errors for invalid game creation", async () => {
@@ -653,7 +757,25 @@ function adminHeaders() {
   };
 }
 
-function stubHowLongToBeatFetch(): void {
+function stubHowLongToBeatFetch(
+  data: Array<{
+    game_id: number;
+    game_name: string;
+    comp_main: number;
+    comp_plus: number;
+    comp_100: number;
+    similarity: number;
+  }> = [
+    {
+      game_id: 12345,
+      game_name: "Readable Game",
+      comp_main: 5400,
+      comp_plus: 7200,
+      comp_100: 10_800,
+      similarity: 1
+    }
+  ]
+): void {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (input: string | URL | Request) => {
@@ -664,22 +786,15 @@ function stubHowLongToBeatFetch(): void {
         });
       }
       return new Response(
-        JSON.stringify({
-          data: [
-            {
-              game_id: 12345,
-              game_name: "Readable Game",
-              comp_main: 5400,
-              comp_plus: 7200,
-              comp_100: 10_800,
-              similarity: 1
-            }
-          ]
-        }),
+        JSON.stringify({ data }),
         { status: 200, headers: { "content-type": "application/json" } }
       );
     })
   );
+}
+
+function jsonResponse(body: unknown): Response {
+  return new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
 }
 
 function validGamePayload(title: string) {

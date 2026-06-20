@@ -26,6 +26,7 @@ import { registerUserRoutes } from "./routes/userRoutes.js";
 import { registerVotesRoutes } from "./routes/votesRoutes.js";
 import { CoverImageRefreshService, type CoverImageRefreshResult } from "./services/coverImageService.js";
 import { GameService } from "./services/gameService.js";
+import { HowLongToBeatRefreshService, type HowLongToBeatDueRefreshResult } from "./services/howLongToBeatService.js";
 import { TwitchStreamStatsService } from "./services/twitchStreamStatsService.js";
 import { VoteService } from "./services/voteService.js";
 
@@ -34,34 +35,46 @@ export type AppDependencies = {
   realtimeHub?: RealtimeHub;
 };
 
-type CoverRefreshLogger = Pick<FastifyBaseLogger, "error" | "info">;
+type SchedulerLogger = Pick<FastifyBaseLogger, "error" | "info">;
 
 type CoverRefreshJob = Pick<CoverImageRefreshService, "refreshCoverImages"> & Partial<Pick<CoverImageRefreshService, "refreshCoverImagesDetailed">>;
 type CoverRefreshSummary = Pick<CoverImageRefreshResult, "updated"> & Partial<Omit<CoverImageRefreshResult, "updated">>;
+type HowLongToBeatRefreshJob = Pick<HowLongToBeatRefreshService, "refreshDueHowLongToBeatDataDetailed">;
 type TwitchStreamStatsJob = Pick<TwitchStreamStatsService, "syncRecentStreams">;
 
 type CoverRefreshSchedulerOptions = {
   coverRefresh: CoverRefreshJob;
   realtimeHub: Pick<RealtimeHub, "broadcastGamesUpdated">;
-  logger?: CoverRefreshLogger;
+  logger?: SchedulerLogger;
   initialDelayMs?: number;
   intervalMs?: number;
 };
 
+type HowLongToBeatRefreshSchedulerOptions = {
+  howLongToBeatRefresh: HowLongToBeatRefreshJob;
+  realtimeHub: Pick<RealtimeHub, "broadcastGamesUpdated">;
+  logger?: SchedulerLogger;
+  initialDelayMs?: number;
+  backlogIntervalMs?: number;
+  intervalMs?: number;
+  haltedIntervalMs?: number;
+  batchSize?: number;
+};
+
 type TwitchStreamStatsSchedulerOptions = {
   twitchStats: TwitchStreamStatsJob;
-  logger?: CoverRefreshLogger;
+  logger?: SchedulerLogger;
   initialDelayMs?: number;
   intervalMs?: number;
 };
 
 type RecurringJobOptions = {
-  logger: CoverRefreshLogger | undefined;
+  logger: SchedulerLogger | undefined;
   initialDelayMs: number;
   intervalMs: number;
   startMessage: string;
   stopMessage: string;
-  run: () => Promise<void>;
+  run: () => Promise<number | void>;
   onError: (error: unknown) => void;
 };
 
@@ -162,16 +175,53 @@ export async function startApp(config: AppConfig): Promise<FastifyInstance> {
   const realtimeHub = new RealtimeHub();
   const app = await buildApp(config, { dbClient, realtimeHub });
   const coverRefresh = new CoverImageRefreshService(dbClient.pool, undefined, dbClient.db);
+  const howLongToBeatRefresh = new HowLongToBeatRefreshService(dbClient.pool, undefined, dbClient.db, { requestDelayMs: 1000 });
   const twitchStats = new TwitchStreamStatsService(config, new TwitchStreamRepository(dbClient.db));
   const coverRefreshScheduler = scheduleCoverImageRefresh({ coverRefresh, realtimeHub, logger: app.log });
+  const howLongToBeatRefreshScheduler = scheduleHowLongToBeatRefresh({ howLongToBeatRefresh, realtimeHub, logger: app.log });
   const twitchStatsScheduler = scheduleTwitchStreamStatsSync({ twitchStats, logger: app.log });
   app.addHook("onClose", async () => {
     coverRefreshScheduler.stop();
+    howLongToBeatRefreshScheduler.stop();
     twitchStatsScheduler.stop();
   });
 
   await app.listen({ port: config.port, host: "0.0.0.0" });
   return app;
+}
+
+export function scheduleHowLongToBeatRefresh({
+  howLongToBeatRefresh,
+  realtimeHub,
+  logger,
+  initialDelayMs = 5 * 60 * 1000,
+  backlogIntervalMs = 5 * 60 * 1000,
+  intervalMs = 6 * 60 * 60 * 1000,
+  haltedIntervalMs = 60 * 60 * 1000,
+  batchSize = 100
+}: HowLongToBeatRefreshSchedulerOptions): { stop: () => void } {
+  return scheduleRecurringJob({
+    logger,
+    initialDelayMs,
+    intervalMs,
+    startMessage: "HowLongToBeat refresh service is starting",
+    stopMessage: "HowLongToBeat refresh service is stopping",
+    run: async () => {
+      logger?.info({ batchSize }, "Starting scheduled HowLongToBeat refresh batch");
+      const result = await howLongToBeatRefresh.refreshDueHowLongToBeatDataDetailed(batchSize);
+      logHowLongToBeatRefreshResult(logger, result);
+      if (result.updated > 0) {
+        realtimeHub.broadcastGamesUpdated();
+      }
+      if (result.halted) {
+        return haltedIntervalMs;
+      }
+      return result.remainingDue > 0 ? backlogIntervalMs : intervalMs;
+    },
+    onError: (error) => {
+      logger?.error(error, "Scheduled HowLongToBeat refresh failed");
+    }
+  });
 }
 
 export async function refreshCoverImagesAndBroadcast(
@@ -266,13 +316,14 @@ function scheduleRecurringJob({
     if (stopped) {
       return;
     }
+    let nextDelayMs = intervalMs;
     try {
-      await run();
+      nextDelayMs = (await run()) ?? intervalMs;
     } catch (error) {
       onError(error);
     } finally {
       if (!stopped) {
-        scheduleNext(intervalMs);
+        scheduleNext(nextDelayMs);
       }
     }
   };
@@ -301,7 +352,7 @@ function scheduleRecurringJob({
 async function refreshCoverImagesWithSummary(
   coverRefresh: CoverRefreshJob,
   realtimeHub: Pick<RealtimeHub, "broadcastGamesUpdated">,
-  logger?: CoverRefreshLogger
+  logger?: SchedulerLogger
 ): Promise<CoverRefreshSummary> {
   if (coverRefresh.refreshCoverImagesDetailed) {
     let loggedTotal = false;
@@ -318,4 +369,19 @@ async function refreshCoverImagesWithSummary(
   }
 
   return { updated: await refreshCoverImagesAndBroadcast(coverRefresh, realtimeHub) };
+}
+
+function logHowLongToBeatRefreshResult(logger: SchedulerLogger | undefined, result: HowLongToBeatDueRefreshResult): void {
+  logger?.info(
+    {
+      total: result.total,
+      updated: result.updated,
+      unchanged: result.unchanged,
+      notFound: result.notFound,
+      errors: result.errors,
+      remainingDue: result.remainingDue,
+      halted: result.halted
+    },
+    "Scheduled HowLongToBeat refresh batch completed"
+  );
 }
