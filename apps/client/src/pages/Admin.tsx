@@ -1,6 +1,6 @@
-import { ExternalLink, Gamepad2, Image, RefreshCw, Shield, UserRound, Users } from "lucide-react";
+import { Clock, ExternalLink, Gamepad2, Image, RefreshCw, Shield, UserRound, Users } from "lucide-react";
 import { useState } from "react";
-import { api, type CoverRefreshProgress } from "../api.js";
+import { api, type CoverRefreshProgress, type HowLongToBeatRefreshProgress } from "../api.js";
 import { ErrorMessage, Loading } from "../components/Status.js";
 import { useAsync } from "../hooks.js";
 
@@ -10,6 +10,9 @@ export function Admin() {
   const [coverUpdating, setCoverUpdating] = useState(false);
   const [coverStatus, setCoverStatus] = useState<{ kind: "success" | "error"; message: string } | null>(null);
   const [coverProgress, setCoverProgress] = useState<CoverRefreshProgress | null>(null);
+  const [howLongToBeatUpdating, setHowLongToBeatUpdating] = useState(false);
+  const [howLongToBeatStatus, setHowLongToBeatStatus] = useState<{ kind: "success" | "error"; message: string } | null>(null);
+  const [howLongToBeatProgress, setHowLongToBeatProgress] = useState<HowLongToBeatRefreshProgress | null>(null);
   const [roleStatus, setRoleStatus] = useState<string | null>(null);
 
   if (users.loading || roles.loading) return <Loading />;
@@ -38,6 +41,26 @@ export function Admin() {
       setCoverStatus({ kind: "error", message: `Error updating covers: ${error instanceof Error ? error.message : String(error)}` });
     } finally {
       setCoverUpdating(false);
+    }
+  };
+
+  const refreshHowLongToBeat = async () => {
+    setHowLongToBeatUpdating(true);
+    setHowLongToBeatStatus(null);
+    setHowLongToBeatProgress({ status: "starting", total: 0, processed: 0, updated: 0, skipped: 0, errors: 0 });
+    try {
+      const result = await api.refreshHowLongToBeatWithProgress(setHowLongToBeatProgress);
+      setHowLongToBeatStatus({
+        kind: result.errors > 0 ? "error" : "success",
+        message: `Update completed. Updated: ${result.updated}, Skipped: ${result.skipped}, Errors: ${result.errors}`
+      });
+    } catch (error) {
+      setHowLongToBeatStatus({
+        kind: "error",
+        message: `Error updating HowLongToBeat times: ${error instanceof Error ? error.message : String(error)}`
+      });
+    } finally {
+      setHowLongToBeatUpdating(false);
     }
   };
 
@@ -81,8 +104,25 @@ export function Admin() {
             <RefreshCw className={coverUpdating ? "spin" : undefined} />{coverUpdating ? "Updating..." : "Update Cover Images Now"}
           </button>
         </header>
-        {coverUpdating || coverProgress ? <CoverProgress progress={coverProgress} /> : null}
+        {coverUpdating || coverProgress ? (
+          <RefreshProgress progress={coverProgress} ariaLabel="Cover refresh progress" currentPrefix="Checking" />
+        ) : null}
         {coverStatus ? <div className={`update-message ${coverStatus.kind}`}>{coverStatus.message}</div> : null}
+      </section>
+
+      <section className="panel maintenance-panel">
+        <header>
+          <div>
+            <h2><Clock />Update HowLongToBeat Times</h2>
+          </div>
+          <button onClick={refreshHowLongToBeat} disabled={howLongToBeatUpdating}>
+            <RefreshCw className={howLongToBeatUpdating ? "spin" : undefined} />{howLongToBeatUpdating ? "Updating..." : "Update Times Now"}
+          </button>
+        </header>
+        {howLongToBeatUpdating || howLongToBeatProgress ? (
+          <RefreshProgress progress={howLongToBeatProgress} ariaLabel="HowLongToBeat refresh progress" currentPrefix="Searching" />
+        ) : null}
+        {howLongToBeatStatus ? <div className={`update-message ${howLongToBeatStatus.kind}`}>{howLongToBeatStatus.message}</div> : null}
       </section>
 
       <section className="panel">
@@ -128,10 +168,28 @@ export function Admin() {
   );
 }
 
-function CoverProgress({ progress }: Readonly<{ progress: CoverRefreshProgress | null }>) {
+type RefreshProgressShape = {
+  total: number;
+  processed: number;
+  updated: number;
+  skipped: number;
+  errors: number;
+  status: string;
+  currentGameTitle?: string;
+};
+
+function RefreshProgress({
+  progress,
+  ariaLabel,
+  currentPrefix
+}: Readonly<{
+  progress: RefreshProgressShape | null;
+  ariaLabel: string;
+  currentPrefix: string;
+}>) {
   const total = progress?.total ?? 0;
   const processed = progress?.processed ?? 0;
-  const current = coverProgressMessage(progress);
+  const current = refreshProgressMessage(progress, currentPrefix);
 
   return (
     <div className="cover-refresh-progress" aria-live="polite">
@@ -139,7 +197,7 @@ function CoverProgress({ progress }: Readonly<{ progress: CoverRefreshProgress |
         <span>{current}</span>
         <strong>{total > 0 ? `${processed} / ${total}` : "Starting"}</strong>
       </div>
-      <progress className="cover-progress-track" max={total || 1} value={processed} aria-label="Cover refresh progress" />
+      <progress className="cover-progress-track" max={total || 1} value={processed} aria-label={ariaLabel} />
       <div className="cover-progress-counts">
         <span>Updated {progress?.updated ?? 0}</span>
         <span>Skipped {progress?.skipped ?? 0}</span>
@@ -159,9 +217,9 @@ function roleClass(role: string | null | undefined) {
   return "role-default";
 }
 
-function coverProgressMessage(progress: CoverRefreshProgress | null) {
+function refreshProgressMessage(progress: RefreshProgressShape | null, currentPrefix: string) {
   if (progress?.currentGameTitle) {
-    return `Checking ${progress.currentGameTitle}`;
+    return `${currentPrefix} ${progress.currentGameTitle}`;
   }
   if (progress?.status === "completed") {
     return "Complete";

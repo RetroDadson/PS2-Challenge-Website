@@ -8,7 +8,16 @@ import { Empty, ErrorMessage, Loading } from "../components/Status.js";
 import { formatDateOnly } from "../dateUtils.js";
 import { useAsync, useCurrentUser, useRealtime } from "../hooks.js";
 
-type SortColumn = "Title" | "Developer" | "Publisher" | "FirstReleased" | "RegionFirstReleasedIn" | "IsExcluded" | "IsOwned" | "CompletionStatus";
+type SortColumn =
+  | "Title"
+  | "HowLongToBeat"
+  | "Developer"
+  | "Publisher"
+  | "FirstReleased"
+  | "RegionFirstReleasedIn"
+  | "IsExcluded"
+  | "IsOwned"
+  | "CompletionStatus";
 
 export function Games() {
   const user = useCurrentUser();
@@ -126,6 +135,7 @@ export function Games() {
               {isAdmin ? <col className="col-games-actions" /> : null}
               <col className="col-games-cover" />
               <col className="col-games-title" />
+              <col className="col-games-hltb" />
               <col className="col-games-developer" />
               <col className="col-games-publisher" />
               <col className="col-games-release" />
@@ -139,6 +149,7 @@ export function Games() {
                 {isAdmin ? <th>Actions</th> : null}
                 <th>Cover</th>
                 <th><SortButton column="Title" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Title</SortButton></th>
+                <th><SortButton column="HowLongToBeat" current={sortColumn} ascending={sortAscending} onSort={sortBy}>How Long To Beat Time</SortButton></th>
                 <th><SortButton column="Developer" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Developer</SortButton></th>
                 <th><SortButton column="Publisher" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Publisher</SortButton></th>
                 <th><SortButton column="FirstReleased" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Release Date</SortButton></th>
@@ -156,6 +167,7 @@ export function Games() {
                     {isAdmin ? <td data-label="Actions"><button className="icon-button" onClick={() => setEditing(game)} aria-label={`Edit ${game.title}`}><Edit3 /></button></td> : null}
                     <td className="cover-cell" data-label="Cover"><CoverImage src={game.imageUrl} alt={`${game.title} cover`} /></td>
                     <td data-label="Title"><GameTitle game={game} alternateTitles={alternateTitles[String(game.id)] ?? []} /></td>
+                    <td data-label="How Long To Beat Time"><HowLongToBeatTime game={game} /></td>
                     <td data-label="Developer">{game.developer}</td>
                     <td data-label="Publisher">{game.publisher}</td>
                     <td data-label="Release Date">{formatDateOnly(game.firstReleased, "Unknown")}</td>
@@ -260,6 +272,25 @@ function GameTitle({ game, alternateTitles }: Readonly<{ game: GameDto; alternat
   );
 }
 
+function HowLongToBeatTime({ game }: Readonly<{ game: GameDto }>) {
+  const label = formatHowLongToBeatSeconds(game.howLongToBeatMainStorySeconds);
+  if (!game.howLongToBeatId) {
+    return <span className="muted-cell">{label}</span>;
+  }
+
+  return (
+    <a
+      className="hltb-link"
+      href={`https://howlongtobeat.com/game/${game.howLongToBeatId}`}
+      target="_blank"
+      rel="noreferrer"
+      title={howLongToBeatTitle(game)}
+    >
+      {label}
+    </a>
+  );
+}
+
 function gameMatchesSearch(game: GameDto, searchLower: string, alternateTitles: Record<string, Array<{ title: string }>>) {
   if ([game.title, game.developer, game.publisher].filter((value): value is string => !!value).some((value) => value.toLocaleLowerCase("en-GB").includes(searchLower))) {
     return true;
@@ -276,6 +307,8 @@ function compareGames(left: GameDto, right: GameDto, column: SortColumn, complet
   switch (column) {
     case "Developer":
       return compareNullable(left.developer, right.developer);
+    case "HowLongToBeat":
+      return compareNullableNumber(left.howLongToBeatMainStorySeconds, right.howLongToBeatMainStorySeconds);
     case "Publisher":
       return compareNullable(left.publisher, right.publisher);
     case "FirstReleased":
@@ -297,6 +330,21 @@ function compareNullable(left?: string | null, right?: string | null) {
   return (left ?? "").localeCompare(right ?? "", "en-GB");
 }
 
+function compareNullableNumber(left?: number | null, right?: number | null) {
+  const leftMissing = left === null || left === undefined;
+  const rightMissing = right === null || right === undefined;
+  if (leftMissing && rightMissing) {
+    return 0;
+  }
+  if (leftMissing) {
+    return 1;
+  }
+  if (rightMissing) {
+    return -1;
+  }
+  return left - right;
+}
+
 function getCompletionStatus(completionStatus: Record<string, string>, id: number) {
   return completionStatus[String(id)] ?? "Not Started";
 }
@@ -305,4 +353,32 @@ function statusClass(status: string) {
   if (status === "Completed") return "status-completed";
   if (status === "In Progress") return "status-inprogress";
   return "status-notstarted";
+}
+
+function formatHowLongToBeatSeconds(seconds?: number | null) {
+  if (!seconds || seconds <= 0) {
+    return "Unknown";
+  }
+
+  let hours = Math.floor(seconds / 3600);
+  let minutes = Math.round((seconds % 3600) / 60);
+  if (minutes === 60) {
+    hours++;
+    minutes = 0;
+  }
+  if (hours > 0 && minutes > 0) {
+    return `${hours}h ${minutes}m`;
+  }
+  if (hours > 0) {
+    return `${hours}h`;
+  }
+  return `${minutes}m`;
+}
+
+function howLongToBeatTitle(game: GameDto) {
+  return [
+    `HowLongToBeat Main Story: ${formatHowLongToBeatSeconds(game.howLongToBeatMainStorySeconds)}`,
+    `Main + Extra: ${formatHowLongToBeatSeconds(game.howLongToBeatMainExtraSeconds)}`,
+    `Completionist: ${formatHowLongToBeatSeconds(game.howLongToBeatCompletionistSeconds)}`
+  ].join("\n");
 }

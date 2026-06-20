@@ -18,6 +18,7 @@ import type { UserRepository } from "../repositories/userRepository.js";
 import type { RealtimeHub } from "../realtime/hub.js";
 import { CoverImageRefreshService } from "../services/coverImageService.js";
 import { GameService } from "../services/gameService.js";
+import { HowLongToBeatRefreshService, type HowLongToBeatRefreshProgress } from "../services/howLongToBeatService.js";
 import { auditError, auditInfo } from "../utils/audit.js";
 
 export async function registerGamesRoutes(
@@ -513,6 +514,80 @@ export async function registerGamesRoutes(
       reply.raw.end();
     }
   });
+
+  app.post("/api/admin/update-howlongtobeat", { schema: gameRouteSchemas.refreshHowLongToBeat }, async (request, reply) => {
+    const user = await requireAdminOrStop(request, reply);
+    if (!user) return;
+    auditInfo(request.log, user, `AUDIT: Admin ${user.username} started HowLongToBeat refresh`);
+    const refresh = new HowLongToBeatRefreshService(gameService.getPool(), undefined, gameService.getDatabase());
+    const result = await refresh.refreshHowLongToBeatDataDetailed(undefined, (progress) =>
+      logHowLongToBeatRefreshProgressError(request.log, user, progress)
+    );
+    if (result.updated > 0) {
+      realtimeHub.broadcastGamesUpdated();
+    }
+    auditInfo(request.log, user, `AUDIT: Admin ${user.username} completed HowLongToBeat refresh`, {
+      checked: result.total,
+      updated: result.updated,
+      skipped: result.skipped,
+      errors: result.errors
+    });
+    return { message: "HowLongToBeat update completed", ...result };
+  });
+
+  app.post("/api/admin/update-howlongtobeat/stream", { schema: gameRouteSchemas.refreshHowLongToBeatStream }, async (request, reply) => {
+    const user = await requireAdminOrStop(request, reply);
+    if (!user) return;
+    auditInfo(request.log, user, `AUDIT: Admin ${user.username} started streamed HowLongToBeat refresh`);
+
+    const controller = new AbortController();
+    request.raw.on("close", () => {
+      if (!reply.raw.writableEnded) {
+        controller.abort();
+      }
+    });
+
+    reply.hijack();
+    reply.raw.writeHead(200, {
+      "content-type": "application/x-ndjson; charset=utf-8",
+      "cache-control": "no-cache, no-transform",
+      connection: "keep-alive"
+    });
+
+    const writeEvent = (event: unknown) => {
+      if (!reply.raw.writableEnded) {
+        reply.raw.write(`${JSON.stringify(event)}\n`);
+      }
+    };
+
+    try {
+      const refresh = new HowLongToBeatRefreshService(gameService.getPool(), undefined, gameService.getDatabase());
+      const result = await refresh.refreshHowLongToBeatDataDetailed(controller.signal, (progress) => {
+        logHowLongToBeatRefreshProgressError(request.log, user, progress);
+        writeEvent({ type: "progress", ...progress });
+      });
+      if (result.updated > 0) {
+        realtimeHub.broadcastGamesUpdated();
+      }
+      auditInfo(request.log, user, `AUDIT: Admin ${user.username} completed streamed HowLongToBeat refresh`, {
+        checked: result.total,
+        updated: result.updated,
+        skipped: result.skipped,
+        errors: result.errors
+      });
+      writeEvent({ type: "complete", message: "HowLongToBeat update completed", ...result });
+    } catch (error) {
+      auditError(request.log, user, `AUDIT: Admin ${user.username} HowLongToBeat refresh failed`, {
+        error: errorMessage(error)
+      });
+      writeEvent({
+        type: "error",
+        message: error instanceof Error ? error.message : String(error)
+      });
+    } finally {
+      reply.raw.end();
+    }
+  });
 }
 
 function errorMessage(error: unknown): string {
@@ -521,6 +596,24 @@ function errorMessage(error: unknown): string {
 
 function validationMessages(error: { issues: Array<{ message: string }> }): string[] {
   return error.issues.map((issue) => issue.message);
+}
+
+function logHowLongToBeatRefreshProgressError(
+  logger: Parameters<typeof auditError>[0],
+  user: Parameters<typeof auditError>[1],
+  progress: HowLongToBeatRefreshProgress
+): void {
+  if (progress.status !== "error") {
+    return;
+  }
+
+  auditError(logger, user, `AUDIT: Admin ${user.username} HowLongToBeat refresh error`, {
+    gameId: progress.currentGameId,
+    gameTitle: progress.currentGameTitle,
+    error: progress.error ?? "Unknown HowLongToBeat refresh error",
+    processed: progress.processed,
+    total: progress.total
+  });
 }
 
 function serialNumberConflict(message: string, serialNumber: string) {

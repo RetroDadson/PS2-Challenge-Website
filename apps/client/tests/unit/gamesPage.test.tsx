@@ -27,6 +27,7 @@ describe("Games page", () => {
     render(<Games />);
 
     expect(await screen.findByText("Showing 2 of 3 games | Owned: 2 | Excluded: 1 | Completed: 1 | In Progress: 1 | Not Started: 0")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /How Long To Beat Time/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Add New Game/i })).not.toBeInTheDocument();
     const cover = screen.getByAltText("Game One cover");
     expect(cover).toHaveAttribute("src", "/covers/game-one.jpg");
@@ -36,6 +37,7 @@ describe("Games page", () => {
     expect(document.querySelector(".cover-hover-preview")).not.toBeInTheDocument();
     expect(screen.getByText("CIB")).toBeInTheDocument();
     expect(screen.getByText("Completed")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "1h 30m" })).toHaveAttribute("href", "https://howlongtobeat.com/game/12345");
     expect(screen.getByText("01/01/2001")).toBeInTheDocument();
     expect(screen.queryByText("Game Two")).not.toBeInTheDocument();
 
@@ -80,7 +82,11 @@ function gamesPageData() {
         regionFirstReleasedIn: "EU",
         imageUrl: "/covers/game-one.jpg",
         isExcluded: false,
-        isOwned: true
+        isOwned: true,
+        howLongToBeatId: 12345,
+        howLongToBeatMainStorySeconds: 5400,
+        howLongToBeatMainExtraSeconds: 7200,
+        howLongToBeatCompletionistSeconds: 10_800
       },
       {
         id: 2,

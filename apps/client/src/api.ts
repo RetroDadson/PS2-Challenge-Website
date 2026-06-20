@@ -33,6 +33,22 @@ export type CoverRefreshProgress = CoverRefreshResult & {
   error?: string;
 };
 
+export type HowLongToBeatRefreshResult = {
+  message?: string;
+  total: number;
+  updated: number;
+  skipped: number;
+  errors: number;
+};
+
+export type HowLongToBeatRefreshProgress = HowLongToBeatRefreshResult & {
+  status: "starting" | "searching" | "updated" | "skipped" | "error" | "completed";
+  processed: number;
+  currentGameId?: number;
+  currentGameTitle?: string;
+  error?: string;
+};
+
 export type TwitchStreamStatsDto = {
   channelLogin: string;
   rangeStart: string;
@@ -46,6 +62,11 @@ export type TwitchStreamStatsDto = {
 type CoverRefreshStreamEvent =
   | ({ type: "progress" } & CoverRefreshProgress)
   | ({ type: "complete" } & CoverRefreshResult)
+  | { type: "error"; message: string };
+
+type HowLongToBeatRefreshStreamEvent =
+  | ({ type: "progress" } & HowLongToBeatRefreshProgress)
+  | ({ type: "complete" } & HowLongToBeatRefreshResult)
   | { type: "error"; message: string };
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
@@ -126,7 +147,10 @@ export const api = {
   roles: () => request<RoleDto[]>("/api/admin/roles"),
   updateRole: (userId: number, roleId: number) => request(`/api/admin/users/${userId}/role`, { method: "PUT", body: JSON.stringify({ roleId }) }),
   refreshCovers: () => request<CoverRefreshResult>("/api/admin/update-cover-images", { method: "POST", body: "{}" }),
-  refreshCoversWithProgress: (onProgress: (progress: CoverRefreshProgress) => void) => refreshCoversWithProgress(onProgress)
+  refreshCoversWithProgress: (onProgress: (progress: CoverRefreshProgress) => void) => refreshCoversWithProgress(onProgress),
+  refreshHowLongToBeat: () => request<HowLongToBeatRefreshResult>("/api/admin/update-howlongtobeat", { method: "POST", body: "{}" }),
+  refreshHowLongToBeatWithProgress: (onProgress: (progress: HowLongToBeatRefreshProgress) => void) =>
+    refreshHowLongToBeatWithProgress(onProgress)
 };
 
 function gamesUrl(title?: string) {
@@ -180,6 +204,52 @@ async function refreshCoversWithProgress(onProgress: (progress: CoverRefreshProg
   return complete;
 }
 
+async function refreshHowLongToBeatWithProgress(
+  onProgress: (progress: HowLongToBeatRefreshProgress) => void
+): Promise<HowLongToBeatRefreshResult> {
+  const response = await fetch("/api/admin/update-howlongtobeat/stream", {
+    method: "POST",
+    credentials: "include",
+    headers: { "content-type": "application/json" },
+    body: "{}"
+  });
+
+  if (!response.ok) {
+    throw new Error(await errorDetail(response));
+  }
+
+  if (!response.body) {
+    const result = await api.refreshHowLongToBeat();
+    onProgress({ ...result, processed: result.total, status: "completed" });
+    return result;
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let complete: HowLongToBeatRefreshResult | null = null;
+
+  for (;;) {
+    const { value, done } = await reader.read();
+    buffer += decoder.decode(value, { stream: !done });
+    const lines = buffer.split(/\r?\n/);
+    buffer = lines.pop() ?? "";
+
+    for (const line of lines) {
+      complete = handleHowLongToBeatRefreshEvent(line, onProgress) ?? complete;
+    }
+
+    if (done) {
+      break;
+    }
+  }
+
+  if (!complete) {
+    throw new Error("HowLongToBeat update did not complete");
+  }
+  return complete;
+}
+
 function handleCoverRefreshEvent(
   line: string,
   onProgress: (progress: CoverRefreshProgress) => void
@@ -189,6 +259,25 @@ function handleCoverRefreshEvent(
   }
 
   const event = JSON.parse(line) as CoverRefreshStreamEvent;
+  if (event.type === "progress") {
+    onProgress(event);
+    return null;
+  }
+  if (event.type === "complete") {
+    return event;
+  }
+  throw new Error(event.message);
+}
+
+function handleHowLongToBeatRefreshEvent(
+  line: string,
+  onProgress: (progress: HowLongToBeatRefreshProgress) => void
+): HowLongToBeatRefreshResult | null {
+  if (!line.trim()) {
+    return null;
+  }
+
+  const event = JSON.parse(line) as HowLongToBeatRefreshStreamEvent;
   if (event.type === "progress") {
     onProgress(event);
     return null;

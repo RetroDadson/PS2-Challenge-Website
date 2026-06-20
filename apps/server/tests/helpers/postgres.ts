@@ -39,6 +39,7 @@ async function resetDatabase(pool: pg.Pool): Promise<void> {
       progress,
       excluded_games,
       game_owned,
+      game_howlongtobeat,
       game_serial_numbers,
       alternate_titles,
       games,

@@ -4,6 +4,14 @@ import type { Kysely } from "kysely";
 import type { Database } from "../db/kysely.js";
 import { mapAlternateTitle, mapGame, sortGames, type AlternateTitleRow } from "../utils/dbRows.js";
 
+export type HowLongToBeatGameEntry = {
+  gameId: number;
+  howLongToBeatId: number;
+  mainStorySeconds: number | null;
+  mainExtraSeconds: number | null;
+  completionistSeconds: number | null;
+};
+
 export class GameRepository {
   constructor(private readonly db: Kysely<Database>) {}
 
@@ -81,6 +89,49 @@ export class GameRepository {
     }
   }
 
+  async upsertHowLongToBeatEntry(entry: HowLongToBeatGameEntry): Promise<boolean> {
+    const existing = await this.db
+      .selectFrom("game_howlongtobeat")
+      .select(["howlongtobeat_id", "main_story_seconds", "main_extra_seconds", "completionist_seconds"])
+      .where("game_id", "=", entry.gameId)
+      .executeTakeFirst();
+
+    if (
+      existing?.howlongtobeat_id === entry.howLongToBeatId &&
+      existing.main_story_seconds === entry.mainStorySeconds &&
+      existing.main_extra_seconds === entry.mainExtraSeconds &&
+      existing.completionist_seconds === entry.completionistSeconds
+    ) {
+      await this.db
+        .updateTable("game_howlongtobeat")
+        .set({ last_synced_at: new Date() })
+        .where("game_id", "=", entry.gameId)
+        .execute();
+      return false;
+    }
+
+    await this.db
+      .insertInto("game_howlongtobeat")
+      .values({
+        game_id: entry.gameId,
+        howlongtobeat_id: entry.howLongToBeatId,
+        main_story_seconds: entry.mainStorySeconds,
+        main_extra_seconds: entry.mainExtraSeconds,
+        completionist_seconds: entry.completionistSeconds
+      })
+      .onConflict((oc) =>
+        oc.column("game_id").doUpdateSet({
+          howlongtobeat_id: entry.howLongToBeatId,
+          main_story_seconds: entry.mainStorySeconds,
+          main_extra_seconds: entry.mainExtraSeconds,
+          completionist_seconds: entry.completionistSeconds,
+          last_synced_at: new Date()
+        })
+      )
+      .execute();
+    return true;
+  }
+
   async delete(id: number): Promise<boolean> {
     const result = await this.db.deleteFrom("games").where("game_id", "=", id).executeTakeFirst();
     return (result.numDeletedRows ?? 0n) > 0n;
@@ -92,7 +143,7 @@ export class GameRepository {
       return null;
     }
 
-    const exact = await this.gameBasicQuery().where("title", "ilike", trimmed).limit(1).executeTakeFirst();
+    const exact = await this.gameBasicQuery().where("games.title", "ilike", trimmed).limit(1).executeTakeFirst();
     if (exact) {
       return mapGame(exact);
     }
@@ -294,6 +345,7 @@ export class GameRepository {
   private gameListQuery() {
     return this.db
       .selectFrom("games as g")
+      .leftJoin("game_howlongtobeat as hltb", "hltb.game_id", "g.game_id")
       .select((eb) => [
         "g.game_id as game_id",
         "g.title as title",
@@ -303,6 +355,10 @@ export class GameRepository {
         "g.region_first_released_in as region_first_released_in",
         "g.released_in_eu_or_na as released_in_eu_or_na",
         "g.image_url as image_url",
+        "hltb.howlongtobeat_id as howlongtobeat_id",
+        "hltb.main_story_seconds as howlongtobeat_main_story_seconds",
+        "hltb.main_extra_seconds as howlongtobeat_main_extra_seconds",
+        "hltb.completionist_seconds as howlongtobeat_completionist_seconds",
         eb
           .exists(eb.selectFrom("excluded_games as e").select("e.exclusion_id").whereRef("e.game_id", "=", "g.game_id"))
           .$castTo<boolean>()
@@ -317,15 +373,20 @@ export class GameRepository {
   private gameBasicQuery() {
     return this.db
       .selectFrom("games")
+      .leftJoin("game_howlongtobeat as hltb", "hltb.game_id", "games.game_id")
       .select([
-        "game_id",
-        "title",
-        "developer",
-        "publisher",
-        "first_released",
-        "region_first_released_in",
-        "released_in_eu_or_na",
-        "image_url"
+        "games.game_id as game_id",
+        "games.title as title",
+        "games.developer as developer",
+        "games.publisher as publisher",
+        "games.first_released as first_released",
+        "games.region_first_released_in as region_first_released_in",
+        "games.released_in_eu_or_na as released_in_eu_or_na",
+        "games.image_url as image_url",
+        "hltb.howlongtobeat_id as howlongtobeat_id",
+        "hltb.main_story_seconds as howlongtobeat_main_story_seconds",
+        "hltb.main_extra_seconds as howlongtobeat_main_extra_seconds",
+        "hltb.completionist_seconds as howlongtobeat_completionist_seconds"
       ]);
   }
 }

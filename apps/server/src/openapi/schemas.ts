@@ -166,7 +166,11 @@ const openApiSchemas = [
       releasedInEuPalOrNa: { type: "boolean" },
       imageUrl: stringNullable,
       isExcluded: { type: "boolean" },
-      isOwned: { type: "boolean" }
+      isOwned: { type: "boolean" },
+      howLongToBeatId: { type: "integer", nullable: true },
+      howLongToBeatMainStorySeconds: { type: "integer", nullable: true },
+      howLongToBeatMainExtraSeconds: { type: "integer", nullable: true },
+      howLongToBeatCompletionistSeconds: { type: "integer", nullable: true }
     }
   },
   {
@@ -547,6 +551,18 @@ const openApiSchemas = [
     }
   },
   {
+    $id: "HowLongToBeatRefreshResult",
+    type: "object",
+    required: ["message", "total", "updated", "skipped", "errors"],
+    properties: {
+      message: { type: "string" },
+      total: { type: "integer" },
+      updated: { type: "integer" },
+      skipped: { type: "integer" },
+      errors: { type: "integer" }
+    }
+  },
+  {
     $id: "TwitchStreamStats",
     type: "object",
     required: ["channelLogin", "rangeStart", "rangeEnd", "rangeWeeks", "totalStreamSeconds", "averageWeeklyStreamSeconds", "vodCount"],
@@ -768,6 +784,22 @@ export const gameRouteSchemas = {
     summary: "Stream game cover image refresh progress",
     description: "Returns newline-delimited JSON progress events for the admin cover refresh UI.",
     operationId: "streamGameCoverImageRefresh",
+    security: adminSecurity,
+    produces: ["application/x-ndjson"],
+    response: { 200: { type: "string", description: "NDJSON stream of progress, completion, or error events" }, ...unauthorizedForbidden }
+  }),
+  refreshHowLongToBeat: route({
+    tags: ["Admin"],
+    summary: "Refresh HowLongToBeat game times",
+    operationId: "refreshHowLongToBeatTimes",
+    security: adminSecurity,
+    response: { 200: ref("HowLongToBeatRefreshResult"), ...unauthorizedForbidden }
+  }),
+  refreshHowLongToBeatStream: route({
+    tags: ["Admin"],
+    summary: "Stream HowLongToBeat refresh progress",
+    description: "Returns newline-delimited JSON progress events for the admin HowLongToBeat refresh UI.",
+    operationId: "streamHowLongToBeatRefresh",
     security: adminSecurity,
     produces: ["application/x-ndjson"],
     response: { 200: { type: "string", description: "NDJSON stream of progress, completion, or error events" }, ...unauthorizedForbidden }
