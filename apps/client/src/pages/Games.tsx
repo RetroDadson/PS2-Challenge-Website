@@ -4,9 +4,15 @@ import type { AlternateTitle, GameDto } from "@ps2-challenge/shared";
 import { api } from "../api.js";
 import { CoverImage } from "../components/CoverImage.js";
 import { GameModal } from "../components/GameModal.js";
+import { GameTableColumnSettings } from "../components/GameTableColumnSettings.js";
 import { Empty, ErrorMessage, Loading } from "../components/Status.js";
 import { formatDateOnly } from "../dateUtils.js";
+import {
+  visibleGameTableColumns,
+  type GameTableColumn
+} from "../gameTablePreferences.js";
 import { useAsync, useCurrentUser, useRealtime } from "../hooks.js";
+import { useGameTablePreferences } from "../useGameTablePreferences.js";
 
 type SortColumn =
   | "Title"
@@ -30,12 +36,22 @@ export function Games() {
   const [editing, setEditing] = useState<GameDto | null | undefined>(undefined);
   useRealtime("/gamesHub", () => void pageData.reload());
 
+  const authenticated = user.loading ? null : user.data?.isAuthenticated === true;
+  const {
+    preferences: columnPreferences,
+    setPreferences: setColumnPreferences,
+    loading: columnPreferencesLoading,
+    saving: columnPreferencesSaving,
+    error: columnPreferencesError,
+    retry: retryColumnPreferences
+  } = useGameTablePreferences(authenticated);
   const isAdmin = user.data?.role === "Admin";
   const games = pageData.data?.games ?? [];
   const ownedTypes = pageData.data?.ownedTypes ?? {};
   const exclusionReasons = pageData.data?.exclusionReasons ?? {};
   const completionStatus = pageData.data?.completionStatus ?? {};
   const alternateTitles = pageData.data?.alternateTitles ?? {};
+  const visibleColumns = useMemo(() => visibleGameTableColumns(columnPreferences), [columnPreferences]);
 
   const counts = useMemo(() => {
     const nonExcluded = games.filter((game) => !game.isExcluded);
@@ -79,7 +95,18 @@ export function Games() {
     setSortAscending(true);
   };
 
-  if (user.loading || pageData.loading) return <Loading />;
+  const applyColumnPreferences = (preferences: typeof columnPreferences) => {
+    setColumnPreferences(preferences);
+    const activeSortIsVisible = visibleGameTableColumns(preferences).some(
+      (column) => "sortColumn" in column && column.sortColumn === sortColumn
+    );
+    if (!activeSortIsVisible) {
+      setSortColumn("Title");
+      setSortAscending(true);
+    }
+  };
+
+  if (user.loading || pageData.loading || columnPreferencesLoading) return <Loading />;
   if (user.error || pageData.error) return <ErrorMessage message={user.error ?? pageData.error ?? ""} />;
 
   return (
@@ -123,6 +150,18 @@ export function Games() {
             />
             <span>Show Excluded Games</span>
           </label>
+          <GameTableColumnSettings
+            preferences={columnPreferences}
+            onChange={applyColumnPreferences}
+            disabled={columnPreferencesError?.kind === "load"}
+          />
+          {columnPreferencesSaving ? <output className="muted">Saving column preferences...</output> : null}
+          {columnPreferencesError ? (
+            <span className="column-preferences-error" role="alert">
+              {columnPreferencesError.message}
+              <button className="secondary" type="button" onClick={retryColumnPreferences}>Retry</button>
+            </span>
+          ) : null}
         </div>
         <div className="results-count">
           Showing {filtered.length} of {counts.total} games | Owned: {counts.owned} | Excluded: {counts.excluded} | Completed: {counts.completed} | In Progress: {counts.inProgress} | Not Started: {counts.notStarted}
@@ -133,30 +172,20 @@ export function Games() {
           <table className="data-table games-table">
             <colgroup>
               {isAdmin ? <col className="col-games-actions" /> : null}
-              <col className="col-games-cover" />
-              <col className="col-games-title" />
-              <col className="col-games-hltb" />
-              <col className="col-games-developer" />
-              <col className="col-games-publisher" />
-              <col className="col-games-release" />
-              <col className="col-games-region" />
-              <col className="col-games-excluded" />
-              <col className="col-games-owned" />
-              <col className="col-games-status" />
+              {visibleColumns.map((column) => <col key={column.id} className={column.className} />)}
             </colgroup>
             <thead>
               <tr>
                 {isAdmin ? <th>Actions</th> : null}
-                <th>Cover</th>
-                <th><SortButton column="Title" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Title</SortButton></th>
-                <th><SortButton column="HowLongToBeat" current={sortColumn} ascending={sortAscending} onSort={sortBy}>How Long To Beat Time</SortButton></th>
-                <th><SortButton column="Developer" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Developer</SortButton></th>
-                <th><SortButton column="Publisher" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Publisher</SortButton></th>
-                <th><SortButton column="FirstReleased" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Release Date</SortButton></th>
-                <th><SortButton column="RegionFirstReleasedIn" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Region First Released In</SortButton></th>
-                <th><SortButton column="IsExcluded" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Excluded</SortButton></th>
-                <th><SortButton column="IsOwned" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Owned</SortButton></th>
-                <th><SortButton column="CompletionStatus" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Status</SortButton></th>
+                {visibleColumns.map((column) => (
+                  <GameColumnHeader
+                    key={column.id}
+                    column={column}
+                    currentSort={sortColumn}
+                    ascending={sortAscending}
+                    onSort={sortBy}
+                  />
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -165,24 +194,17 @@ export function Games() {
                 return (
                   <tr key={game.id} className={gameRowClass(game)}>
                     {isAdmin ? <td data-label="Actions"><button className="icon-button" onClick={() => setEditing(game)} aria-label={`Edit ${game.title}`}><Edit3 /></button></td> : null}
-                    <td className="cover-cell" data-label="Cover"><CoverImage src={game.imageUrl} alt={`${game.title} cover`} /></td>
-                    <td data-label="Title"><GameTitle game={game} alternateTitles={alternateTitles[String(game.id)] ?? []} /></td>
-                    <td data-label="How Long To Beat Time"><HowLongToBeatTime game={game} /></td>
-                    <td data-label="Developer">{game.developer}</td>
-                    <td data-label="Publisher">{game.publisher}</td>
-                    <td data-label="Release Date">{formatDateOnly(game.firstReleased, "Unknown")}</td>
-                    <td data-label="Region">{game.regionFirstReleasedIn}</td>
-                    <td data-label="Excluded">
-                      {game.isExcluded
-                        ? <span className="badge excluded-badge" title={exclusionReasons[String(game.id)] ?? "No reason provided"}>Excluded</span>
-                        : <span className="badge included-badge">Included</span>}
-                    </td>
-                    <td data-label="Owned">
-                      {game.isOwned
-                        ? <span className="badge owned-badge" title={ownedTypes[String(game.id)] ?? "Owned"}>{ownedTypes[String(game.id)] || "Owned"}</span>
-                        : <span className="badge not-owned-badge">To Purchase</span>}
-                    </td>
-                    <td data-label="Status"><span className={`badge ${statusClass(status)}`}>{status}</span></td>
+                    {visibleColumns.map((column) => (
+                      <GameColumnCell
+                        key={column.id}
+                        column={column}
+                        game={game}
+                        alternateTitles={alternateTitles[String(game.id)] ?? []}
+                        exclusionReason={exclusionReasons[String(game.id)]}
+                        ownedType={ownedTypes[String(game.id)]}
+                        status={status}
+                      />
+                    ))}
                   </tr>
                 );
               })}
@@ -199,6 +221,86 @@ export function Games() {
       />
     </section>
   );
+}
+
+function GameColumnHeader({
+  column,
+  currentSort,
+  ascending,
+  onSort
+}: Readonly<{
+  column: GameTableColumn;
+  currentSort: SortColumn;
+  ascending: boolean;
+  onSort: (column: SortColumn) => void;
+}>) {
+  if (!("sortColumn" in column)) {
+    return <th>{column.label}</th>;
+  }
+  return (
+    <th>
+      <SortButton column={column.sortColumn} current={currentSort} ascending={ascending} onSort={onSort}>
+        {column.label}
+      </SortButton>
+    </th>
+  );
+}
+
+function GameColumnCell({
+  column,
+  game,
+  alternateTitles,
+  exclusionReason,
+  ownedType,
+  status
+}: Readonly<{
+  column: GameTableColumn;
+  game: GameDto;
+  alternateTitles: AlternateTitle[];
+  exclusionReason: string | undefined;
+  ownedType: string | undefined;
+  status: string;
+}>) {
+  switch (column.id) {
+    case "cover":
+      return <td className="cover-cell" data-label="Cover"><CoverImage src={game.imageUrl} alt={`${game.title} cover`} /></td>;
+    case "title":
+      return <td data-label="Title"><GameTitle game={game} alternateTitles={alternateTitles} /></td>;
+    case "howLongToBeat":
+      return <td data-label="How Long To Beat Time"><HowLongToBeatTime game={game} /></td>;
+    case "developer":
+      return <td data-label="Developer">{game.developer}</td>;
+    case "publisher":
+      return <td data-label="Publisher">{game.publisher}</td>;
+    case "releaseDate":
+      return <td data-label="Release Date">{formatDateOnly(game.firstReleased, "Unknown")}</td>;
+    case "region":
+      return <td data-label="Region">{game.regionFirstReleasedIn}</td>;
+    case "excluded":
+      return (
+        <td data-label="Excluded">
+          {game.isExcluded
+            ? <span className="badge excluded-badge" title={exclusionReason ?? "No reason provided"}>Excluded</span>
+            : <span className="badge included-badge">Included</span>}
+        </td>
+      );
+    case "owned":
+      return (
+        <td data-label="Owned">
+          {game.isOwned
+            ? <span className="badge owned-badge" title={ownedType ?? "Owned"}>{ownedType || "Owned"}</span>
+            : <span className="badge not-owned-badge">To Purchase</span>}
+        </td>
+      );
+    case "status":
+      return <td data-label="Status"><span className={`badge ${statusClass(status)}`}>{status}</span></td>;
+    default:
+      return assertNever(column);
+  }
+}
+
+function assertNever(value: never): never {
+  throw new Error(`Unhandled game table column: ${JSON.stringify(value)}`);
 }
 
 function SortButton({

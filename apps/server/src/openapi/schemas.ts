@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifySchema } from "fastify";
+import { gameTableColumnIds } from "@ps2-challenge/shared";
 
 type SecurityRequirement = Record<string, never[]>;
 type OpenApiRouteSchema = FastifySchema & {
@@ -476,6 +477,35 @@ const openApiSchemas = [
     }
   },
   {
+    $id: "GameTablePreferences",
+    type: "object",
+    additionalProperties: false,
+    required: ["order", "hidden"],
+    properties: {
+      order: {
+        type: "array",
+        minItems: 2,
+        maxItems: gameTableColumnIds.length,
+        uniqueItems: true,
+        items: { type: "string", enum: gameTableColumnIds }
+      },
+      hidden: {
+        type: "array",
+        maxItems: gameTableColumnIds.length,
+        uniqueItems: true,
+        items: { type: "string", enum: gameTableColumnIds }
+      }
+    }
+  },
+  {
+    $id: "GameTablePreferencesResponse",
+    type: "object",
+    required: ["preferences"],
+    properties: {
+      preferences: { nullable: true, allOf: [ref("GameTablePreferences")] }
+    }
+  },
+  {
     $id: "UserProfile",
     type: "object",
     required: ["isAuthenticated"],
@@ -924,6 +954,25 @@ export const userRouteSchemas = {
     operationId: "generateApiKey",
     security: authenticatedSecurity,
     response: { 200: ref("ApiKeyResponse"), 401: ref("ErrorResponse") }
+  }),
+  gameTablePreferences: route({
+    tags: ["User"],
+    summary: "Get game table preferences",
+    operationId: "getGameTablePreferences",
+    security: authenticatedSecurity,
+    response: { 200: ref("GameTablePreferencesResponse"), 401: ref("ErrorResponse") }
+  }),
+  updateGameTablePreferences: route({
+    tags: ["User"],
+    summary: "Update game table preferences",
+    operationId: "updateGameTablePreferences",
+    security: authenticatedSecurity,
+    body: ref("GameTablePreferences"),
+    response: {
+      200: ref("GameTablePreferencesResponse"),
+      400: ref("ErrorResponse"),
+      401: ref("ErrorResponse")
+    }
   })
 } as const;
 

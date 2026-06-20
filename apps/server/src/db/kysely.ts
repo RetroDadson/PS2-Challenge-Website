@@ -1,4 +1,5 @@
-import { Kysely, PostgresDialect, type ColumnType, type Generated } from "kysely";
+import type { GameTablePreferencesDto } from "@ps2-challenge/shared";
+import { Kysely, PostgresDialect, type ColumnType, type Generated, type JSONColumnType } from "kysely";
 import pg from "pg";
 
 const { Pool } = pg;
@@ -116,6 +117,11 @@ export interface Database {
     created_at: Timestamp;
     last_login_at: Timestamp;
     api_key: string;
+    game_table_preferences: JSONColumnType<
+      GameTablePreferencesDto | null,
+      GameTablePreferencesDto | null | undefined,
+      GameTablePreferencesDto | null
+    >;
   };
   vote_history: {
     history_id: Generated<number>;

@@ -77,6 +77,8 @@ describe("client API requests", () => {
 
     await api.user();
     await api.regenerateApiKey();
+    await api.gameTablePreferences();
+    await api.updateGameTablePreferences({ order: ["cover", "title", "status"], hidden: ["status"] });
     await api.game(8);
     await api.createGame({ title: "Game" });
     await api.updateGame(8, { title: "Updated" });
@@ -108,6 +110,12 @@ describe("client API requests", () => {
       expect.arrayContaining([
         { method: "GET", path: "/api/user", body: null },
         { method: "POST", path: "/api/user/api-key", body: {} },
+        { method: "GET", path: "/api/user/preferences/game-table-columns", body: null },
+        {
+          method: "PUT",
+          path: "/api/user/preferences/game-table-columns",
+          body: { order: ["cover", "title", "status"], hidden: ["status"] }
+        },
         { method: "GET", path: "/api/games/8", body: null },
         { method: "PUT", path: "/api/games/8/ownership", body: { ownPhysicalCopy: true, typeOwned: "Base" } },
         { method: "DELETE", path: "/api/votes/current/Game%20%2F%20One", body: null },

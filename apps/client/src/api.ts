@@ -2,6 +2,8 @@ import type {
   AdminUserDto,
   CurrentVoteDto,
   GameDto,
+  GameTablePreferencesDto,
+  GameTablePreferencesResponseDto,
   GamesPageDataDto,
   GameProgressDto,
   RoleDto,
@@ -110,6 +112,12 @@ export const api = {
   authUser: () => request<UserProfileDto>("/api/auth/user"),
   user: () => request<UserProfileDto>("/api/user"),
   regenerateApiKey: () => request<{ apiKey: string }>("/api/user/api-key", { method: "POST", body: "{}" }),
+  gameTablePreferences: () => request<GameTablePreferencesResponseDto>("/api/user/preferences/game-table-columns"),
+  updateGameTablePreferences: (preferences: GameTablePreferencesDto) =>
+    request<GameTablePreferencesResponseDto>("/api/user/preferences/game-table-columns", {
+      method: "PUT",
+      body: JSON.stringify(preferences)
+    }),
   games: (title?: string) => request<GameDto[]>(gamesUrl(title)),
   gamesPageData: () => request<GamesPageDataDto>("/api/games/page-data"),
   game: (id: number) => request<GameDto>(`/api/games/${id}`),

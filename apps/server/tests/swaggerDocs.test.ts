@@ -74,6 +74,8 @@ describe("swagger docs", () => {
     expect(document.paths["/api/votes/current/by-game-number"].put.requestBody).toBeDefined();
     expect(document.paths["/api/twitch/stream-stats"].get.responses["200"]).toBeDefined();
     expect(document.paths["/api/admin/users/{userId}/role"].put.security).toEqual([{ ApiKey: [] }, { Cookie: [] }]);
+    expect(document.paths["/api/user/preferences/game-table-columns"].put.requestBody).toBeDefined();
+    expect(document.paths["/api/user/preferences/game-table-columns"].put.security).toEqual([{ ApiKey: [] }, { Cookie: [] }]);
     expect(document.paths["/api/health"].get.responses["503"]).toBeDefined();
 
     for (const [path, item] of Object.entries<Record<string, any>>(document.paths)) {
