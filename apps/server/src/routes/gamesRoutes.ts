@@ -10,7 +10,7 @@ import {
   updateOwnershipRequestSchema,
   updateProgressRequestSchema
 } from "@ps2-challenge/shared";
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { AppConfig } from "../config.js";
 import { requireAdmin } from "../auth/guards.js";
 import { gameRouteSchemas, registerOpenApiSchemas } from "../openapi/schemas.js";
@@ -20,6 +20,11 @@ import { CoverImageRefreshService } from "../services/coverImageService.js";
 import { GameService } from "../services/gameService.js";
 import { HowLongToBeatRefreshService, type HowLongToBeatRefreshProgress } from "../services/howLongToBeatService.js";
 import { auditError, auditInfo } from "../utils/audit.js";
+
+type NdjsonStream = {
+  signal: AbortSignal;
+  writeEvent: (event: unknown) => void;
+};
 
 export async function registerGamesRoutes(
   app: FastifyInstance,
@@ -469,29 +474,11 @@ export async function registerGamesRoutes(
     if (!user) return;
     auditInfo(request.log, user, `AUDIT: Admin ${user.username} started streamed cover image refresh`);
 
-    const controller = new AbortController();
-    request.raw.on("close", () => {
-      if (!reply.raw.writableEnded) {
-        controller.abort();
-      }
-    });
-
-    reply.hijack();
-    reply.raw.writeHead(200, {
-      "content-type": "application/x-ndjson; charset=utf-8",
-      "cache-control": "no-cache, no-transform",
-      connection: "keep-alive"
-    });
-
-    const writeEvent = (event: unknown) => {
-      if (!reply.raw.writableEnded) {
-        reply.raw.write(`${JSON.stringify(event)}\n`);
-      }
-    };
+    const stream = startNdjsonStream(request, reply);
 
     try {
       const refresh = new CoverImageRefreshService(gameService.getPool(), undefined, gameService.getDatabase());
-      const result = await refresh.refreshCoverImagesDetailed(controller.signal, (progress) => writeEvent({ type: "progress", ...progress }));
+      const result = await refresh.refreshCoverImagesDetailed(stream.signal, (progress) => stream.writeEvent({ type: "progress", ...progress }));
       if (result.updated > 0) {
         realtimeHub.broadcastGamesUpdated();
       }
@@ -501,14 +488,14 @@ export async function registerGamesRoutes(
         skipped: result.skipped,
         errors: result.errors
       });
-      writeEvent({ type: "complete", message: "Cover image update completed", ...result });
+      stream.writeEvent({ type: "complete", message: "Cover image update completed", ...result });
     } catch (error) {
       auditError(request.log, user, `AUDIT: Admin ${user.username} cover image refresh failed`, {
         error: errorMessage(error)
       });
-      writeEvent({
+      stream.writeEvent({
         type: "error",
-        message: error instanceof Error ? error.message : String(error)
+        message: errorMessage(error)
       });
     } finally {
       reply.raw.end();
@@ -540,31 +527,13 @@ export async function registerGamesRoutes(
     if (!user) return;
     auditInfo(request.log, user, `AUDIT: Admin ${user.username} started streamed HowLongToBeat refresh`);
 
-    const controller = new AbortController();
-    request.raw.on("close", () => {
-      if (!reply.raw.writableEnded) {
-        controller.abort();
-      }
-    });
-
-    reply.hijack();
-    reply.raw.writeHead(200, {
-      "content-type": "application/x-ndjson; charset=utf-8",
-      "cache-control": "no-cache, no-transform",
-      connection: "keep-alive"
-    });
-
-    const writeEvent = (event: unknown) => {
-      if (!reply.raw.writableEnded) {
-        reply.raw.write(`${JSON.stringify(event)}\n`);
-      }
-    };
+    const stream = startNdjsonStream(request, reply);
 
     try {
       const refresh = new HowLongToBeatRefreshService(gameService.getPool(), undefined, gameService.getDatabase());
-      const result = await refresh.refreshHowLongToBeatDataDetailed(controller.signal, (progress) => {
+      const result = await refresh.refreshHowLongToBeatDataDetailed(stream.signal, (progress) => {
         logHowLongToBeatRefreshProgressError(request.log, user, progress);
-        writeEvent({ type: "progress", ...progress });
+        stream.writeEvent({ type: "progress", ...progress });
       });
       if (result.updated > 0) {
         realtimeHub.broadcastGamesUpdated();
@@ -575,19 +544,44 @@ export async function registerGamesRoutes(
         skipped: result.skipped,
         errors: result.errors
       });
-      writeEvent({ type: "complete", message: "HowLongToBeat update completed", ...result });
+      stream.writeEvent({ type: "complete", message: "HowLongToBeat update completed", ...result });
     } catch (error) {
       auditError(request.log, user, `AUDIT: Admin ${user.username} HowLongToBeat refresh failed`, {
         error: errorMessage(error)
       });
-      writeEvent({
+      stream.writeEvent({
         type: "error",
-        message: error instanceof Error ? error.message : String(error)
+        message: errorMessage(error)
       });
     } finally {
       reply.raw.end();
     }
   });
+}
+
+function startNdjsonStream(request: FastifyRequest, reply: FastifyReply): NdjsonStream {
+  const controller = new AbortController();
+  request.raw.on("close", () => {
+    if (!reply.raw.writableEnded) {
+      controller.abort();
+    }
+  });
+
+  reply.hijack();
+  reply.raw.writeHead(200, {
+    "content-type": "application/x-ndjson; charset=utf-8",
+    "cache-control": "no-cache, no-transform",
+    connection: "keep-alive"
+  });
+
+  return {
+    signal: controller.signal,
+    writeEvent(event: unknown): void {
+      if (!reply.raw.writableEnded) {
+        reply.raw.write(`${JSON.stringify(event)}\n`);
+      }
+    }
+  };
 }
 
 function errorMessage(error: unknown): string {
