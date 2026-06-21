@@ -72,4 +72,32 @@ describe("health API contract parity", () => {
       message: "PS2 Challenge API is running"
     });
   });
+
+  it("stringifies non-Error dependency failures", async () => {
+    app = fastify({ logger: false });
+    await registerHealthRoutes(app, async () => {
+      throw "database unavailable";
+    });
+
+    const response = await app.inject({ method: "GET", url: "/health" });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json().checks[0].exception).toBe("database unavailable");
+  });
+
+  it("returns a fallback response when the health check itself fails", async () => {
+    app = fastify({ logger: false });
+    await registerHealthRoutes(app, async () => undefined);
+    vi.spyOn(performance, "now").mockImplementationOnce(() => {
+      throw "clock unavailable";
+    });
+
+    const response = await app.inject({ method: "GET", url: "/api/health" });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.json()).toMatchObject({
+      status: "Unhealthy",
+      checks: [{ name: "health", exception: "clock unavailable" }]
+    });
+  });
 });

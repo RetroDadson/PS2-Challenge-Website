@@ -135,11 +135,15 @@ describe("client API requests", () => {
         .mockResolvedValueOnce(new Response(JSON.stringify({ message: "Nope" }), { status: 400, statusText: "Bad Request" }))
         .mockResolvedValueOnce(new Response(JSON.stringify({ error: "Conflict" }), { status: 409, statusText: "Conflict" }))
         .mockResolvedValueOnce(new Response("not-json", { status: 401, statusText: "" }))
+        .mockResolvedValueOnce(new Response(JSON.stringify({}), { status: 403, statusText: "" }))
+        .mockResolvedValueOnce(new Response("not-json", { status: 418, statusText: "" }))
     );
 
     await expect(api.authUser()).rejects.toThrow("Nope");
     await expect(api.authUser()).rejects.toThrow("Conflict");
     await expect(api.authUser()).rejects.toThrow("Unauthorized");
+    await expect(api.authUser()).rejects.toThrow("Forbidden");
+    await expect(api.authUser()).rejects.toThrow("HTTP 418");
   });
 
   it("streams cover refresh progress and returns the completion payload", async () => {
@@ -245,5 +249,41 @@ describe("client API requests", () => {
       { type: "progress", status: "searching", processed: 1, total: 2, updated: 0, unchanged: 0, notFound: 0, errors: 0 }
     ]);
     expect(result).toEqual({ type: "complete", total: 2, updated: 1, unchanged: 1, notFound: 0, errors: 0, message: "Done" });
+  });
+
+  it("handles HowLongToBeat fallback, stream failures, and incomplete streams", async () => {
+    const encoder = new TextEncoder();
+    const streamResponse = (lines: string[]) => new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(encoder.encode(`${lines.join("\n")}\n`));
+          controller.close();
+        }
+      }),
+      { status: 200 }
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(new Response(null, { status: 200 }))
+        .mockResolvedValueOnce(new Response(JSON.stringify({ total: 2, updated: 1, unchanged: 1, notFound: 0, errors: 0 }), { status: 200 }))
+        .mockResolvedValueOnce(streamResponse(["", JSON.stringify({ type: "error", message: "HLTB failure" })]))
+        .mockResolvedValueOnce(streamResponse([JSON.stringify({ type: "progress", status: "searching", processed: 1, total: 1, updated: 0, unchanged: 0, notFound: 0, errors: 0 })]))
+        .mockResolvedValueOnce(new Response(JSON.stringify({ message: "Stream unavailable" }), { status: 503 }))
+    );
+    const progress: unknown[] = [];
+
+    await expect(api.refreshHowLongToBeatWithProgress((event) => progress.push(event))).resolves.toMatchObject({ total: 2, updated: 1 });
+    expect(progress).toEqual([expect.objectContaining({ processed: 2, status: "completed" })]);
+    await expect(api.refreshHowLongToBeatWithProgress(() => undefined)).rejects.toThrow("HLTB failure");
+    await expect(api.refreshHowLongToBeatWithProgress(() => undefined)).rejects.toThrow("HowLongToBeat update did not complete");
+    await expect(api.refreshHowLongToBeatWithProgress(() => undefined)).rejects.toThrow("Stream unavailable");
+  });
+
+  it("reports cover stream response failures", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("not-json", { status: 500, statusText: "" })));
+
+    await expect(api.refreshCoversWithProgress(() => undefined)).rejects.toThrow("HTTP 500");
   });
 });

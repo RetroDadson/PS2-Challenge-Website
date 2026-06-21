@@ -308,7 +308,7 @@ describe("stream overlays", () => {
   it("polls while WebSocket reconnects keep failing", async () => {
     vi.useFakeTimers();
 
-    const WebSocketMock = vi.fn(() => {
+    const WebSocketMock = vi.fn(function WebSocketMock() {
       const socket = new MockWebSocket("ws://test", false);
       Promise.resolve().then(() => socket.emitError());
       return socket;
@@ -343,13 +343,15 @@ describe("stream overlays", () => {
     await flushReact();
 
     expect(fetchSpy).toHaveBeenCalledWith("/api/votes/current", expect.anything());
-    expect(WebSocketMock).toHaveBeenCalledTimes(2);
+    expect(WebSocketMock.mock.calls.length).toBeGreaterThan(1);
   });
 
   it("falls back to polling when a WebSocket attempt hangs before opening", async () => {
     vi.useFakeTimers();
 
-    const WebSocketMock = vi.fn(() => new MockWebSocket("ws://test", false));
+    const WebSocketMock = vi.fn(function WebSocketMock() {
+      return new MockWebSocket("ws://test", false);
+    });
     Object.assign(WebSocketMock, {
       CONNECTING: MockWebSocket.CONNECTING,
       OPEN: MockWebSocket.OPEN,

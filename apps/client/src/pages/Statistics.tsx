@@ -605,3 +605,21 @@ function angleToPoint(angle: number, radius: number) {
   const radians = (Math.PI / 180) * angle;
   return { x: radius * Math.cos(radians), y: radius * Math.sin(radians) };
 }
+
+export const statisticsPageHelpers = {
+  calculateStatistics,
+  calculateEstimatedStreamingWeeks,
+  calculateYearlyStatistics,
+  parseDurationSeconds,
+  formatAverageDuration,
+  formatDurationLong,
+  buildDurationChart,
+  niceDurationCeiling,
+  buildDurationTicks,
+  formatTickHours,
+  formatEstimatedTimeRemaining,
+  formatStreamingTimeRemaining,
+  buildOwnershipSlices,
+  sectorPath,
+  angleToPoint
+};

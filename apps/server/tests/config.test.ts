@@ -145,4 +145,49 @@ describe("config", () => {
     };
     expect(loadConfig(false).nodeEnv).toBe("Development");
   });
+
+  it("uses direct connection settings and runtime defaults in test environments", () => {
+    process.env = {
+      NODE_ENV: "Test",
+      PORT: "6000",
+      POSTGRESQLCONNSTR_DefaultConnection: "Host=direct;Database=challenge",
+      TWITCH_CLIENT_ID: "client",
+      TWITCH_CLIENT_SECRET: "secret"
+    };
+
+    const config = loadConfig();
+
+    expect(config.databaseConnectionString).toBe("postgresql://direct/challenge");
+    expect(config.publicBaseUrl).toBe("http://localhost:5001");
+    expect(config.twitchChannelLogin).toBe("retrodadson");
+    expect(config.cookieSecret).toHaveLength(64);
+  });
+
+  it("uses ApiBaseUrl and appsetting Twitch fallbacks", () => {
+    const settingsDir = fs.mkdtempSync(path.join(os.tmpdir(), "ps2-config-api-base-"));
+    fs.writeFileSync(path.join(settingsDir, "appsettings.json"), JSON.stringify({
+      PublicBaseUrl: null,
+      ApiBaseUrl: "https://api-base.example",
+      Twitch: { ClientId: "settings-client", ClientSecret: "settings-secret" }
+    }));
+    process.env = {
+      APPSETTINGS_DIR: settingsDir,
+      NODE_ENV: "Testing",
+      DATABASE_CONNECTION_STRING: "postgresql://localhost/test"
+    };
+
+    const config = loadConfig();
+
+    expect(config.publicBaseUrl).toBe("https://api-base.example");
+    expect(config.twitchClientId).toBe("settings-client");
+    expect(config.twitchClientSecret).toBe("settings-secret");
+  });
+
+  it("preserves opaque connection strings and explicit SSL modes", () => {
+    expect(normalizePostgresConnectionString("opaque-connection-name")).toBe("opaque-connection-name");
+    expect(normalizePostgresConnectionString("Host=db;Database=challenge;Ssl Mode=disable")).toBe(
+      "postgresql://db/challenge?sslmode=disable"
+    );
+    expect(normalizePostgresConnectionString("not a valid://url")).toBe("not a valid://url");
+  });
 });

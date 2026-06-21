@@ -12,10 +12,10 @@
     "coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "zod": "^4.1.12"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
-    "typescript": "^5.9.3",
-    "vitest": "^3.2.4"
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
   }
 }
