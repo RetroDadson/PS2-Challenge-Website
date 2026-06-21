@@ -24,6 +24,36 @@ describe("realtime hub logging", () => {
 
     expect(socket.sent).toEqual([JSON.stringify({ type: "Pong" })]);
   });
+
+  it("broadcasts only to open sockets and removes closed sockets", () => {
+    const open = fakeSocket();
+    const closed = fakeSocket();
+    closed.readyState = 0;
+    const hub = new RealtimeHub();
+    const logger = { debug: vi.fn() };
+    hub.setLogger(logger as never);
+
+    hub.register("games", open);
+    hub.register("games", closed);
+    open.emit("message", "not-a-ping");
+    hub.broadcastGamesUpdated();
+
+    expect(open.sent).toEqual([JSON.stringify({ type: "GamesUpdated" })]);
+    expect(closed.sent).toEqual([]);
+    open.emit("close");
+    hub.broadcastGamesUpdated();
+    expect(open.sent).toHaveLength(1);
+    expect(logger.debug).toHaveBeenCalled();
+  });
+
+  it("ignores unknown hub names", () => {
+    const hub = new RealtimeHub();
+    const socket = fakeSocket();
+
+    hub.register("unknown" as never, socket);
+
+    expect(socket.sent).toEqual([]);
+  });
 });
 
 function fakeSocket() {

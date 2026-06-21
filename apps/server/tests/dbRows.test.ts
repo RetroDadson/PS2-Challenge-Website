@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { mapGame, mapProgress, normalizePgInterval, sortGames } from "../src/utils/dbRows.js";
+import { mapAlternateTitle, mapGame, mapProgress, normalizePgInterval, sortGames } from "../src/utils/dbRows.js";
 
 describe("db row helpers", () => {
   it("normalizes postgres intervals to the existing API duration shape", () => {
+    expect(normalizePgInterval(null)).toBeNull();
+    expect(normalizePgInterval("  ")).toBe("");
     expect(normalizePgInterval("10:30:45")).toBe("10:30:45");
+    expect(normalizePgInterval("04:00")).toBe("04:00");
+    expect(normalizePgInterval("04:00:00 elapsed")).toBe("04:00:00");
     expect(normalizePgInterval("4 days 04:00:00")).toBe("100:00:00");
   });
 
@@ -44,5 +48,38 @@ describe("db row helpers", () => {
       { id: 3, title: "Ace Combat", releasedInEuPalOrNa: false, isExcluded: false, isOwned: false }
     ]);
     expect(sorted.map((game) => game.title)).toEqual([".hack", "Ace Combat", "Zone"]);
+  });
+
+  it("maps optional game flags, duration fields, and alternate titles", () => {
+    expect(mapGame({
+      game_id: 1,
+      title: "Game",
+      developer: null,
+      publisher: null,
+      first_released: null,
+      region_first_released_in: null,
+      released_in_eu_or_na: true,
+      image_url: null,
+      is_excluded: true,
+      is_owned: true,
+      howlongtobeat_id: 10,
+      howlongtobeat_main_story_seconds: 100,
+      howlongtobeat_main_extra_seconds: 200,
+      howlongtobeat_completionist_seconds: 300
+    })).toMatchObject({
+      releasedInEuPalOrNa: true,
+      isExcluded: true,
+      isOwned: true,
+      howLongToBeatId: 10,
+      howLongToBeatMainStorySeconds: 100,
+      howLongToBeatMainExtraSeconds: 200,
+      howLongToBeatCompletionistSeconds: 300
+    });
+    expect(mapAlternateTitle({ alternate_title_id: 2, game_id: 1, title: "Alternate", notes: null })).toEqual({
+      alternateTitleId: 2,
+      gameId: 1,
+      title: "Alternate",
+      notes: null
+    });
   });
 });

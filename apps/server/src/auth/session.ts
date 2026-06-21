@@ -83,7 +83,7 @@ export function normalizeReturnUrl(returnUrl?: string): string {
     return "/";
   }
   const decoded = safeDecodeURIComponent(returnUrl);
-  let path = decoded;
+  let path: string;
   try {
     const url = new URL(decoded);
     path = `${url.pathname}${url.search}`;

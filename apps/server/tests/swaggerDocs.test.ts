@@ -95,6 +95,12 @@ describe("swagger docs", () => {
 
   it("tolerates undocumented routes while generating the document", () => {
     expect(openApiTransform({ url: "/robots.txt" })).toEqual({ schema: {}, url: "/robots.txt" });
+    expect(openApiRefResolver.buildLocalReference({}, {}, "", 3)).toBe("def-3");
+    expect(openApiRefResolver.buildLocalReference({ $id: "Named" }, {}, "", 3)).toBe("Named");
+    expect(openApiTransform({ schema: { summary: "Plain" }, url: "/plain" })).toEqual({
+      schema: { summary: "Plain" },
+      url: "/plain"
+    });
   });
 });
 

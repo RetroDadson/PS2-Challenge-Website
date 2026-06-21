@@ -664,6 +664,21 @@ function formatPathNumber(value: number) {
   return Number.isInteger(value) ? String(value) : value.toFixed(3);
 }
 
+export const votesPageHelpers = {
+  sortMarker,
+  filterVoteHistory,
+  sortVoteHistory,
+  isTopTied,
+  isSecondTied,
+  isLastTied,
+  nextAvailableGameNumber,
+  findGameForVote,
+  buildPieSlices,
+  sectorPath,
+  fullCirclePath,
+  formatPathNumber
+};
+
 function VoteArchiveModal({
   currentVotes,
   onClose,

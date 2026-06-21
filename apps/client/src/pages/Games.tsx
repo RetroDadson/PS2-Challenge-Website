@@ -484,3 +484,15 @@ function howLongToBeatTitle(game: GameDto) {
     `Completionist: ${formatHowLongToBeatSeconds(game.howLongToBeatCompletionistSeconds)}`
   ].join("\n");
 }
+
+export const gamesPageHelpers = {
+  gameRowClass,
+  sortMarker,
+  gameMatchesSearch,
+  sortGames,
+  compareNullableNumber,
+  getCompletionStatus,
+  statusClass,
+  formatHowLongToBeatSeconds,
+  howLongToBeatTitle
+};
