@@ -18,7 +18,7 @@ jobs:
     steps:
       - name: Check if relevant paths changed
         id: check
-        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const headSha = context.payload.workflow_run.head_sha;
@@ -56,14 +56,14 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Login to Azure
-        uses: azure/login@1384c340ab2dda50fed2bee3041d1d87018aa5e8
+        uses: azure/login@532459ea530d8321f2fb9bb10d1e0bcf23869a43 # v3.0.0
         with:
           client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_30B7FC53F3174B04A2793DE2BC7D0F35 }}
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_96A01072E1974D40A7C1E976C9CEB756 }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_EF4C4F434B07428E812445CDFC335E13 }}
 
       - name: Deploy to Azure Web App
-        uses: azure/webapps-deploy@2e64e04aaaeeec4396edcb982544dbd30f8e9ddf
+        uses: azure/webapps-deploy@5cfb776471c748b351e1ebf5770e208a54ace016 # v2.2.19
         with:
           app-name: 'retrodadsonchallenge'
           slot-name: 'Production'
