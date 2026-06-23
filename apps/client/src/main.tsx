@@ -13,6 +13,7 @@ import { Progress } from "./pages/Progress.js";
 import { Statistics } from "./pages/Statistics.js";
 import { UserPage } from "./pages/User.js";
 import { Votes } from "./pages/Votes.js";
+import { ChallengeRunners } from "./pages/ChallengeRunners.js";
 import "./styles/app.css";
 
 const router = createBrowserRouter([
@@ -24,6 +25,7 @@ const router = createBrowserRouter([
       { path: "/progress", element: <DocumentTitle title="Game Progress - Dadson's PS2 Tracker"><Progress /></DocumentTitle> },
       { path: "/statistics", element: <DocumentTitle title="Statistics - Dadson's PS2 Challenge"><Statistics /></DocumentTitle> },
       { path: "/votes", element: <DocumentTitle title="Vote History - Dadson's PS2 Tracker"><Votes /></DocumentTitle> },
+      { path: "/runners", element: <DocumentTitle title="Challenge Runners - Dadson's PS2 Challenge"><ChallengeRunners /></DocumentTitle> },
       { path: "/login", element: <DocumentTitle title="Login - Dadson's PS2 Challenge"><Login /></DocumentTitle> },
       { path: "/user", element: <DocumentTitle title="User Profile - Dadson's PS2 Challenge"><UserPage /></DocumentTitle> },
       { path: "/admin", element: <DocumentTitle title="Admin Panel - Dadson's PS2 Challenge"><Admin /></DocumentTitle> },

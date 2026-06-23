@@ -1,4 +1,4 @@
-import { BookOpen, Gamepad2, Library, LineChart, LogIn, LogOut, PlaySquare, Shield, Trophy, User, UserRound, Vote } from "lucide-react";
+import { BookOpen, Gamepad2, Library, LineChart, LogIn, LogOut, PlaySquare, Shield, Trophy, User, UserRound, Users, Vote } from "lucide-react";
 import { NavLink, Outlet } from "react-router-dom";
 import { useCurrentUser } from "../hooks.js";
 
@@ -19,6 +19,7 @@ export function Layout() {
           <NavLink to="/progress"><Trophy aria-hidden />Progress</NavLink>
           <NavLink to="/statistics"><LineChart aria-hidden />Statistics</NavLink>
           <NavLink to="/votes"><Vote aria-hidden />Votes</NavLink>
+          <NavLink to="/runners"><Users aria-hidden />Challenge Runners</NavLink>
           {isAuthenticated ? <NavLink to="/user"><User aria-hidden />Profile</NavLink> : <NavLink to="/login"><LogIn aria-hidden />Login</NavLink>}
           {isAdmin ? <NavLink to="/admin"><Shield aria-hidden />Admin</NavLink> : null}
           <details className="sidebar-social-menu">

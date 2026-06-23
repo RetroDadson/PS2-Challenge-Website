@@ -33,6 +33,7 @@ export async function startIntegrationDatabase(): Promise<IntegrationDatabase> {
 async function resetDatabase(pool: pg.Pool): Promise<void> {
   await pool.query(`
     TRUNCATE
+      challenge_runners,
       twitch_stream_vods,
       vote_history,
       current_vote,

@@ -143,6 +143,43 @@ const openApiSchemas = [
     properties: { errors: { type: "array", items: { type: "string" } } }
   },
   {
+    $id: "ChallengeRunnerInput",
+    type: "object",
+    additionalProperties: false,
+    required: ["name", "description", "twitchUrl", "youtubeUrl"],
+    properties: {
+      name: { type: "string", minLength: 1, maxLength: 100 },
+      description: { type: "string", minLength: 1, maxLength: 1000 },
+      twitchUrl: { type: "string", format: "uri", maxLength: 500, nullable: true },
+      youtubeUrl: { type: "string", format: "uri", maxLength: 500, nullable: true }
+    }
+  },
+  {
+    $id: "ChallengeRunner",
+    type: "object",
+    required: ["id", "name", "description", "twitchUrl", "youtubeUrl", "logoUrl"],
+    properties: {
+      id: positiveId,
+      name: { type: "string" },
+      description: { type: "string" },
+      twitchUrl: stringNullable,
+      youtubeUrl: stringNullable,
+      logoUrl: stringNullable
+    }
+  },
+  {
+    $id: "ChallengeRunnerLogoRefreshResult",
+    type: "object",
+    required: ["message", "total", "updated", "unchanged", "errors"],
+    properties: {
+      message: { type: "string" },
+      total: { type: "integer" },
+      updated: { type: "integer" },
+      unchanged: { type: "integer" },
+      errors: { type: "integer" }
+    }
+  },
+  {
     $id: "SerialNumberConflictResponse",
     type: "object",
     required: ["error", "serialNumber"],
@@ -608,6 +645,18 @@ const openApiSchemas = [
     }
   },
   {
+    $id: "TwitchStreamSyncResult",
+    type: "object",
+    required: ["message", "channelLogin", "checked", "upserted", "skipped"],
+    properties: {
+      message: { type: "string" },
+      channelLogin: { type: "string" },
+      checked: { type: "integer" },
+      upserted: { type: "integer" },
+      skipped: { type: "integer" }
+    }
+  },
+  {
     $id: "HealthCheckEntry",
     type: "object",
     required: ["name", "status", "duration"],
@@ -648,6 +697,47 @@ const unauthorizedForbidden = { 401: ref("ErrorResponse"), 403: ref("ErrorRespon
 const notFound = { 404: ref("ErrorResponse") };
 const conflict = { 409: ref("ErrorResponse") };
 const serverError = { 500: ref("ErrorResponse") };
+
+export const challengeRunnerRouteSchemas = {
+  list: route({
+    tags: ["Challenge Runners"],
+    summary: "List challenge runners",
+    operationId: "listChallengeRunners",
+    response: { 200: arrayOf("ChallengeRunner"), ...serverError }
+  }),
+  create: route({
+    tags: ["Challenge Runners"],
+    summary: "Create a challenge runner",
+    operationId: "createChallengeRunner",
+    security: adminSecurity,
+    body: ref("ChallengeRunnerInput"),
+    response: { 201: ref("ChallengeRunner"), ...badRequest, ...unauthorizedForbidden, 502: ref("ErrorResponse"), 503: ref("ErrorResponse"), ...serverError }
+  }),
+  refreshLogos: route({
+    tags: ["Challenge Runners"],
+    summary: "Refresh challenge runner profile pictures",
+    operationId: "refreshChallengeRunnerProfilePictures",
+    security: adminSecurity,
+    response: { 200: ref("ChallengeRunnerLogoRefreshResult"), ...unauthorizedForbidden, ...serverError }
+  }),
+  update: route({
+    tags: ["Challenge Runners"],
+    summary: "Update a challenge runner",
+    operationId: "updateChallengeRunner",
+    security: adminSecurity,
+    params: ref("IdParams"),
+    body: ref("ChallengeRunnerInput"),
+    response: { 200: ref("ChallengeRunner"), ...badRequest, ...unauthorizedForbidden, ...notFound, 502: ref("ErrorResponse"), 503: ref("ErrorResponse"), ...serverError }
+  }),
+  delete: route({
+    tags: ["Challenge Runners"],
+    summary: "Delete a challenge runner",
+    operationId: "deleteChallengeRunner",
+    security: adminSecurity,
+    params: ref("IdParams"),
+    response: { 200: ref("MessageResponse"), ...unauthorizedForbidden, ...notFound, ...serverError }
+  })
+} as const;
 
 export const gameRouteSchemas = {
   list: route({
@@ -990,6 +1080,13 @@ export const adminRouteSchemas = {
     operationId: "listRoles",
     security: adminSecurity,
     response: { 200: arrayOf("Role"), ...unauthorizedForbidden, ...serverError }
+  }),
+  refreshTwitchStats: route({
+    tags: ["Admin"],
+    summary: "Update Twitch stream statistics",
+    operationId: "updateTwitchStreamStatistics",
+    security: adminSecurity,
+    response: { 200: ref("TwitchStreamSyncResult"), ...unauthorizedForbidden, ...serverError }
   }),
   updateRole: route({
     tags: ["Admin"],

@@ -16,6 +16,8 @@ describe("Home", () => {
     expect(screen.getByRole("link", { name: "View Progress" })).toHaveAttribute("href", "/progress");
     expect(screen.getByRole("link", { name: "View Statistics" })).toHaveAttribute("href", "/statistics");
     expect(screen.getByRole("link", { name: "View Votes" })).toHaveAttribute("href", "/votes");
+    expect(screen.getByRole("heading", { name: "Meet other console challenge runners" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Explore the runner directory/i })).toHaveAttribute("href", "/runners");
     expect(screen.getByRole("link", { name: "Twitch" })).toHaveAttribute("href", "https://twitch.tv/retrodadson");
     expect(screen.getByRole("link", { name: "YouTube" })).toHaveAttribute("href", "https://www.youtube.com/@dadson1996");
   });

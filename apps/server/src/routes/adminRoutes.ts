@@ -4,9 +4,19 @@ import type { AppConfig } from "../config.js";
 import { requireAdmin } from "../auth/guards.js";
 import { adminRouteSchemas, registerOpenApiSchemas } from "../openapi/schemas.js";
 import type { UserRepository } from "../repositories/userRepository.js";
+import type { TwitchStreamSyncResult } from "../services/twitchStreamStatsService.js";
 import { auditError, auditInfo, auditWarn } from "../utils/audit.js";
 
-export async function registerAdminRoutes(app: FastifyInstance, userRepository: UserRepository, config: AppConfig) {
+type TwitchStreamSyncProvider = {
+  syncRecentStreams(): Promise<TwitchStreamSyncResult>;
+};
+
+export async function registerAdminRoutes(
+  app: FastifyInstance,
+  userRepository: UserRepository,
+  config: AppConfig,
+  twitchStats?: TwitchStreamSyncProvider
+) {
   registerOpenApiSchemas(app);
   const requireAdminOrStop = async (request: any, reply: any) => requireAdmin(request, reply, userRepository, config);
 
@@ -37,6 +47,22 @@ export async function registerAdminRoutes(app: FastifyInstance, userRepository: 
       return reply.status(500).send({ message: "Internal server error" });
     }
   });
+
+  if (twitchStats) {
+    app.post("/api/admin/update-twitch-stream-stats", { schema: adminRouteSchemas.refreshTwitchStats }, async (request, reply) => {
+      try {
+        const user = await requireAdminOrStop(request, reply);
+        if (!user) return;
+        auditInfo(request.log, user, `AUDIT: Admin ${user.username} started Twitch stream statistics sync`);
+        const result = await twitchStats.syncRecentStreams();
+        auditInfo(request.log, user, `AUDIT: Admin ${user.username} completed Twitch stream statistics sync`, result);
+        return { message: "Twitch stream statistics update completed", ...result };
+      } catch (error) {
+        request.log.error({ err: error }, "Failed to update Twitch stream statistics");
+        return reply.status(500).send({ message: "Internal server error" });
+      }
+    });
+  }
 
   app.put("/api/admin/users/:userId/role", { schema: adminRouteSchemas.updateRole }, async (request, reply) => {
     try {

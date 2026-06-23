@@ -13,7 +13,8 @@ const expectedMigrationRecords = [
   "003_add_twitch_stream_vods",
   "004_add_howlongtobeat_games",
   "005_add_howlongtobeat_sync_state",
-  "006_add_user_game_table_preferences"
+  "006_add_user_game_table_preferences",
+  "007_add_challenge_runners"
 ];
 
 describe("database migrations", () => {
@@ -47,6 +48,16 @@ describe("database migrations", () => {
       expect(tables.rows.map((row) => row.table_name)).toContain("twitch_stream_vods");
       expect(tables.rows.map((row) => row.table_name)).toContain("game_howlongtobeat");
       expect(tables.rows.map((row) => row.table_name)).toContain("game_howlongtobeat_sync_state");
+      expect(tables.rows.map((row) => row.table_name)).toContain("challenge_runners");
+
+      const challengeRunnerLogoColumn = await pool.query<{ data_type: string; is_nullable: string; character_maximum_length: number }>(
+        `
+        SELECT data_type, is_nullable, character_maximum_length
+        FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'challenge_runners' AND column_name = 'logo_url'
+        `
+      );
+      expect(challengeRunnerLogoColumn.rows[0]).toEqual({ data_type: "character varying", is_nullable: "YES", character_maximum_length: 500 });
 
       const apiKeyColumn = await pool.query<{ is_nullable: string; character_maximum_length: number }>(
         `

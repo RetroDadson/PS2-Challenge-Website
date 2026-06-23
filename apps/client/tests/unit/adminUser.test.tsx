@@ -81,6 +81,20 @@ describe("Admin page", () => {
         },
         { type: "complete", message: "HowLongToBeat update completed", total: 2, updated: 2, unchanged: 0, notFound: 0, errors: 0 }
       ]),
+      "POST /api/admin/challenge-runners/refresh-logos": {
+        message: "Challenge runner profile picture refresh completed",
+        total: 3,
+        updated: 1,
+        unchanged: 2,
+        errors: 0
+      },
+      "POST /api/admin/update-twitch-stream-stats": {
+        message: "Twitch stream statistics update completed",
+        channelLogin: "retrodadson",
+        checked: 3,
+        upserted: 2,
+        skipped: 1
+      },
       "PUT /api/admin/users/2/role": { id: 2, username: "NormalUser", role: "Admin", message: "User role updated to Admin" }
     });
 
@@ -93,6 +107,8 @@ describe("Admin page", () => {
     expect(screen.getByText("NormalUser")).toBeInTheDocument();
     expect(screen.getAllByText("Admin").length).toBeGreaterThan(0);
     expect(screen.getAllByText("User").length).toBeGreaterThan(0);
+    expect(screen.getByText("Starts 1 minute after startup, then refreshes automatically every 24 hours.")).toBeInTheDocument();
+    expect(screen.getByText("Starts 5 minutes after startup, then refreshes every 6 hours. Due backlogs continue in 5-minute batches.")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /Update Cover Images Now/i }));
     expect(await screen.findByText("Update completed. Updated: 1, Skipped: 1, Errors: 0")).toBeInTheDocument();
@@ -103,6 +119,14 @@ describe("Admin page", () => {
     expect(await screen.findByText("Update completed. Updated: 2, Unchanged: 0, Not found: 0, Errors: 0")).toBeInTheDocument();
     expect(screen.getByLabelText("HowLongToBeat refresh progress")).toHaveAttribute("value", "2");
     expect(screen.getByLabelText("HowLongToBeat refresh progress")).toHaveAttribute("max", "2");
+
+    expect(screen.getByText("Starts 3 minutes after startup, then refreshes automatically every 2 hours.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Update Profile Pictures Now/i }));
+    expect(await screen.findByText("Update completed. Updated: 1, Unchanged: 2, Errors: 0")).toBeInTheDocument();
+
+    expect(screen.getByText("Starts 2 minutes after startup, then refreshes automatically every 6 hours.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Update Twitch Statistics Now/i }));
+    expect(await screen.findByText("Update completed for retrodadson. Checked: 3, Upserted: 2, Skipped: 1")).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Role for NormalUser"), { target: { value: "1" } });
     await waitFor(() => expect(calls.some((call) => call.method === "PUT" && call.path === "/api/admin/users/2/role")).toBe(true));

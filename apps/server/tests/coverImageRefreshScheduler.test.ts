@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   refreshCoverImagesAndBroadcast,
+  scheduleChallengeRunnerLogoRefresh,
   scheduleCoverImageRefresh,
   scheduleHowLongToBeatRefresh,
   scheduleTwitchStreamStatsSync
@@ -137,6 +138,36 @@ describe("cover image refresh scheduler", () => {
 
     scheduler.stop();
     expect(logger.info).toHaveBeenCalledWith("Twitch stream stats sync service is stopping");
+  });
+
+  it("refreshes challenge runner profile pictures on a repeating schedule after a staggered startup delay", async () => {
+    vi.useFakeTimers();
+    const challengeRunnerLogoRefresh = {
+      refreshLogos: vi.fn().mockResolvedValue({ total: 3, updated: 1, unchanged: 1, errors: 1 })
+    };
+    const logger = { info: vi.fn(), error: vi.fn() };
+
+    const scheduler = scheduleChallengeRunnerLogoRefresh({
+      challengeRunnerLogoRefresh,
+      logger,
+      initialDelayMs: 1_000,
+      intervalMs: 5_000
+    });
+
+    await vi.advanceTimersByTimeAsync(999);
+    expect(challengeRunnerLogoRefresh.refreshLogos).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(challengeRunnerLogoRefresh.refreshLogos).toHaveBeenCalledTimes(1);
+    expect(logger.info).toHaveBeenCalledWith(
+      { total: 3, updated: 1, unchanged: 1, errors: 1 },
+      "Scheduled challenge runner profile picture refresh completed"
+    );
+
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(challengeRunnerLogoRefresh.refreshLogos).toHaveBeenCalledTimes(2);
+    scheduler.stop();
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(challengeRunnerLogoRefresh.refreshLogos).toHaveBeenCalledTimes(2);
   });
 
   it("drains HowLongToBeat backlog batches before switching to the maintenance interval", async () => {

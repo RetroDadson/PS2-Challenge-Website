@@ -38,6 +38,7 @@ describe("public site routes", () => {
     expect(response.headers["content-type"]).toContain("application/xml");
     expect(response.body).toContain("<loc>https://challenge.retrodadson.example/</loc>");
     expect(response.body).toContain("<loc>https://challenge.retrodadson.example/statistics</loc>");
+    expect(response.body).toContain("<loc>https://challenge.retrodadson.example/runners</loc>");
     expect(response.body).not.toContain("appservice.example");
   });
 

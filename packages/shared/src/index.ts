@@ -1,4 +1,5 @@
 export * from "./schemas/common.js";
+export * from "./schemas/challengeRunners.js";
 export * from "./schemas/games.js";
 export * from "./schemas/health.js";
 export * from "./schemas/users.js";

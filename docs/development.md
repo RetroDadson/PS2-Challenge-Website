@@ -35,6 +35,7 @@ Database connection strings are resolved in this order:
 4. `ConnectionStrings:DefaultConnection` from appsettings files
 
 Twitch credentials are loaded from `TWITCH_CLIENT_ID`/`TWITCH_CLIENT_SECRET`, `Twitch__ClientId`/`Twitch__ClientSecret`, or appsettings.
+The optional YouTube Data API key used for challenge-runner logos is loaded from `YOUTUBE_API_KEY`, `YouTube__ApiKey`, or appsettings.
 
 Useful environment variables:
 
@@ -43,6 +44,7 @@ Useful environment variables:
 - `ADMIN_API_KEY` - deployment secret and fallback cookie signing secret
 - `COOKIE_SECRET` - preferred cookie signing secret
 - `LOG_LEVEL` - Fastify logger level outside test environments
+- `YOUTUBE_API_KEY` - YouTube Data API v3 key for challenge-runner channel logos when no Twitch URL is available
 - `APPLICATIONINSIGHTS_CONNECTION_STRING` - Azure Application Insights connection string
 - `APPINSIGHTS_INSTRUMENTATIONKEY` - legacy Application Insights fallback
 

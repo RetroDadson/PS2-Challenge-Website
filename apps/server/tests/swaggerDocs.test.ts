@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { openApiRefResolver, openApiTransform, registerOpenApiSchemas } from "../src/openapi/schemas.js";
 import { registerAdminRoutes } from "../src/routes/adminRoutes.js";
 import { registerAuthRoutes } from "../src/routes/authRoutes.js";
+import { registerChallengeRunnerRoutes } from "../src/routes/challengeRunnerRoutes.js";
 import { registerGamesRoutes } from "../src/routes/gamesRoutes.js";
 import { registerHealthRoutes } from "../src/routes/healthRoutes.js";
 import { registerTwitchRoutes } from "../src/routes/twitchRoutes.js";
@@ -48,7 +49,8 @@ describe("swagger docs", () => {
     const userRepository = {} as never;
     await registerAuthRoutes(app, userRepository, config);
     await registerUserRoutes(app, userRepository, config);
-    await registerAdminRoutes(app, userRepository, config);
+    await registerAdminRoutes(app, userRepository, config, fakeTwitchStatsService());
+    await registerChallengeRunnerRoutes(app, {} as never, {} as never, {} as never, userRepository, config);
     await registerGamesRoutes(app, fakeGameService(), userRepository, config, fakeRealtimeHub());
     await registerTwitchRoutes(app, fakeTwitchStatsService());
     await registerVotesRoutes(app, fakeVoteService(), userRepository, config, fakeRealtimeHub());
@@ -74,6 +76,11 @@ describe("swagger docs", () => {
     expect(document.paths["/api/votes/current/by-game-number"].put.requestBody).toBeDefined();
     expect(document.paths["/api/twitch/stream-stats"].get.responses["200"]).toBeDefined();
     expect(document.paths["/api/admin/users/{userId}/role"].put.security).toEqual([{ ApiKey: [] }, { Cookie: [] }]);
+    expect(document.paths["/api/challenge-runners"].get.responses["200"]).toBeDefined();
+    expect(document.paths["/api/admin/challenge-runners"].post.security).toEqual([{ ApiKey: [] }, { Cookie: [] }]);
+    expect(document.paths["/api/admin/challenge-runners/refresh-logos"].post.responses["200"]).toBeDefined();
+    expect(document.paths["/api/admin/challenge-runners/{id}"].put.requestBody).toBeDefined();
+    expect(document.paths["/api/admin/update-twitch-stream-stats"].post.responses["200"]).toBeDefined();
     expect(document.paths["/api/user/preferences/game-table-columns"].put.requestBody).toBeDefined();
     expect(document.paths["/api/user/preferences/game-table-columns"].put.security).toEqual([{ ApiKey: [] }, { Cookie: [] }]);
     expect(document.paths["/api/health"].get.responses["503"]).toBeDefined();
@@ -113,7 +120,18 @@ function fakeVoteService() {
 }
 
 function fakeTwitchStatsService() {
-  return {} as never;
+  return {
+    getRecentStreamStats: async () => ({
+      channelLogin: "retrodadson",
+      rangeStart: "2024-01-01T00:00:00.000Z",
+      rangeEnd: "2024-02-26T00:00:00.000Z",
+      rangeWeeks: 8,
+      totalStreamSeconds: 7200,
+      averageWeeklyStreamSeconds: 900,
+      vodCount: 2
+    }),
+    syncRecentStreams: async () => ({ channelLogin: "retrodadson", checked: 3, upserted: 2, skipped: 1 })
+  };
 }
 
 function fakeRealtimeHub() {

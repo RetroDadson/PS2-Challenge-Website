@@ -7,7 +7,8 @@ const sitemapPages = [
   { path: "/games", changefreq: "daily", priority: "0.9" },
   { path: "/progress", changefreq: "daily", priority: "0.8" },
   { path: "/votes", changefreq: "daily", priority: "0.9" },
-  { path: "/statistics", changefreq: "weekly", priority: "0.7" }
+  { path: "/statistics", changefreq: "weekly", priority: "0.7" },
+  { path: "/runners", changefreq: "weekly", priority: "0.6" }
 ] as const;
 const sitemapXmlNamespace = `http${"://"}www.sitemaps.org/schemas/sitemap/0.9`;
 

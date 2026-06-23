@@ -46,7 +46,7 @@ Start the app:
 npm run dev
 ```
 
-Fill in the copied `apps/server/appsettings.Development.json` with local Postgres and Twitch values. Environment variables can be used instead and take precedence over appsettings files.
+Fill in the copied `apps/server/appsettings.Development.json` with local Postgres and Twitch values. A YouTube Data API key is also needed to fetch a challenge runner's logo when they do not have a Twitch URL. Environment variables can be used instead and take precedence over appsettings files.
 
 Development URLs:
 
@@ -54,6 +54,37 @@ Development URLs:
 - Fastify API and static frontend snapshot: `http://localhost:5001`
 - Swagger UI: `http://localhost:5001/swagger`
 - Health: `http://localhost:5001/health`
+
+## YouTube Data API Key
+
+Challenge-runner logos are loaded from Twitch when a Twitch URL is present. For runners with only a YouTube URL, the server uses the YouTube Data API v3 and needs an API key.
+
+1. Open the [Google Cloud Console](https://console.cloud.google.com/) and create or select a project.
+2. Go to **APIs & Services > Library**.
+3. Find **YouTube Data API v3** and select **Enable**.
+4. Go to **APIs & Services > Credentials**.
+5. Select **Create credentials > API key**.
+6. Edit the new key and set **API restrictions** to **Restrict key > YouTube Data API v3**.
+7. Because Fastify makes the request server-side, do not use a browser HTTP-referrer restriction. Use an IP-address restriction only when the server has known, stable outbound IP addresses.
+8. Store the key outside source control as `YOUTUBE_API_KEY`.
+
+For Docker development, add it to the repository's untracked `.env` file:
+
+```dotenv
+YOUTUBE_API_KEY=your_youtube_data_api_key
+```
+
+For local development without Docker, either set the environment variable before starting the app or add the key to the ignored `apps/server/appsettings.Development.json` file:
+
+```json
+{
+  "YouTube": {
+    "ApiKey": "your_youtube_data_api_key"
+  }
+}
+```
+
+For deployed environments, configure `YOUTUBE_API_KEY` as a secret environment variable in the hosting platform. Never commit the real key.
 
 ## Useful Commands
 
