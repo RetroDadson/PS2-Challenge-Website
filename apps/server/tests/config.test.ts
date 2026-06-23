@@ -44,21 +44,24 @@ describe("config", () => {
       path.join(settingsDir, "appsettings.json"),
       JSON.stringify({
         ConnectionStrings: { DefaultConnection: "Host=base;Database=base_db;Username=base_user;Password=base_password" },
-        Twitch: { ClientId: "base-client", ClientSecret: "base-secret", ChannelLogin: "base-channel" }
+        Twitch: { ClientId: "base-client", ClientSecret: "base-secret", ChannelLogin: "base-channel" },
+        YouTube: { ApiKey: "base-youtube-key" }
       })
     );
     fs.writeFileSync(
       path.join(settingsDir, "appsettings.Development.json"),
       JSON.stringify({
         ConnectionStrings: { DefaultConnection: "Host=dev;Database=dev_db;Username=dev_user;Password=dev_password" },
-        Twitch: { ClientId: "dev-client", ClientSecret: "dev-secret", ChannelLogin: "dev-channel" }
+        Twitch: { ClientId: "dev-client", ClientSecret: "dev-secret", ChannelLogin: "dev-channel" },
+        YouTube: { ApiKey: "dev-youtube-key" }
       })
     );
 
     process.env = {
       APPSETTINGS_DIR: settingsDir,
       ASPNETCORE_ENVIRONMENT: "Development",
-      TWITCH_CLIENT_SECRET: "env-secret"
+      TWITCH_CLIENT_SECRET: "env-secret",
+      YOUTUBE_API_KEY: "env-youtube-key"
     };
 
     const config = loadConfig(false);
@@ -68,6 +71,7 @@ describe("config", () => {
     expect(config.twitchClientId).toBe("dev-client");
     expect(config.twitchClientSecret).toBe("env-secret");
     expect(config.twitchChannelLogin).toBe("dev-channel");
+    expect(config.youtubeApiKey).toBe("env-youtube-key");
   });
 
   it("resolves Azure-style connection strings, public base URLs, cookie secrets, and App Insights keys", () => {
@@ -163,17 +167,21 @@ describe("config", () => {
     expect(config.cookieSecret).toHaveLength(64);
   });
 
-  it("uses ApiBaseUrl and appsetting Twitch fallbacks", () => {
+  it("uses ApiBaseUrl and appsetting service fallbacks when environment values are blank", () => {
     const settingsDir = fs.mkdtempSync(path.join(os.tmpdir(), "ps2-config-api-base-"));
     fs.writeFileSync(path.join(settingsDir, "appsettings.json"), JSON.stringify({
       PublicBaseUrl: null,
       ApiBaseUrl: "https://api-base.example",
-      Twitch: { ClientId: "settings-client", ClientSecret: "settings-secret" }
+      Twitch: { ClientId: "settings-client", ClientSecret: "settings-secret" },
+      YouTube: { ApiKey: "settings-youtube-key" }
     }));
     process.env = {
       APPSETTINGS_DIR: settingsDir,
       NODE_ENV: "Testing",
-      DATABASE_CONNECTION_STRING: "postgresql://localhost/test"
+      DATABASE_CONNECTION_STRING: "postgresql://localhost/test",
+      TWITCH_CLIENT_ID: "",
+      TWITCH_CLIENT_SECRET: "",
+      YOUTUBE_API_KEY: ""
     };
 
     const config = loadConfig();
@@ -181,6 +189,7 @@ describe("config", () => {
     expect(config.publicBaseUrl).toBe("https://api-base.example");
     expect(config.twitchClientId).toBe("settings-client");
     expect(config.twitchClientSecret).toBe("settings-secret");
+    expect(config.youtubeApiKey).toBe("settings-youtube-key");
   });
 
   it("preserves opaque connection strings and explicit SSL modes", () => {

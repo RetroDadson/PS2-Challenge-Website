@@ -11,10 +11,11 @@ export type AppConfig = {
   twitchClientId: string;
   twitchClientSecret: string;
   twitchChannelLogin: string;
+  youtubeApiKey?: string;
   publicBaseUrl: string;
   cookieSecret: string;
   logLevel: string;
-  applicationInsightsConnectionString?: string | undefined;
+  applicationInsightsConnectionString?: string;
 };
 
 type AppSettings = {
@@ -25,6 +26,9 @@ type AppSettings = {
     ClientId?: string;
     ClientSecret?: string;
     ChannelLogin?: string;
+  };
+  YouTube?: {
+    ApiKey?: string;
   };
   ApiBaseUrl?: string;
   PublicBaseUrl?: string;
@@ -55,15 +59,18 @@ export function loadConfig(validate = true): AppConfig {
   const settings = loadAppSettings(nodeEnv);
   const port = Number.parseInt(process.env.PORT ?? "5001", 10);
   const databaseConnectionString = resolveConnectionString(settings);
-  const twitchClientId = process.env.TWITCH_CLIENT_ID ?? process.env.Twitch__ClientId ?? settings.Twitch?.ClientId ?? "";
-  const twitchClientSecret = process.env.TWITCH_CLIENT_SECRET ?? process.env.Twitch__ClientSecret ?? settings.Twitch?.ClientSecret ?? "";
-  const twitchChannelLogin = process.env.TWITCH_CHANNEL_LOGIN ?? process.env.Twitch__ChannelLogin ?? settings.Twitch?.ChannelLogin ?? "retrodadson";
+  const twitchClientId = firstNonBlank(process.env.TWITCH_CLIENT_ID, process.env.Twitch__ClientId, settings.Twitch?.ClientId) ?? "";
+  const twitchClientSecret = firstNonBlank(process.env.TWITCH_CLIENT_SECRET, process.env.Twitch__ClientSecret, settings.Twitch?.ClientSecret) ?? "";
+  const twitchChannelLogin =
+    firstNonBlank(process.env.TWITCH_CHANNEL_LOGIN, process.env.Twitch__ChannelLogin, settings.Twitch?.ChannelLogin) ?? "retrodadson";
+  const youtubeApiKey = firstNonBlank(process.env.YOUTUBE_API_KEY, process.env.YouTube__ApiKey, settings.YouTube?.ApiKey) ?? "";
   const configuredPort = Number.isFinite(port) ? port : 5001;
   const fallbackPublicBaseUrl = new URL(`http://localhost:${configuredPort}`).toString().replace(/\/$/, "");
   const publicBaseUrl =
     process.env.PUBLIC_BASE_URL ?? settings.PublicBaseUrl ?? settings.ApiBaseUrl ?? fallbackPublicBaseUrl;
   const configuredCookieSecret = process.env.COOKIE_SECRET ?? process.env.ADMIN_API_KEY;
   const logLevel = process.env.LOG_LEVEL ?? "info";
+  const applicationInsightsConnectionString = resolveApplicationInsightsConnectionString();
 
   const config: AppConfig = {
     nodeEnv,
@@ -72,10 +79,11 @@ export function loadConfig(validate = true): AppConfig {
     twitchClientId,
     twitchClientSecret,
     twitchChannelLogin,
+    youtubeApiKey,
     publicBaseUrl,
     cookieSecret: configuredCookieSecret ?? crypto.randomBytes(32).toString("hex"),
     logLevel,
-    applicationInsightsConnectionString: resolveApplicationInsightsConnectionString()
+    ...(applicationInsightsConnectionString ? { applicationInsightsConnectionString } : {})
   };
 
   if (shouldValidateConfig(validate, normalizedNodeEnv)) {
@@ -124,6 +132,10 @@ function resolveNodeEnv(): string {
   );
 }
 
+function firstNonBlank(...values: Array<string | undefined>): string | undefined {
+  return values.find((value) => value?.trim())?.trim();
+}
+
 function loadAppSettings(nodeEnv: string): AppSettings {
   const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
   const candidates = [
@@ -153,6 +165,7 @@ function mergeSettings(left: AppSettings, right: AppSettings): AppSettings {
   const settings: AppSettings = { ...left, ...right };
   const connectionStrings = mergeSettingsSection(left.ConnectionStrings, right.ConnectionStrings);
   const twitch = mergeSettingsSection(left.Twitch, right.Twitch);
+  const youtube = mergeSettingsSection(left.YouTube, right.YouTube);
 
   if (connectionStrings) {
     settings.ConnectionStrings = connectionStrings;
@@ -164,6 +177,12 @@ function mergeSettings(left: AppSettings, right: AppSettings): AppSettings {
     settings.Twitch = twitch;
   } else {
     delete settings.Twitch;
+  }
+
+  if (youtube) {
+    settings.YouTube = youtube;
+  } else {
+    delete settings.YouTube;
   }
 
   return settings;
