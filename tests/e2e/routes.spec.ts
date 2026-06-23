@@ -7,13 +7,22 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("serves primary routes", async ({ page }) => {
+  await page.route("**/api/challenge-runners", async (route) => {
+    await route.fulfill({ json: [{ id: 1, name: "Runner One", description: "Completing every PAL PS2 game.", twitchUrl: "https://www.twitch.tv/runnerone", youtubeUrl: null, logoUrl: "https://static-cdn.jtvnw.net/runnerone.png" }] });
+  });
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Dadson's PS2 Challenge" })).toBeVisible();
+  await expect(page.getByRole("link", { name: /Explore the runner directory/i })).toHaveAttribute("href", "/runners");
   await expect(page).toHaveTitle("Home - Dadson's PS2 Challenge");
 
   await page.goto("/login");
   await expect(page.getByRole("heading", { name: "Login with Twitch" })).toBeVisible();
   await expect(page).toHaveTitle("Login - Dadson's PS2 Challenge");
+
+  await page.goto("/runners");
+  await expect(page.getByRole("heading", { name: "Other Challenge Runners" })).toBeVisible();
+  await expect(page.getByText("Completing every PAL PS2 game.")).toBeVisible();
+  await expect(page).toHaveTitle("Challenge Runners - Dadson's PS2 Challenge");
 
   await page.goto("/missing-route");
   await expect(page.getByRole("alert")).toHaveText("Sorry, there's nothing at this address.");

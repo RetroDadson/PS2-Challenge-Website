@@ -16,6 +16,16 @@ export interface Database {
     title: string;
     notes: string | null;
   };
+  challenge_runners: {
+    challenge_runner_id: Generated<number>;
+    name: string;
+    description: string;
+    twitch_url: string | null;
+    youtube_url: string | null;
+    logo_url: string | null;
+    created_at: Timestamp;
+    updated_at: Timestamp;
+  };
   current_vote: {
     vote_id: Generated<number>;
     game_id: number;

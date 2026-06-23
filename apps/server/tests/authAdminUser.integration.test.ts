@@ -6,6 +6,7 @@ import { authCookieName, createSessionCookie } from "../src/auth/session.js";
 import { createDbClient } from "../src/db/client.js";
 import { hashApiKey } from "../src/repositories/userRepository.js";
 import { buildApp } from "../src/server.js";
+import { ChallengeRunnerLogoLookupError } from "../src/services/challengeRunnerLogoService.js";
 import { seedUser, startIntegrationDatabase, type IntegrationDatabase } from "./helpers/postgres.js";
 
 const adminApiKey = "admin-api-key";
@@ -30,7 +31,31 @@ describe("auth, admin, and user API contract parity", () => {
         publicBaseUrl: "http://localhost",
         cookieSecret
       },
-      { dbClient: createDbClient({ databaseConnectionString: db.connectionString }) }
+      {
+        dbClient: createDbClient({ databaseConnectionString: db.connectionString }),
+        challengeRunnerLogoService: {
+          resolveLogo: async (input) => {
+            if (input.name === "Logo Failure") {
+              throw new ChallengeRunnerLogoLookupError("YouTube logo lookup is not configured", 503);
+            }
+            return input.twitchUrl
+              ? "https://static-cdn.jtvnw.net/runnerone.png"
+              : "https://yt3.ggpht.com/runnerone";
+          }
+        },
+        twitchStreamStatsService: {
+          getRecentStreamStats: async () => ({
+            channelLogin: "retrodadson",
+            rangeStart: "2024-01-01T00:00:00.000Z",
+            rangeEnd: "2024-02-26T00:00:00.000Z",
+            rangeWeeks: 8,
+            totalStreamSeconds: 7200,
+            averageWeeklyStreamSeconds: 900,
+            vodCount: 2
+          }),
+          syncRecentStreams: async () => ({ channelLogin: "retrodadson", checked: 3, upserted: 2, skipped: 1 })
+        }
+      }
     );
   }, 120_000);
 
@@ -285,8 +310,149 @@ describe("auth, admin, and user API contract parity", () => {
       payload: { order: ["title", "cover"], hidden: [] }
     });
     expect(invalid.statusCode).toBe(400);
+
+    const logoFailure = await app.inject({
+      method: "POST",
+      url: "/api/admin/challenge-runners",
+      headers: adminHeaders(),
+      payload: { ...runnerPayload(), name: "Logo Failure" }
+    });
+    expect(logoFailure.statusCode).toBe(503);
+    expect(logoFailure.json()).toEqual({ message: "YouTube logo lookup is not configured" });
+  });
+
+  it("publishes challenge runners while restricting create, update, and delete to admins", async () => {
+    const anonymousInitial = await app.inject({ method: "GET", url: "/api/challenge-runners" });
+    expect(anonymousInitial.statusCode).toBe(200);
+    expect(anonymousInitial.json()).toEqual([]);
+
+    const forbidden = await app.inject({
+      method: "POST",
+      url: "/api/admin/challenge-runners",
+      headers: { "x-api-key": userApiKey },
+      payload: runnerPayload()
+    });
+    expect(forbidden.statusCode).toBe(403);
+
+    const invalid = await app.inject({
+      method: "POST",
+      url: "/api/admin/challenge-runners",
+      headers: adminHeaders(),
+      payload: { ...runnerPayload(), twitchUrl: null, youtubeUrl: null }
+    });
+    expect(invalid.statusCode).toBe(400);
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/admin/challenge-runners",
+      headers: adminHeaders(),
+      payload: runnerPayload()
+    });
+    expect(created.statusCode).toBe(201);
+    expect(created.json()).toEqual({ id: 1, ...runnerPayload(), logoUrl: "https://static-cdn.jtvnw.net/runnerone.png" });
+
+    const updated = await app.inject({
+      method: "PUT",
+      url: "/api/admin/challenge-runners/1",
+      headers: adminHeaders(),
+      payload: { ...runnerPayload(), description: "An updated challenge description", twitchUrl: null, youtubeUrl: "https://www.youtube.com/@runnerone" }
+    });
+    expect(updated.statusCode).toBe(200);
+    expect(updated.json()).toEqual(expect.objectContaining({
+      id: 1,
+      description: "An updated challenge description",
+      logoUrl: "https://yt3.ggpht.com/runnerone"
+    }));
+
+    await db.pool.query("UPDATE challenge_runners SET logo_url = $1 WHERE challenge_runner_id = $2", ["https://images.example/stale.png", 1]);
+    const forbiddenRefresh = await app.inject({
+      method: "POST",
+      url: "/api/admin/challenge-runners/refresh-logos",
+      headers: { "x-api-key": userApiKey },
+      payload: {}
+    });
+    expect(forbiddenRefresh.statusCode).toBe(403);
+
+    const refreshed = await app.inject({
+      method: "POST",
+      url: "/api/admin/challenge-runners/refresh-logos",
+      headers: adminHeaders(),
+      payload: {}
+    });
+    expect(refreshed.statusCode).toBe(200);
+    expect(refreshed.json()).toEqual({
+      message: "Challenge runner profile picture refresh completed",
+      total: 1,
+      updated: 1,
+      unchanged: 0,
+      errors: 0
+    });
+
+    const unchangedRefresh = await app.inject({
+      method: "POST",
+      url: "/api/admin/challenge-runners/refresh-logos",
+      headers: adminHeaders(),
+      payload: {}
+    });
+    expect(unchangedRefresh.json()).toEqual(expect.objectContaining({ updated: 0, unchanged: 1, errors: 0 }));
+
+    const missingUpdate = await app.inject({
+      method: "PUT",
+      url: "/api/admin/challenge-runners/999",
+      headers: adminHeaders(),
+      payload: runnerPayload()
+    });
+    expect(missingUpdate.statusCode).toBe(404);
+    expect(missingUpdate.json()).toEqual({ message: "Challenge runner not found" });
+
+    const listed = await app.inject({ method: "GET", url: "/api/challenge-runners" });
+    expect(listed.json()).toEqual([updated.json()]);
+
+    const removed = await app.inject({ method: "DELETE", url: "/api/admin/challenge-runners/1", headers: adminHeaders() });
+    expect(removed.statusCode).toBe(200);
+    expect(removed.json()).toEqual({ message: "Challenge runner deleted" });
+
+    const missing = await app.inject({ method: "DELETE", url: "/api/admin/challenge-runners/1", headers: adminHeaders() });
+    expect(missing.statusCode).toBe(404);
+  });
+
+  it("restricts manual Twitch stream statistics updates to admins", async () => {
+    const anonymous = await app.inject({ method: "POST", url: "/api/admin/update-twitch-stream-stats", payload: {} });
+    expect(anonymous.statusCode).toBe(401);
+
+    const forbidden = await app.inject({
+      method: "POST",
+      url: "/api/admin/update-twitch-stream-stats",
+      headers: { "x-api-key": userApiKey },
+      payload: {}
+    });
+    expect(forbidden.statusCode).toBe(403);
+
+    const updated = await app.inject({
+      method: "POST",
+      url: "/api/admin/update-twitch-stream-stats",
+      headers: adminHeaders(),
+      payload: {}
+    });
+    expect(updated.statusCode).toBe(200);
+    expect(updated.json()).toEqual({
+      message: "Twitch stream statistics update completed",
+      channelLogin: "retrodadson",
+      checked: 3,
+      upserted: 2,
+      skipped: 1
+    });
   });
 });
+
+function runnerPayload() {
+  return {
+    name: "Runner One",
+    description: "Completing every PAL PS2 game.",
+    twitchUrl: "https://www.twitch.tv/runnerone",
+    youtubeUrl: null
+  };
+}
 
 function adminHeaders() {
   return {

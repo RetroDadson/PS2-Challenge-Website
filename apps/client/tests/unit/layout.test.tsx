@@ -30,6 +30,7 @@ describe("Layout", () => {
     renderLayout();
 
     expect(await screen.findByRole("link", { name: "Login" })).toHaveAttribute("href", "/login");
+    expect(screen.getByRole("link", { name: "Challenge Runners" })).toHaveAttribute("href", "/runners");
     expect(within(screen.getByLabelText("Utilities")).getByRole("link", { name: "API Docs" })).toHaveAttribute("href", "/swagger");
     fireEvent.click(screen.getByText("Watch the Challenge"));
     expect(screen.getByRole("link", { name: "Twitch" })).toHaveAttribute("href", "https://www.twitch.tv/retrodadson");

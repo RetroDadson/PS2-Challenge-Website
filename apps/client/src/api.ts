@@ -1,5 +1,7 @@
 import type {
   AdminUserDto,
+  ChallengeRunnerDto,
+  ChallengeRunnerInput,
   CurrentVoteDto,
   GameDto,
   GameTablePreferencesDto,
@@ -44,6 +46,14 @@ export type HowLongToBeatRefreshResult = {
   errors: number;
 };
 
+export type ChallengeRunnerLogoRefreshResult = {
+  message?: string;
+  total: number;
+  updated: number;
+  unchanged: number;
+  errors: number;
+};
+
 export type HowLongToBeatRefreshProgress = HowLongToBeatRefreshResult & {
   status: "starting" | "searching" | "updated" | "unchanged" | "notFound" | "error" | "completed";
   processed: number;
@@ -60,6 +70,14 @@ export type TwitchStreamStatsDto = {
   totalStreamSeconds: number;
   averageWeeklyStreamSeconds: number;
   vodCount: number;
+};
+
+export type TwitchStreamSyncResult = {
+  message?: string;
+  channelLogin: string;
+  checked: number;
+  upserted: number;
+  skipped: number;
 };
 
 type CoverRefreshStreamEvent =
@@ -155,6 +173,17 @@ export const api = {
   adminUsers: () => request<AdminUserDto[]>("/api/admin/users"),
   roles: () => request<RoleDto[]>("/api/admin/roles"),
   updateRole: (userId: number, roleId: number) => request(`/api/admin/users/${userId}/role`, { method: "PUT", body: JSON.stringify({ roleId }) }),
+  challengeRunners: () => request<ChallengeRunnerDto[]>("/api/challenge-runners"),
+  createChallengeRunner: (runner: ChallengeRunnerInput) =>
+    request<ChallengeRunnerDto>("/api/admin/challenge-runners", { method: "POST", body: JSON.stringify(runner) }),
+  updateChallengeRunner: (id: number, runner: ChallengeRunnerInput) =>
+    request<ChallengeRunnerDto>(`/api/admin/challenge-runners/${id}`, { method: "PUT", body: JSON.stringify(runner) }),
+  deleteChallengeRunner: (id: number) =>
+    request<{ message: string }>(`/api/admin/challenge-runners/${id}`, { method: "DELETE" }),
+  refreshChallengeRunnerLogos: () =>
+    request<ChallengeRunnerLogoRefreshResult>("/api/admin/challenge-runners/refresh-logos", { method: "POST", body: "{}" }),
+  refreshTwitchStreamStats: () =>
+    request<TwitchStreamSyncResult>("/api/admin/update-twitch-stream-stats", { method: "POST", body: "{}" }),
   refreshCovers: () => request<CoverRefreshResult>("/api/admin/update-cover-images", { method: "POST", body: "{}" }),
   refreshCoversWithProgress: (onProgress: (progress: CoverRefreshProgress) => void) => refreshCoversWithProgress(onProgress),
   refreshHowLongToBeat: () => request<HowLongToBeatRefreshResult>("/api/admin/update-howlongtobeat", { method: "POST", body: "{}" }),

@@ -1,3 +1,4 @@
+import { ArrowRight, Gamepad2, Trophy, Users } from "lucide-react";
 import { Link } from "react-router-dom";
 
 export function Home() {
@@ -30,6 +31,32 @@ export function Home() {
           <a href="https://www.youtube.com/@dadson1996" target="_blank" rel="noreferrer" aria-label="YouTube">
             <img src="/assets/yt_icon_red_digital.png" alt="" />
           </a>
+        </div>
+      </section>
+
+      <section className="home-runners-feature" aria-labelledby="home-runners-heading">
+        <div className="home-runners-visual" aria-hidden="true">
+          <span className="home-runners-orbit home-runners-orbit-one" />
+          <span className="home-runners-orbit home-runners-orbit-two" />
+          <span className="home-runners-node home-runners-node-games"><Gamepad2 /></span>
+          <span className="home-runners-node home-runners-node-trophy"><Trophy /></span>
+          <span className="home-runners-node home-runners-node-community"><Users /></span>
+          <div className="home-runners-visual-copy">
+            <strong>One community</strong>
+            <span>Countless challenges</span>
+          </div>
+        </div>
+
+        <div className="home-runners-copy">
+          <p className="home-runners-eyebrow">Beyond the PS2</p>
+          <h2 id="home-runners-heading">Meet other console challenge runners</h2>
+          <p>
+            Find creators taking on complete libraries, regional collections, and ambitious gaming
+            journeys across different consoles.
+          </p>
+          <Link className="home-runners-link" to="/runners">
+            Explore the runner directory <ArrowRight aria-hidden />
+          </Link>
         </div>
       </section>
     </section>

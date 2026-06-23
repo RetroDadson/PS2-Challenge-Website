@@ -15,9 +15,11 @@ import { migrateDatabase } from "./db/migrate.js";
 import { openApiRefResolver, openApiTransform, registerOpenApiSchemas } from "./openapi/schemas.js";
 import { RealtimeHub } from "./realtime/hub.js";
 import { TwitchStreamRepository } from "./repositories/twitchStreamRepository.js";
+import { ChallengeRunnerRepository } from "./repositories/challengeRunnerRepository.js";
 import { UserRepository } from "./repositories/userRepository.js";
 import { registerAdminRoutes } from "./routes/adminRoutes.js";
 import { registerAuthRoutes } from "./routes/authRoutes.js";
+import { registerChallengeRunnerRoutes } from "./routes/challengeRunnerRoutes.js";
 import { registerGamesRoutes } from "./routes/gamesRoutes.js";
 import { registerHealthRoutes } from "./routes/healthRoutes.js";
 import { registerPublicSiteRoutes } from "./routes/publicSiteRoutes.js";
@@ -29,10 +31,18 @@ import { GameService } from "./services/gameService.js";
 import { HowLongToBeatRefreshService, type HowLongToBeatDueRefreshResult } from "./services/howLongToBeatService.js";
 import { TwitchStreamStatsService } from "./services/twitchStreamStatsService.js";
 import { VoteService } from "./services/voteService.js";
+import { ChallengeRunnerLogoService } from "./services/challengeRunnerLogoService.js";
+import {
+  ChallengeRunnerLogoRefreshService,
+  type ChallengeRunnerLogoRefreshResult
+} from "./services/challengeRunnerLogoRefreshService.js";
 
 export type AppDependencies = {
   dbClient?: DbClient;
   realtimeHub?: RealtimeHub;
+  challengeRunnerLogoService?: Pick<ChallengeRunnerLogoService, "resolveLogo">;
+  challengeRunnerLogoRefreshService?: Pick<ChallengeRunnerLogoRefreshService, "refreshLogos">;
+  twitchStreamStatsService?: Pick<TwitchStreamStatsService, "getRecentStreamStats" | "syncRecentStreams">;
 };
 
 type SchedulerLogger = Pick<FastifyBaseLogger, "error" | "info">;
@@ -41,6 +51,7 @@ type CoverRefreshJob = Pick<CoverImageRefreshService, "refreshCoverImages"> & Pa
 type CoverRefreshSummary = Pick<CoverImageRefreshResult, "updated"> & Partial<Omit<CoverImageRefreshResult, "updated">>;
 type HowLongToBeatRefreshJob = Pick<HowLongToBeatRefreshService, "refreshDueHowLongToBeatDataDetailed">;
 type TwitchStreamStatsJob = Pick<TwitchStreamStatsService, "syncRecentStreams">;
+type ChallengeRunnerLogoRefreshJob = Pick<ChallengeRunnerLogoRefreshService, "refreshLogos">;
 
 type CoverRefreshSchedulerOptions = {
   coverRefresh: CoverRefreshJob;
@@ -63,6 +74,13 @@ type HowLongToBeatRefreshSchedulerOptions = {
 
 type TwitchStreamStatsSchedulerOptions = {
   twitchStats: TwitchStreamStatsJob;
+  logger?: SchedulerLogger;
+  initialDelayMs?: number;
+  intervalMs?: number;
+};
+
+type ChallengeRunnerLogoRefreshSchedulerOptions = {
+  challengeRunnerLogoRefresh: ChallengeRunnerLogoRefreshJob;
   logger?: SchedulerLogger;
   initialDelayMs?: number;
   intervalMs?: number;
@@ -126,9 +144,14 @@ export async function buildApp(config: AppConfig, dependencies: AppDependencies 
   const realtimeHub = dependencies.realtimeHub ?? new RealtimeHub(app.log);
   realtimeHub.setLogger(app.log);
   const userRepository = new UserRepository(dbClient.db);
+  const challengeRunnerRepository = new ChallengeRunnerRepository(dbClient.db);
+  const challengeRunnerLogoService = dependencies.challengeRunnerLogoService ?? new ChallengeRunnerLogoService(config);
+  const challengeRunnerLogoRefreshService =
+    dependencies.challengeRunnerLogoRefreshService ??
+    new ChallengeRunnerLogoRefreshService(challengeRunnerRepository, challengeRunnerLogoService, app.log);
   const gameService = new GameService(pool, dbClient.db);
   const twitchStatsRepository = new TwitchStreamRepository(dbClient.db);
-  const twitchStatsService = new TwitchStreamStatsService(config, twitchStatsRepository);
+  const twitchStatsService = dependencies.twitchStreamStatsService ?? new TwitchStreamStatsService(config, twitchStatsRepository);
   const voteService = new VoteService(pool, dbClient.db);
 
   app.get("/votesHub", { websocket: true }, (socket) => realtimeHub.register("votes", socket));
@@ -137,7 +160,15 @@ export async function buildApp(config: AppConfig, dependencies: AppDependencies 
   await registerHealthRoutes(app, () => dbClient.db.selectFrom("platform_types").select("platform").limit(1).executeTakeFirst());
   await registerAuthRoutes(app, userRepository, config);
   await registerUserRoutes(app, userRepository, config);
-  await registerAdminRoutes(app, userRepository, config);
+  await registerAdminRoutes(app, userRepository, config, twitchStatsService);
+  await registerChallengeRunnerRoutes(
+    app,
+    challengeRunnerRepository,
+    challengeRunnerLogoService,
+    challengeRunnerLogoRefreshService,
+    userRepository,
+    config
+  );
   await registerGamesRoutes(app, gameService, userRepository, config, realtimeHub);
   await registerTwitchRoutes(app, twitchStatsService);
   await registerVotesRoutes(app, voteService, userRepository, config, realtimeHub);
@@ -173,17 +204,25 @@ export async function startApp(config: AppConfig): Promise<FastifyInstance> {
   await migrateDatabase(config.databaseConnectionString);
   const dbClient = createDbClient(config);
   const realtimeHub = new RealtimeHub();
-  const app = await buildApp(config, { dbClient, realtimeHub });
+  const challengeRunnerLogoService = new ChallengeRunnerLogoService(config);
+  const twitchStats = new TwitchStreamStatsService(config, new TwitchStreamRepository(dbClient.db));
+  const app = await buildApp(config, { dbClient, realtimeHub, challengeRunnerLogoService, twitchStreamStatsService: twitchStats });
   const coverRefresh = new CoverImageRefreshService(dbClient.pool, undefined, dbClient.db);
   const howLongToBeatRefresh = new HowLongToBeatRefreshService(dbClient.pool, undefined, dbClient.db, { requestDelayMs: 1000 });
-  const twitchStats = new TwitchStreamStatsService(config, new TwitchStreamRepository(dbClient.db));
+  const challengeRunnerLogoRefresh = new ChallengeRunnerLogoRefreshService(
+    new ChallengeRunnerRepository(dbClient.db),
+    challengeRunnerLogoService,
+    app.log
+  );
   const coverRefreshScheduler = scheduleCoverImageRefresh({ coverRefresh, realtimeHub, logger: app.log });
   const howLongToBeatRefreshScheduler = scheduleHowLongToBeatRefresh({ howLongToBeatRefresh, realtimeHub, logger: app.log });
   const twitchStatsScheduler = scheduleTwitchStreamStatsSync({ twitchStats, logger: app.log });
+  const challengeRunnerLogoRefreshScheduler = scheduleChallengeRunnerLogoRefresh({ challengeRunnerLogoRefresh, logger: app.log });
   app.addHook("onClose", async () => {
     coverRefreshScheduler.stop();
     howLongToBeatRefreshScheduler.stop();
     twitchStatsScheduler.stop();
+    challengeRunnerLogoRefreshScheduler.stop();
   });
 
   await app.listen({ port: config.port, host: "0.0.0.0" });
@@ -300,6 +339,29 @@ export function scheduleTwitchStreamStatsSync({
   });
 }
 
+export function scheduleChallengeRunnerLogoRefresh({
+  challengeRunnerLogoRefresh,
+  logger,
+  initialDelayMs = 3 * 60 * 1000,
+  intervalMs = 2 * 60 * 60 * 1000
+}: ChallengeRunnerLogoRefreshSchedulerOptions): { stop: () => void } {
+  return scheduleRecurringJob({
+    logger,
+    initialDelayMs,
+    intervalMs,
+    startMessage: "Challenge runner profile picture refresh service is starting",
+    stopMessage: "Challenge runner profile picture refresh service is stopping",
+    run: async () => {
+      logger?.info("Starting scheduled challenge runner profile picture refresh");
+      const result = await challengeRunnerLogoRefresh.refreshLogos();
+      logChallengeRunnerLogoRefreshResult(logger, result);
+    },
+    onError: (error) => {
+      logger?.error(error, "Scheduled challenge runner profile picture refresh failed");
+    }
+  });
+}
+
 function scheduleRecurringJob({
   logger,
   initialDelayMs,
@@ -384,4 +446,11 @@ function logHowLongToBeatRefreshResult(logger: SchedulerLogger | undefined, resu
     },
     "Scheduled HowLongToBeat refresh batch completed"
   );
+}
+
+function logChallengeRunnerLogoRefreshResult(
+  logger: SchedulerLogger | undefined,
+  result: ChallengeRunnerLogoRefreshResult
+): void {
+  logger?.info(result, "Scheduled challenge runner profile picture refresh completed");
 }

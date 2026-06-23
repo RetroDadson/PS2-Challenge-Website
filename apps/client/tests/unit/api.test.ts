@@ -103,6 +103,8 @@ describe("client API requests", () => {
     await api.adminUsers();
     await api.roles();
     await api.updateRole(9, 1);
+    await api.refreshChallengeRunnerLogos();
+    await api.refreshTwitchStreamStats();
     await api.refreshCovers();
     await api.refreshHowLongToBeat();
 
@@ -121,6 +123,8 @@ describe("client API requests", () => {
         { method: "DELETE", path: "/api/votes/current/Game%20%2F%20One", body: null },
         { method: "POST", path: "/api/votes/archive", body: { notes: "Done", manualPositions: { 1: 1 } } },
         { method: "PUT", path: "/api/admin/users/9/role", body: { roleId: 1 } },
+        { method: "POST", path: "/api/admin/challenge-runners/refresh-logos", body: {} },
+        { method: "POST", path: "/api/admin/update-twitch-stream-stats", body: {} },
         { method: "POST", path: "/api/admin/update-cover-images", body: {} },
         { method: "POST", path: "/api/admin/update-howlongtobeat", body: {} }
       ])
