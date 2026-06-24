@@ -176,7 +176,7 @@ export function Games() {
             </colgroup>
             <thead>
               <tr>
-                {isAdmin ? <th>Actions</th> : null}
+                {isAdmin ? <th className="col-games-actions">Actions</th> : null}
                 {visibleColumns.map((column) => (
                   <GameColumnHeader
                     key={column.id}
@@ -193,7 +193,7 @@ export function Games() {
                 const status = getCompletionStatus(completionStatus, game.id);
                 return (
                   <tr key={game.id} className={gameRowClass(game)}>
-                    {isAdmin ? <td data-label="Actions"><button className="icon-button" onClick={() => setEditing(game)} aria-label={`Edit ${game.title}`}><Edit3 /></button></td> : null}
+                    {isAdmin ? <td className="col-games-actions" data-label="Actions"><button className="icon-button" onClick={() => setEditing(game)} aria-label={`Edit ${game.title}`}><Edit3 /></button></td> : null}
                     {visibleColumns.map((column) => (
                       <GameColumnCell
                         key={column.id}
@@ -235,10 +235,10 @@ function GameColumnHeader({
   onSort: (column: SortColumn) => void;
 }>) {
   if (!("sortColumn" in column)) {
-    return <th>{column.label}</th>;
+    return <th className={column.className}>{column.label}</th>;
   }
   return (
-    <th>
+    <th className={column.className}>
       <SortButton column={column.sortColumn} current={currentSort} ascending={ascending} onSort={onSort}>
         {column.label}
       </SortButton>
@@ -263,22 +263,22 @@ function GameColumnCell({
 }>) {
   switch (column.id) {
     case "cover":
-      return <td className="cover-cell" data-label="Cover"><CoverImage src={game.imageUrl} alt={`${game.title} cover`} /></td>;
+      return <td className={`cover-cell ${column.className}`} data-label="Cover"><CoverImage src={game.imageUrl} alt={`${game.title} cover`} /></td>;
     case "title":
-      return <td data-label="Title"><GameTitle game={game} alternateTitles={alternateTitles} /></td>;
+      return <td className={column.className} data-label="Title"><GameTitle game={game} alternateTitles={alternateTitles} /></td>;
     case "howLongToBeat":
-      return <td data-label="How Long To Beat Time"><HowLongToBeatTime game={game} /></td>;
+      return <td className={column.className} data-label="How Long To Beat Time"><HowLongToBeatTime game={game} /></td>;
     case "developer":
-      return <td data-label="Developer">{game.developer}</td>;
+      return <td className={column.className} data-label="Developer">{game.developer}</td>;
     case "publisher":
-      return <td data-label="Publisher">{game.publisher}</td>;
+      return <td className={column.className} data-label="Publisher">{game.publisher}</td>;
     case "releaseDate":
-      return <td data-label="Release Date">{formatDateOnly(game.firstReleased, "Unknown")}</td>;
+      return <td className={column.className} data-label="Release Date">{formatDateOnly(game.firstReleased, "Unknown")}</td>;
     case "region":
-      return <td data-label="Region">{game.regionFirstReleasedIn}</td>;
+      return <td className={column.className} data-label="Region">{game.regionFirstReleasedIn}</td>;
     case "excluded":
       return (
-        <td data-label="Excluded">
+        <td className={column.className} data-label="Excluded">
           {game.isExcluded
             ? <span className="badge excluded-badge" title={exclusionReason ?? "No reason provided"}>Excluded</span>
             : <span className="badge included-badge">Included</span>}
@@ -286,14 +286,14 @@ function GameColumnCell({
       );
     case "owned":
       return (
-        <td data-label="Owned">
+        <td className={column.className} data-label="Owned">
           {game.isOwned
             ? <span className="badge owned-badge" title={ownedType ?? "Owned"}>{ownedType || "Owned"}</span>
             : <span className="badge not-owned-badge">To Purchase</span>}
         </td>
       );
     case "status":
-      return <td data-label="Status"><span className={`badge ${statusClass(status)}`}>{status}</span></td>;
+      return <td className={column.className} data-label="Status"><span className={`badge ${statusClass(status)}`}>{status}</span></td>;
     default:
       return assertNever(column);
   }
