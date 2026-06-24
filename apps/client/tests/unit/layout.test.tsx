@@ -39,6 +39,40 @@ describe("Layout", () => {
     expect(document.querySelector('img[src="/assets/yt_icon_red_digital.png"]')).toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "X" })).not.toBeInTheDocument();
   });
+
+  it("toggles the compact navigation drawer", async () => {
+    mockAuthUser({ isAuthenticated: false });
+
+    renderLayout();
+
+    const openButton = await screen.findByRole("button", { name: "Open navigation" });
+    expect(openButton).toHaveAttribute("aria-expanded", "false");
+
+    fireEvent.click(openButton);
+    const closeButton = screen.getByRole("button", { name: "Close navigation" });
+    expect(closeButton).toHaveAttribute("aria-expanded", "true");
+
+    fireEvent.click(closeButton);
+    expect(screen.getByRole("button", { name: "Open navigation" })).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("waits for navigation auth before showing the compact drawer toggle", async () => {
+    let resolveUser!: (response: Response) => void;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => new Promise<Response>((resolve) => {
+        resolveUser = resolve;
+      }))
+    );
+
+    renderLayout();
+
+    expect(screen.queryByRole("button", { name: "Open navigation" })).not.toBeInTheDocument();
+
+    resolveUser(new Response(JSON.stringify({ isAuthenticated: false }), { status: 200, headers: { "content-type": "application/json" } }));
+
+    expect(await screen.findByRole("button", { name: "Open navigation" })).toBeInTheDocument();
+  });
 });
 
 function renderLayout() {
