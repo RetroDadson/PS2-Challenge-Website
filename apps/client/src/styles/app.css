@@ -59,6 +59,10 @@ svg { width: 1.1rem; height: 1.1rem; flex: 0 0 auto; }
 }
 
 .app-shell { display: grid; grid-template-columns: 17rem minmax(0, 1fr); min-height: 100vh; }
+.sidebar-toggle,
+.sidebar-backdrop {
+  display: none;
+}
 .sidebar {
   display: flex;
   flex-direction: column;
@@ -1530,25 +1534,64 @@ th { color: var(--heading-accent); font-size: .82rem; text-transform: uppercase;
   }
 }
 @media (max-width: 1100px) {
-  .app-shell { grid-template-columns: 1fr; }
-  .sidebar {
-    position: static;
-    height: auto;
-  }
-  .sidebar nav {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-  .sidebar-lower {
-    margin-top: 0;
-  }
-  .sidebar-account {
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-  }
   .current-votes-dashboard { grid-template-columns: 1fr; }
 }
+
+@media (max-width: 1500px) {
+  .app-shell {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  .sidebar-toggle {
+    position: sticky;
+    z-index: 1100;
+    top: .75rem;
+    display: inline-flex;
+    align-self: start;
+    justify-self: start;
+    width: fit-content;
+    height: fit-content;
+    margin: .75rem 0 0 .75rem;
+    background: var(--surface-2);
+    color: var(--text);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .28);
+  }
+  .app-shell > main {
+    grid-row: 2;
+  }
+  .sidebar {
+    position: fixed;
+    z-index: 1000;
+    inset: 0 auto 0 0;
+    width: min(17rem, calc(100vw - 3rem));
+    height: 100dvh;
+    transform: translateX(-100%);
+    transition: transform 180ms ease;
+    box-shadow: 16px 0 36px rgba(0, 0, 0, .35);
+  }
+  .app-shell.sidebar-open .sidebar {
+    transform: translateX(0);
+  }
+  .sidebar-backdrop {
+    position: fixed;
+    z-index: 900;
+    inset: 0;
+    display: block;
+    width: 100%;
+    min-height: 100dvh;
+    padding: 0;
+    border-radius: 0;
+    background: rgba(0, 0, 0, .46);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 180ms ease;
+  }
+  .app-shell.sidebar-open .sidebar-backdrop {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
 @media (max-width: 820px) {
-  .sidebar nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .page {
     padding: .75rem;
   }
@@ -1667,6 +1710,34 @@ th { color: var(--heading-accent); font-size: .82rem; text-transform: uppercase;
 }
 
 @media (max-width: 700px) {
+  .sidebar-toggle {
+    width: 2.45rem;
+    min-height: 2.25rem;
+    justify-content: center;
+    gap: 0;
+    padding: .45rem;
+  }
+  .sidebar-toggle span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+  .sidebar {
+    width: 100vw;
+    max-width: 100vw;
+    padding-top: 4.25rem;
+    border-right: 0;
+    box-shadow: none;
+  }
+  .sidebar-backdrop {
+    display: none;
+  }
   .table-scroll .data-table.games-table,
   .table-scroll .data-table.progress-table {
     display: block;
