@@ -112,8 +112,8 @@ export function Progress() {
               <col className="col-progress-status" />
               <col className="col-progress-cover" />
               <col className="col-progress-title" />
-              <col className="col-progress-date" />
-              <col className="col-progress-date" />
+              <col className="col-progress-started" />
+              <col className="col-progress-finished" />
               <col className="col-progress-time" />
               <col className="col-progress-platform" />
               <col className="col-progress-criteria" />
@@ -122,33 +122,33 @@ export function Progress() {
             </colgroup>
             <thead>
               <tr>
-                <th><SortButton column="ProgressId" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Game Number</SortButton></th>
-                <th><SortButton column="Status" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Status</SortButton></th>
-                <th>Cover</th>
-                <th><SortButton column="GameTitle" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Title</SortButton></th>
-                <th><SortButton column="DateStarted" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Started</SortButton></th>
-                <th><SortButton column="DateFinished" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Finished</SortButton></th>
-                <th><SortButton column="CompletionTime" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Time</SortButton></th>
-                <th><SortButton column="Platform" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Platform</SortButton></th>
-                <th>Criteria</th>
-                <th>Review</th>
-                {isAdmin ? <th>Actions</th> : null}
+                <th className="col-progress-number"><SortButton column="ProgressId" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Game Number</SortButton></th>
+                <th className="col-progress-status"><SortButton column="Status" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Status</SortButton></th>
+                <th className="col-progress-cover">Cover</th>
+                <th className="col-progress-title"><SortButton column="GameTitle" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Title</SortButton></th>
+                <th className="col-progress-started"><SortButton column="DateStarted" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Started</SortButton></th>
+                <th className="col-progress-finished"><SortButton column="DateFinished" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Finished</SortButton></th>
+                <th className="col-progress-time"><SortButton column="CompletionTime" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Time</SortButton></th>
+                <th className="col-progress-platform"><SortButton column="Platform" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Platform</SortButton></th>
+                <th className="col-progress-criteria">Criteria</th>
+                <th className="col-progress-review">Review</th>
+                {isAdmin ? <th className="col-progress-actions">Actions</th> : null}
               </tr>
             </thead>
             <tbody>
               {filtered.map((game) => (
                 <tr key={game.progressId} className={game.dateFinished ? "completed" : "in-progress"}>
-                  <td data-label="Game Number">{game.progressId}</td>
-                  <td data-label="Status"><span className={`status-badge ${game.dateFinished ? "status-completed" : "status-inprogress"}`}>{game.dateFinished ? "Completed" : "In Progress"}</span></td>
-                  <td className="cover-cell" data-label="Cover"><CoverImage src={game.imageUrl} alt={`${game.gameTitle} cover`} /></td>
-                  <td data-label="Title"><ProgressTitle game={game} alternateTitles={alternateTitles[String(game.gameId)] ?? []} /></td>
-                  <td data-label="Started">{formatDateOnly(game.dateStarted)}</td>
-                  <td data-label="Finished">{game.dateFinished ? formatDateOnly(game.dateFinished) : "-"}</td>
-                  <td data-label="Time">{formatCompletionTime(game.completionTime)}</td>
-                  <td data-label="Platform"><span className={`platform-badge platform-${game.platform.toLocaleLowerCase("en-GB")}`}>{game.platform}</span></td>
-                  <td data-label="Criteria">{game.beatenCriteria ?? "-"}</td>
-                  <td data-label="Review">{game.review ?? "-"}</td>
-                  {isAdmin ? <td data-label="Actions"><button className="icon-text-button" onClick={() => openEditModal(game)} aria-label={`Edit ${game.gameTitle}`}><Edit3 />Edit</button></td> : null}
+                  <td className="col-progress-number" data-label="Game Number">{game.progressId}</td>
+                  <td className="col-progress-status" data-label="Status"><span className={`status-badge ${game.dateFinished ? "status-completed" : "status-inprogress"}`}>{game.dateFinished ? "Completed" : "In Progress"}</span></td>
+                  <td className="cover-cell col-progress-cover" data-label="Cover"><CoverImage src={game.imageUrl} alt={`${game.gameTitle} cover`} /></td>
+                  <td className="col-progress-title" data-label="Title"><ProgressTitle game={game} alternateTitles={alternateTitles[String(game.gameId)] ?? []} /></td>
+                  <td className="col-progress-started" data-label="Started">{formatDateOnly(game.dateStarted)}</td>
+                  <td className="col-progress-finished" data-label="Finished">{game.dateFinished ? formatDateOnly(game.dateFinished) : "-"}</td>
+                  <td className="col-progress-time" data-label="Time">{formatCompletionTime(game.completionTime)}</td>
+                  <td className="col-progress-platform" data-label="Platform"><span className={`platform-badge platform-${game.platform.toLocaleLowerCase("en-GB")}`}>{game.platform}</span></td>
+                  <td className="col-progress-criteria" data-label="Criteria">{game.beatenCriteria ?? "-"}</td>
+                  <td className="col-progress-review" data-label="Review">{game.review ?? "-"}</td>
+                  {isAdmin ? <td className="col-progress-actions" data-label="Actions"><button className="icon-text-button" onClick={() => openEditModal(game)} aria-label={`Edit ${game.gameTitle}`}><Edit3 />Edit</button></td> : null}
                 </tr>
               ))}
             </tbody>
