@@ -1,6 +1,6 @@
 # PS2 Challenge Website
-[![CI Build and Test](https://github.com/RobinDadswell/PS2-Challenge-Website/actions/workflows/build.yml/badge.svg)](https://github.com/RobinDadswell/PS2-Challenge-Website/actions/workflows/build.yml)
-[![CI Deploy](https://github.com/RobinDadswell/PS2-Challenge-Website/actions/workflows/deploy.yml/badge.svg)](https://github.com/RobinDadswell/PS2-Challenge-Website/actions/workflows/deploy.yml)
+[![CI Build and Test](https://github.com/RetroDadson/PS2-Challenge-Website/actions/workflows/build.yml/badge.svg)](https://github.com/RetroDadson/PS2-Challenge-Website/actions/workflows/build.yml)
+[![CI Deploy](https://github.com/RetroDadson/PS2-Challenge-Website/actions/workflows/deploy.yml/badge.svg)](https://github.com/RetroDadson/PS2-Challenge-Website/actions/workflows/deploy.yml)
 
 A TypeScript web app for tracking progress through the PS2 challenge, managing the game library, showing voting pages and stream overlays, and exposing API/health endpoints for the site.
 
