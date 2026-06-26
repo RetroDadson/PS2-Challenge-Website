@@ -4,9 +4,17 @@
 # https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
 
 version: 2
+registries:
+  npm-registry:
+    type: "npm-registry"
+    url: "https://registry.npmjs.org"
+    token: ${{secrets.GH_DUMMY}}
+    replaces-base: true
 updates:
   - package-ecosystem: "npm"
     directory: "/"
+    registries:
+      - npm-registry
     schedule:
       interval: "weekly"
   - package-ecosystem: "docker"
