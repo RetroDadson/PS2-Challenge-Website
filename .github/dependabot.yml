@@ -16,12 +16,21 @@ updates:
     registries:
       - npm-registry
     schedule:
-      interval: "weekly"
+      interval: "daily"
+    commit-message:
+      prefix: "Chore: "
+      include: scope
   - package-ecosystem: "docker"
     directory: "/docker"
     schedule:
-      interval: "weekly"
+      interval: "daily"
+    commit-message:
+      prefix: "Chore: "
+      include: scope
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "weekly"
+      interval: "daily"
+    commit-message:
+      prefix: "Chore: "
+      include: scope
