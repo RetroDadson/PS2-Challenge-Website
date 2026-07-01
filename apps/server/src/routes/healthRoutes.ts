@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { healthRouteSchemas, registerOpenApiSchemas } from "../openapi/schemas.js";
+import { errorMessage } from "../utils/errors.js";
 
 export type DatabaseHealthCheck = () => Promise<unknown>;
 
@@ -35,7 +36,7 @@ export async function registerHealthRoutes(app: FastifyInstance, checkDatabase: 
           status: "Unhealthy",
           description: "PostgreSQL connection failed",
           duration: formatDuration(performance.now() - databaseStarted),
-          exception: error instanceof Error ? error.message : String(error),
+          exception: errorMessage(error),
           tags: ["db", "postgres"]
         });
       }
@@ -62,7 +63,7 @@ export async function registerHealthRoutes(app: FastifyInstance, checkDatabase: 
             status: "Unhealthy",
             description: "Health check failed",
             duration: "00:00:00.000",
-            exception: error instanceof Error ? error.message : String(error),
+            exception: errorMessage(error),
             tags: ["health"]
           }
         ]

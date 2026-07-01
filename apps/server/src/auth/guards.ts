@@ -66,6 +66,12 @@ export async function requireAdmin(request: FastifyRequest, reply: FastifyReply,
   return user;
 }
 
+export function createRequireAdmin(userRepository: UserRepository, config: AppConfig) {
+  return (request: FastifyRequest, reply: FastifyReply) => requireAdmin(request, reply, userRepository, config);
+}
+
+export type RequireAdmin = ReturnType<typeof createRequireAdmin>;
+
 function getApiKey(request: FastifyRequest): string | null {
   const header = request.headers["x-api-key"];
   if (typeof header === "string" && header.trim()) {

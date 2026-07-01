@@ -7,12 +7,13 @@ import {
 } from "@ps2-challenge/shared";
 import type { FastifyInstance } from "fastify";
 import type { AppConfig } from "../config.js";
-import { requireAdmin } from "../auth/guards.js";
+import { createRequireAdmin } from "../auth/guards.js";
 import { registerOpenApiSchemas, voteRouteSchemas } from "../openapi/schemas.js";
 import type { UserRepository } from "../repositories/userRepository.js";
 import type { RealtimeHub } from "../realtime/hub.js";
 import type { VoteService } from "../services/voteService.js";
 import { auditInfo } from "../utils/audit.js";
+import { errorMessage } from "../utils/errors.js";
 
 export async function registerVotesRoutes(
   app: FastifyInstance,
@@ -22,7 +23,7 @@ export async function registerVotesRoutes(
   realtimeHub: RealtimeHub
 ) {
   registerOpenApiSchemas(app);
-  const requireAdminOrStop = async (request: any, reply: any) => requireAdmin(request, reply, userRepository, config);
+  const requireAdminOrStop = createRequireAdmin(userRepository, config);
 
   app.get("/api/votes/history", { schema: voteRouteSchemas.history }, async () => voteService.getVoteHistory());
   app.get("/api/votes/current", { schema: voteRouteSchemas.current }, async () => voteService.getCurrentVotes());
@@ -193,10 +194,6 @@ function validateUploadRound(round: { voteRound: number; votes: Array<{ gameTitl
     return `Invalid position ${invalidPosition.position} in round ${round.voteRound} for '${invalidPosition.gameTitle}'. Position must be 1, 2, or 3.`;
   }
   return null;
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 function safeDecodeURIComponent(value: string): string {

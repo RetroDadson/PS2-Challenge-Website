@@ -1,7 +1,7 @@
 import { updateRoleRequestSchema } from "@ps2-challenge/shared";
 import type { FastifyInstance } from "fastify";
 import type { AppConfig } from "../config.js";
-import { requireAdmin } from "../auth/guards.js";
+import { createRequireAdmin } from "../auth/guards.js";
 import { adminRouteSchemas, registerOpenApiSchemas } from "../openapi/schemas.js";
 import type { UserRepository } from "../repositories/userRepository.js";
 import type { TwitchStreamSyncResult } from "../services/twitchStreamStatsService.js";
@@ -18,7 +18,7 @@ export async function registerAdminRoutes(
   twitchStats?: TwitchStreamSyncProvider
 ) {
   registerOpenApiSchemas(app);
-  const requireAdminOrStop = async (request: any, reply: any) => requireAdmin(request, reply, userRepository, config);
+  const requireAdminOrStop = createRequireAdmin(userRepository, config);
 
   app.get("/api/admin/users", { schema: adminRouteSchemas.users }, async (request, reply) => {
     try {
