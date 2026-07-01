@@ -5,6 +5,7 @@ import type { Kysely } from "kysely";
 import type pg from "pg";
 import { createKyselyFromPool, type Database } from "../db/kysely.js";
 import { GameRepository } from "../repositories/gameRepository.js";
+import { errorMessage } from "../utils/errors.js";
 
 type FetchHowLongToBeat = (input: string, init?: RequestInit) => Promise<Response>;
 const howLongToBeatOrigin = "https://howlongtobeat.com";
@@ -383,7 +384,7 @@ export class HowLongToBeatRefreshService {
     progress.processed++;
     progress.errors++;
     progress.status = "error";
-    progress.error = error instanceof Error ? error.message : String(error);
+    progress.error = errorMessage(error);
   }
 
   private markCompleted(progress: HowLongToBeatRefreshProgress): void {
@@ -419,10 +420,6 @@ export class HowLongToBeatRefreshService {
       connection.release();
     }
   }
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 export function selectBestHowLongToBeatResult(title: string, results: HowLongToBeatGame[]): HowLongToBeatGame | null {

@@ -1,7 +1,7 @@
 import { challengeRunnerInputSchema } from "@ps2-challenge/shared";
 import type { FastifyInstance } from "fastify";
 import type { AppConfig } from "../config.js";
-import { requireAdmin } from "../auth/guards.js";
+import { createRequireAdmin } from "../auth/guards.js";
 import { challengeRunnerRouteSchemas, registerOpenApiSchemas } from "../openapi/schemas.js";
 import type { ChallengeRunnerRepository } from "../repositories/challengeRunnerRepository.js";
 import type { UserRepository } from "../repositories/userRepository.js";
@@ -17,7 +17,7 @@ export async function registerChallengeRunnerRoutes(
   config: AppConfig
 ) {
   registerOpenApiSchemas(app);
-  const requireAdminOrStop = async (request: any, reply: any) => requireAdmin(request, reply, userRepository, config);
+  const requireAdminOrStop = createRequireAdmin(userRepository, config);
 
   app.get("/api/challenge-runners", { schema: challengeRunnerRouteSchemas.list }, async (request, reply) => {
     try {

@@ -2,6 +2,7 @@ import type { Kysely } from "kysely";
 import type pg from "pg";
 import type { GameDto } from "@ps2-challenge/shared";
 import { createKyselyFromPool, type Database } from "../db/kysely.js";
+import { errorMessage } from "../utils/errors.js";
 import { GameService } from "./gameService.js";
 
 const coverRepositoryPath = "https://raw.githubusercontent.com/xlenore/ps2-covers/main/covers/default";
@@ -206,7 +207,7 @@ export class CoverImageRefreshService {
     progress.processed++;
     progress.errors++;
     progress.status = "error";
-    progress.error = error instanceof Error ? error.message : String(error);
+    progress.error = errorMessage(error);
   }
 
   private markCompleted(progress: CoverImageRefreshProgress): void {
