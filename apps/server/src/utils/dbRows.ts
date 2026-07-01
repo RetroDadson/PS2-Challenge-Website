@@ -91,7 +91,7 @@ export function normalizePgInterval(value: string | null | undefined): string | 
     return `${simple[1]!.padStart(2, "0")}:${simple[2]}:${simple[3]}`;
   }
 
-  const verbose = /(?:(\d+)\s+days?\s+)?(?:(\d{1,3}):(\d{2}):(\d{2}))/.exec(trimmed);
+  const verbose = /^(?:(\d{1,9})\s{1,3}days?\s{1,3})?(\d{1,3}):(\d{2}):(\d{2})/.exec(trimmed);
   if (verbose) {
     const days = Number.parseInt(verbose[1] ?? "0", 10);
     const hours = Number.parseInt(verbose[2] ?? "0", 10) + days * 24;
