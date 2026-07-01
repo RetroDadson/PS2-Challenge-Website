@@ -103,14 +103,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   });
 
   if (!response.ok) {
-    let detail = response.statusText || statusMessage(response.status);
-    try {
-      const body = (await response.json()) as { message?: string; error?: string };
-      detail = body.message ?? body.error ?? detail;
-    } catch {
-      // Keep status text.
-    }
-    throw new Error(detail);
+    throw new Error(await errorDetail(response));
   }
 
   if (response.status === 204) {
@@ -327,12 +320,11 @@ function handleHowLongToBeatRefreshEvent(
 }
 
 async function errorDetail(response: Response): Promise<string> {
-  let detail = response.statusText || statusMessage(response.status);
+  const fallback = response.statusText || statusMessage(response.status);
   try {
-    const body = (await response.json()) as { message?: string; error?: string };
-    detail = body.message ?? body.error ?? detail;
+    const body = (await response.json()) as { message?: string; error?: string; errors?: string[] };
+    return body.message ?? body.error ?? body.errors?.[0] ?? fallback;
   } catch {
-    // Keep status text.
+    return fallback;
   }
-  return detail;
 }
