@@ -4,9 +4,11 @@ import type { AlternateTitle, GameProgressDto } from "@ps2-challenge/shared";
 import { api } from "../api.js";
 import { CoverImage } from "../components/CoverImage.js";
 import { ProgressModal } from "../components/ProgressModal.js";
+import { SortButton } from "../components/SortButton.js";
 import { Empty, ErrorMessage, Loading } from "../components/Status.js";
 import { formatDateOnly } from "../dateUtils.js";
 import { useAsync, useCurrentUser, useRealtime } from "../hooks.js";
+import { compareNullable } from "../sortHelpers.js";
 
 type SortColumn = "ProgressId" | "Status" | "GameTitle" | "DateStarted" | "DateFinished" | "CompletionTime" | "Platform";
 
@@ -170,30 +172,6 @@ export function Progress() {
   );
 }
 
-function SortButton({
-  column,
-  current,
-  ascending,
-  onSort,
-  children
-}: Readonly<{
-  column: SortColumn;
-  current: SortColumn;
-  ascending: boolean;
-  onSort: (column: SortColumn) => void;
-  children: string;
-}>) {
-  const marker = sortMarker(current, column, ascending);
-  return <button className="table-sort-button" onClick={() => onSort(column)}>{children}{marker}</button>;
-}
-
-function sortMarker(current: SortColumn, column: SortColumn, ascending: boolean) {
-  if (current !== column) {
-    return "";
-  }
-  return ascending ? " ▲" : " ▼";
-}
-
 function ProgressTitle({ game, alternateTitles }: Readonly<{ game: GameProgressDto; alternateTitles: AlternateTitle[] }>) {
   if (!alternateTitles.length) {
     return <>{game.gameTitle}</>;
@@ -229,10 +207,6 @@ function compareProgress(left: GameProgressDto, right: GameProgressDto, column: 
     case "Platform":
       return left.platform.localeCompare(right.platform, "en-GB") * direction;
   }
-}
-
-function compareNullable(left?: string | null, right?: string | null) {
-  return (left ?? "").localeCompare(right ?? "", "en-GB");
 }
 
 function compareNullableLast(left: string | null | undefined, right: string | null | undefined, ascending: boolean) {
