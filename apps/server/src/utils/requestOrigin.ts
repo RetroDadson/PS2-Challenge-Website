@@ -4,10 +4,18 @@ export function requestOrigin(request: FastifyRequest, fallbackOrigin: string): 
   const protocol = firstHeaderValue(request.headers["x-forwarded-proto"]) ?? request.protocol ?? "https";
   const host = externalHost(request, protocol);
   if (!host) {
-    return fallbackOrigin.replace(/\/+$/, "");
+    return stripTrailingSlashes(fallbackOrigin);
   }
 
   return `${protocol}://${host}`;
+}
+
+function stripTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value[end - 1] === "/") {
+    end--;
+  }
+  return value.slice(0, end);
 }
 
 function externalHost(request: FastifyRequest, protocol: string): string | undefined {
