@@ -80,14 +80,9 @@ export type TwitchStreamSyncResult = {
   skipped: number;
 };
 
-type CoverRefreshStreamEvent =
-  | ({ type: "progress" } & CoverRefreshProgress)
-  | ({ type: "complete" } & CoverRefreshResult)
-  | { type: "error"; message: string };
-
-type HowLongToBeatRefreshStreamEvent =
-  | ({ type: "progress" } & HowLongToBeatRefreshProgress)
-  | ({ type: "complete" } & HowLongToBeatRefreshResult)
+type NdjsonStreamEvent<TProgress, TResult> =
+  | ({ type: "progress" } & TProgress)
+  | ({ type: "complete" } & TResult)
   | { type: "error"; message: string };
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
@@ -192,53 +187,40 @@ function gamesUrl(title?: string) {
 }
 
 async function refreshCoversWithProgress(onProgress: (progress: CoverRefreshProgress) => void): Promise<CoverRefreshResult> {
-  const response = await fetch("/api/admin/update-cover-images/stream", {
-    method: "POST",
-    credentials: "include",
-    headers: { "content-type": "application/json" },
-    body: "{}"
-  });
-
-  if (!response.ok) {
-    throw new Error(await errorDetail(response));
-  }
-
-  if (!response.body) {
-    const result = await api.refreshCovers();
-    onProgress({ ...result, processed: result.total, status: "completed" });
-    return result;
-  }
-
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let complete: CoverRefreshResult | null = null;
-
-  for (;;) {
-    const { value, done } = await reader.read();
-    buffer += decoder.decode(value, { stream: !done });
-    const lines = buffer.split(/\r?\n/);
-    buffer = lines.pop() ?? "";
-
-    for (const line of lines) {
-      complete = handleCoverRefreshEvent(line, onProgress) ?? complete;
-    }
-
-    if (done) {
-      break;
-    }
-  }
-
-  if (!complete) {
-    throw new Error("Cover image update did not complete");
-  }
-  return complete;
+  return streamNdjson<CoverRefreshProgress, CoverRefreshResult>(
+    "/api/admin/update-cover-images/stream",
+    onProgress,
+    async () => {
+      const result = await api.refreshCovers();
+      onProgress({ ...result, processed: result.total, status: "completed" });
+      return result;
+    },
+    "Cover image update did not complete"
+  );
 }
 
 async function refreshHowLongToBeatWithProgress(
   onProgress: (progress: HowLongToBeatRefreshProgress) => void
 ): Promise<HowLongToBeatRefreshResult> {
-  const response = await fetch("/api/admin/update-howlongtobeat/stream", {
+  return streamNdjson<HowLongToBeatRefreshProgress, HowLongToBeatRefreshResult>(
+    "/api/admin/update-howlongtobeat/stream",
+    onProgress,
+    async () => {
+      const result = await api.refreshHowLongToBeat();
+      onProgress({ ...result, processed: result.total, status: "completed" });
+      return result;
+    },
+    "HowLongToBeat update did not complete"
+  );
+}
+
+async function streamNdjson<TProgress, TResult>(
+  url: string,
+  onProgress: (progress: TProgress) => void,
+  runFallback: () => Promise<TResult>,
+  incompleteMessage: string
+): Promise<TResult> {
+  const response = await fetch(url, {
     method: "POST",
     credentials: "include",
     headers: { "content-type": "application/json" },
@@ -250,15 +232,13 @@ async function refreshHowLongToBeatWithProgress(
   }
 
   if (!response.body) {
-    const result = await api.refreshHowLongToBeat();
-    onProgress({ ...result, processed: result.total, status: "completed" });
-    return result;
+    return runFallback();
   }
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
-  let complete: HowLongToBeatRefreshResult | null = null;
+  let complete: TResult | null = null;
 
   for (;;) {
     const { value, done } = await reader.read();
@@ -267,7 +247,7 @@ async function refreshHowLongToBeatWithProgress(
     buffer = lines.pop() ?? "";
 
     for (const line of lines) {
-      complete = handleHowLongToBeatRefreshEvent(line, onProgress) ?? complete;
+      complete = readNdjsonEvent<TProgress, TResult>(line, onProgress) ?? complete;
     }
 
     if (done) {
@@ -276,39 +256,16 @@ async function refreshHowLongToBeatWithProgress(
   }
 
   if (!complete) {
-    throw new Error("HowLongToBeat update did not complete");
+    throw new Error(incompleteMessage);
   }
   return complete;
 }
 
-function handleCoverRefreshEvent(
-  line: string,
-  onProgress: (progress: CoverRefreshProgress) => void
-): CoverRefreshResult | null {
+function readNdjsonEvent<TProgress, TResult>(line: string, onProgress: (progress: TProgress) => void): TResult | null {
   if (!line.trim()) {
     return null;
   }
-
-  const event = JSON.parse(line) as CoverRefreshStreamEvent;
-  if (event.type === "progress") {
-    onProgress(event);
-    return null;
-  }
-  if (event.type === "complete") {
-    return event;
-  }
-  throw new Error(event.message);
-}
-
-function handleHowLongToBeatRefreshEvent(
-  line: string,
-  onProgress: (progress: HowLongToBeatRefreshProgress) => void
-): HowLongToBeatRefreshResult | null {
-  if (!line.trim()) {
-    return null;
-  }
-
-  const event = JSON.parse(line) as HowLongToBeatRefreshStreamEvent;
+  const event = JSON.parse(line) as NdjsonStreamEvent<TProgress, TResult>;
   if (event.type === "progress") {
     onProgress(event);
     return null;
