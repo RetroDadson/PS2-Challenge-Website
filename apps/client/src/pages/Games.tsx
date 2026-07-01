@@ -5,6 +5,7 @@ import { api } from "../api.js";
 import { CoverImage } from "../components/CoverImage.js";
 import { GameModal } from "../components/GameModal.js";
 import { GameTableColumnSettings } from "../components/GameTableColumnSettings.js";
+import { SortButton, sortMarker } from "../components/SortButton.js";
 import { Empty, ErrorMessage, Loading } from "../components/Status.js";
 import { formatDateOnly } from "../dateUtils.js";
 import {
@@ -12,6 +13,7 @@ import {
   type GameTableColumn
 } from "../gameTablePreferences.js";
 import { useAsync, useCurrentUser, useRealtime } from "../hooks.js";
+import { compareNullable } from "../sortHelpers.js";
 import { useGameTablePreferences } from "../useGameTablePreferences.js";
 
 type SortColumn =
@@ -303,23 +305,6 @@ function assertNever(value: never): never {
   throw new Error(`Unhandled game table column: ${JSON.stringify(value)}`);
 }
 
-function SortButton({
-  column,
-  current,
-  ascending,
-  onSort,
-  children
-}: Readonly<{
-  column: SortColumn;
-  current: SortColumn;
-  ascending: boolean;
-  onSort: (column: SortColumn) => void;
-  children: string;
-}>) {
-  const marker = sortMarker(current, column, ascending);
-  return <button className="table-sort-button" onClick={() => onSort(column)}>{children}{marker}</button>;
-}
-
 function EditingGameModal({
   editing,
   onClose,
@@ -352,13 +337,6 @@ function gameRowClass(game: GameDto) {
     return "owned-row";
   }
   return undefined;
-}
-
-function sortMarker(current: SortColumn, column: SortColumn, ascending: boolean) {
-  if (current !== column) {
-    return "";
-  }
-  return ascending ? " ▲" : " ▼";
 }
 
 function GameTitle({ game, alternateTitles }: Readonly<{ game: GameDto; alternateTitles: AlternateTitle[] }>) {
@@ -426,10 +404,6 @@ function compareGames(left: GameDto, right: GameDto, column: SortColumn, complet
     case "Title":
       return left.title.localeCompare(right.title, "en-GB");
   }
-}
-
-function compareNullable(left?: string | null, right?: string | null) {
-  return (left ?? "").localeCompare(right ?? "", "en-GB");
 }
 
 function compareNullableNumber(left?: number | null, right?: number | null) {

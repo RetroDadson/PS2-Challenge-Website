@@ -1,5 +1,5 @@
 import { Plus, Save, Trash2, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type { GameDto } from "@ps2-challenge/shared";
 import { api, type SerialNumberDto } from "../api.js";
 import { toDateInputValue } from "../dateUtils.js";
@@ -42,10 +42,6 @@ export function GameModal({
   const [newSerialNotes, setNewSerialNotes] = useState("");
   const [newAlternateTitle, setNewAlternateTitle] = useState("");
   const [newAlternateNotes, setNewAlternateNotes] = useState("");
-  const ownPhysicalCopyRef = useRef(!!game?.isOwned);
-  const typeOwnedRef = useRef(defaultTypeOwnedFor(game));
-  const isExcludedRef = useRef(!!game?.isExcluded);
-  const exclusionReasonRef = useRef(defaultExclusionReasonFor(game));
 
   useEffect(() => {
     void api.ownershipTypes().then(setOwnershipTypes).catch(() => setOwnershipTypes([]));
@@ -53,18 +49,10 @@ export function GameModal({
 
   useEffect(() => {
     setDraft(draftFor(game));
-    const nextOwnPhysicalCopy = !!game?.isOwned;
-    const nextTypeOwned = defaultTypeOwnedFor(game);
-    const nextIsExcluded = !!game?.isExcluded;
-    const nextExclusionReason = defaultExclusionReasonFor(game);
-    ownPhysicalCopyRef.current = nextOwnPhysicalCopy;
-    typeOwnedRef.current = nextTypeOwned;
-    isExcludedRef.current = nextIsExcluded;
-    exclusionReasonRef.current = nextExclusionReason;
-    setOwnPhysicalCopy(nextOwnPhysicalCopy);
-    setTypeOwned(nextTypeOwned);
-    setIsExcluded(nextIsExcluded);
-    setExclusionReason(nextExclusionReason);
+    setOwnPhysicalCopy(!!game?.isOwned);
+    setTypeOwned(defaultTypeOwnedFor(game));
+    setIsExcluded(!!game?.isExcluded);
+    setExclusionReason(defaultExclusionReasonFor(game));
     setError(null);
     setNewSerialNumber("");
     setNewSerialRegion("");
@@ -77,9 +65,7 @@ export function GameModal({
         .then(([serials, titles, ownedTypesByGame]) => {
           setSerialNumbers(serials);
           setAlternateTitles(titles);
-          const loadedTypeOwned = game.isOwned ? ownedTypesByGame[String(game.id)] ?? "Base" : "";
-          typeOwnedRef.current = loadedTypeOwned;
-          setTypeOwned(loadedTypeOwned);
+          setTypeOwned(game.isOwned ? ownedTypesByGame[String(game.id)] ?? "Base" : "");
         })
         .catch((loadError) => setError(loadError instanceof Error ? loadError.message : String(loadError)));
     } else {
@@ -95,13 +81,9 @@ export function GameModal({
       const saved = await onSave(draft);
       const gameId = game?.id ?? saved?.id;
       const title = (draft.title ?? saved?.title ?? game?.title ?? "").trim();
-      const currentOwnPhysicalCopy = ownPhysicalCopyRef.current;
-      const currentTypeOwned = currentOwnPhysicalCopy ? typeOwnedRef.current : "";
-      const currentIsExcluded = isExcludedRef.current;
-      const currentExclusionReason = exclusionReasonRef.current;
       if (gameId) {
-        await api.updateOwnership(gameId, currentOwnPhysicalCopy, currentTypeOwned);
-        await api.updateExclusion(gameId, currentIsExcluded, currentIsExcluded ? currentExclusionReason || "No reason provided" : undefined);
+        await api.updateOwnership(gameId, ownPhysicalCopy, ownPhysicalCopy ? typeOwned : "");
+        await api.updateExclusion(gameId, isExcluded, isExcluded ? exclusionReason || "No reason provided" : undefined);
         for (const serial of serialNumbers.filter((entry) => entry.serialId <= 0)) {
           await api.addSerialNumber({ title, serialNumber: serial.serialNumber, region: serial.region ?? null, notes: serial.notes ?? null });
         }
@@ -269,10 +251,8 @@ export function GameModal({
               checked={ownPhysicalCopy}
               onChange={(event) => {
                 const checked = event.target.checked;
-                ownPhysicalCopyRef.current = checked;
                 setOwnPhysicalCopy(checked);
                 if (!checked) {
-                  typeOwnedRef.current = "";
                   setTypeOwned("");
                 }
               }}
@@ -283,10 +263,7 @@ export function GameModal({
             <select
               value={typeOwned}
               disabled={!ownPhysicalCopy}
-              onChange={(event) => {
-                typeOwnedRef.current = event.target.value;
-                setTypeOwned(event.target.value);
-              }}
+              onChange={(event) => setTypeOwned(event.target.value)}
             >
               <option value="">Select Type</option>
               {ownershipTypes.map((type) => <option key={type.typeOwned} value={type.typeOwned}>{type.typeOwned}</option>)}
@@ -300,10 +277,7 @@ export function GameModal({
             <input
               type="checkbox"
               checked={isExcluded}
-              onChange={(event) => {
-                isExcludedRef.current = event.target.checked;
-                setIsExcluded(event.target.checked);
-              }}
+              onChange={(event) => setIsExcluded(event.target.checked)}
             />
             <span>Exclude from Challenge</span>
           </label>
@@ -311,10 +285,7 @@ export function GameModal({
             <label><span>Exclusion Reason</span>
               <textarea
                 value={exclusionReason}
-                onChange={(event) => {
-                  exclusionReasonRef.current = event.target.value;
-                  setExclusionReason(event.target.value);
-                }}
+                onChange={(event) => setExclusionReason(event.target.value)}
               />
             </label>
           ) : null}

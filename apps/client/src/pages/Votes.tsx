@@ -4,8 +4,10 @@ import type { CurrentVoteDto, GameDto, VoteRoundDto } from "@ps2-challenge/share
 import { api } from "../api.js";
 import { CoverImage } from "../components/CoverImage.js";
 import { ModalDialog } from "../components/ModalDialog.js";
+import { SortButton, sortMarker } from "../components/SortButton.js";
 import { Empty, ErrorMessage, Loading } from "../components/Status.js";
 import { useAsync, useCurrentUser, useRealtime } from "../hooks.js";
+import { fullCirclePath, PIE_CHART_COLORS, sectorPath, formatPathNumber } from "../pieChart.js";
 
 type SortColumn = "VoteRound" | "TopGameTitle" | "TopVotes" | "SecondGameTitle" | "SecondVotes" | "LastGameTitle" | "LastVotes";
 
@@ -522,30 +524,6 @@ function VoteHistoryRow({ round }: Readonly<{ round: VoteRoundDto }>) {
   );
 }
 
-function SortButton({
-  column,
-  current,
-  ascending,
-  onSort,
-  children
-}: Readonly<{
-  column: SortColumn;
-  current: SortColumn;
-  ascending: boolean;
-  onSort: (column: SortColumn) => void;
-  children: string;
-}>) {
-  const marker = sortMarker(current, column, ascending);
-  return <button className="table-sort-button" onClick={() => onSort(column)}>{children}{marker}</button>;
-}
-
-function sortMarker(current: SortColumn, column: SortColumn, ascending: boolean) {
-  if (current !== column) {
-    return "";
-  }
-  return ascending ? " ▲" : " ▼";
-}
-
 function filterVoteHistory(rounds: VoteRoundDto[], filter: string, showOnlyRoundsWithVotes: boolean) {
   const search = filter.trim().toLocaleLowerCase("en-GB");
   return rounds.filter((round) => {
@@ -622,7 +600,6 @@ function buildPieSlices(votes: CurrentVoteDto[]): PieSlice[] {
     return [{ path: fullCirclePath(70), color: "#e0e0e0", label: "No votes", value: 0, percent: 100 }];
   }
 
-  const colors = ["#e91e63", "#9c27b0", "#9146ff", "#ff9800", "#4caf50", "#2196f3", "#f44336", "#ffc107"];
   const slices: PieSlice[] = [];
   const itemsWithVotes = votes.filter((vote) => vote.voteCount > 0);
   let startAngle = -90;
@@ -634,7 +611,7 @@ function buildPieSlices(votes: CurrentVoteDto[]): PieSlice[] {
     const endAngle = startAngle + angle;
     slices.push({
       path: itemsWithVotes.length === 1 && value === total ? fullCirclePath(70) : sectorPath(startAngle, endAngle, 70),
-      color: colors[index % colors.length]!,
+      color: PIE_CHART_COLORS[index % PIE_CHART_COLORS.length]!,
       label: vote.gameTitle,
       value,
       percent: (value / total) * 100
@@ -643,25 +620,6 @@ function buildPieSlices(votes: CurrentVoteDto[]): PieSlice[] {
   });
 
   return slices;
-}
-
-function sectorPath(startAngleDeg: number, endAngleDeg: number, radius: number) {
-  const startRad = (Math.PI / 180) * startAngleDeg;
-  const endRad = (Math.PI / 180) * endAngleDeg;
-  const x1 = radius * Math.cos(startRad);
-  const y1 = radius * Math.sin(startRad);
-  const x2 = radius * Math.cos(endRad);
-  const y2 = radius * Math.sin(endRad);
-  const largeArc = endAngleDeg - startAngleDeg > 180 ? 1 : 0;
-  return `M 0 0 L ${formatPathNumber(x1)} ${formatPathNumber(y1)} A ${radius} ${radius} 0 ${largeArc} 1 ${formatPathNumber(x2)} ${formatPathNumber(y2)} Z`;
-}
-
-function fullCirclePath(radius: number) {
-  return `M 0 ${-radius} A ${radius} ${radius} 0 0 1 0 ${radius} A ${radius} ${radius} 0 0 1 0 ${-radius} Z`;
-}
-
-function formatPathNumber(value: number) {
-  return Number.isInteger(value) ? String(value) : value.toFixed(3);
 }
 
 export const votesPageHelpers = {

@@ -23,6 +23,7 @@ import type { TwitchStreamStatsDto } from "../api.js";
 import { api } from "../api.js";
 import { Empty, ErrorMessage, Loading } from "../components/Status.js";
 import { useAsync } from "../hooks.js";
+import { angleToPoint, PIE_CHART_COLORS, sectorPath } from "../pieChart.js";
 
 type YearlyStatistic = {
   year: number;
@@ -581,7 +582,6 @@ function buildOwnershipSlices(ownedTypes: Record<string, string>): OwnershipSlic
   const total = Object.values(counts).reduce((sum, value) => sum + value, 0);
   if (total <= 0) return [];
 
-  const colors = ["#e91e63", "#9c27b0", "#9146ff", "#ff9800", "#4caf50", "#2196f3", "#f44336", "#ffc107", "#795548", "#9e9e9e"];
   let startAngle = -90;
   return Object.entries(counts)
     .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0], "en-GB"))
@@ -590,20 +590,8 @@ function buildOwnershipSlices(ownedTypes: Record<string, string>): OwnershipSlic
       const endAngle = startAngle + (value / total) * 360;
       const path = sectorPath(startAngle, endAngle, 70);
       startAngle = endAngle;
-      return { label, value, percent, color: colors[index % colors.length]!, path };
+      return { label, value, percent, color: PIE_CHART_COLORS[index % PIE_CHART_COLORS.length]!, path };
     });
-}
-
-function sectorPath(startAngle: number, endAngle: number, radius: number) {
-  const start = angleToPoint(startAngle, radius);
-  const end = angleToPoint(endAngle, radius);
-  const largeArc = endAngle - startAngle > 180 ? 1 : 0;
-  return `M 0 0 L ${start.x.toFixed(3)} ${start.y.toFixed(3)} A ${radius} ${radius} 0 ${largeArc} 1 ${end.x.toFixed(3)} ${end.y.toFixed(3)} Z`;
-}
-
-function angleToPoint(angle: number, radius: number) {
-  const radians = (Math.PI / 180) * angle;
-  return { x: radius * Math.cos(radians), y: radius * Math.sin(radians) };
 }
 
 export const statisticsPageHelpers = {
