@@ -59,7 +59,7 @@
     "@fastify/websocket": "^11.2.0",
     "@opentelemetry/api": "^1.9.1",
     "chart.js": "^4.5.1",
-    "fastify": "^5.8.5",
+    "fastify": "^5.9.0",
     "kysely": "^0.29.2",
     "lucide-react": "^1.21.0",
     "pg": "^8.22.0",
