@@ -665,7 +665,6 @@ const openApiSchemas = [
       status: { type: "string" },
       description: stringNullable,
       duration: { type: "string" },
-      exception: stringNullable,
       tags: { type: "array", items: { type: "string" } }
     }
   },

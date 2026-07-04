@@ -32,16 +32,17 @@ describe("health API contract parity", () => {
     });
   });
 
-  it("returns 503 and the C# detailed health shape when dependencies fail", async () => {
+  it("returns 503 without leaking the failure detail but logs it for operators", async () => {
     app = fastify({ logger: false });
     const warn = vi.spyOn(app.log, "warn");
     await registerHealthRoutes(app, async () => {
-      throw new Error("database offline");
+      throw new Error("connection to internal-db.example failed for user postgres");
     });
 
     const response = await app.inject({ method: "GET", url: "/api/health" });
 
     expect(response.statusCode).toBe(503);
+    expect(response.body).not.toContain("internal-db.example");
     expect(response.json()).toEqual({
       status: "Unhealthy",
       totalDuration: expect.any(String),
@@ -51,35 +52,12 @@ describe("health API contract parity", () => {
           status: "Unhealthy",
           description: "PostgreSQL connection failed",
           duration: expect.any(String),
-          tags: ["db", "postgres"],
-          exception: "database offline"
+          tags: ["db", "postgres"]
         }
       ]
     });
+    expect(warn).toHaveBeenCalledWith(expect.objectContaining({ err: expect.any(Error) }), "PostgreSQL health check probe failed");
     expect(warn).toHaveBeenCalledWith(expect.objectContaining({ status: "Unhealthy" }), "Health check failed: Unhealthy");
-  });
-
-  it("omits internal exception detail when includeErrorDetail is false", async () => {
-    app = fastify({ logger: false });
-    await registerHealthRoutes(
-      app,
-      async () => {
-        throw new Error("connection to internal-db.example failed for user postgres");
-      },
-      { includeErrorDetail: false }
-    );
-
-    const response = await app.inject({ method: "GET", url: "/api/health" });
-
-    expect(response.statusCode).toBe(503);
-    expect(response.body).not.toContain("internal-db.example");
-    expect(response.json().checks[0]).toEqual({
-      name: "database",
-      status: "Unhealthy",
-      description: "PostgreSQL connection failed",
-      duration: expect.any(String),
-      tags: ["db", "postgres"]
-    });
   });
 
   it("preserves the C# ping response body", async () => {
@@ -96,7 +74,7 @@ describe("health API contract parity", () => {
     });
   });
 
-  it("stringifies non-Error dependency failures", async () => {
+  it("handles non-Error dependency failures without exposing detail", async () => {
     app = fastify({ logger: false });
     await registerHealthRoutes(app, async () => {
       throw "database unavailable";
@@ -105,11 +83,13 @@ describe("health API contract parity", () => {
     const response = await app.inject({ method: "GET", url: "/health" });
 
     expect(response.statusCode).toBe(503);
-    expect(response.json().checks[0].exception).toBe("database unavailable");
+    expect(response.body).not.toContain("database unavailable");
+    expect(response.json().checks[0]).not.toHaveProperty("exception");
   });
 
   it("returns a fallback response when the health check itself fails", async () => {
     app = fastify({ logger: false });
+    const errorLog = vi.spyOn(app.log, "error");
     await registerHealthRoutes(app, async () => undefined);
     vi.spyOn(performance, "now").mockImplementationOnce(() => {
       throw "clock unavailable";
@@ -118,9 +98,11 @@ describe("health API contract parity", () => {
     const response = await app.inject({ method: "GET", url: "/api/health" });
 
     expect(response.statusCode).toBe(503);
+    expect(response.body).not.toContain("clock unavailable");
     expect(response.json()).toMatchObject({
       status: "Unhealthy",
-      checks: [{ name: "health", exception: "clock unavailable" }]
+      checks: [{ name: "health" }]
     });
+    expect(errorLog).toHaveBeenCalledWith(expect.objectContaining({ err: "clock unavailable" }), "Error performing health check");
   });
 });
