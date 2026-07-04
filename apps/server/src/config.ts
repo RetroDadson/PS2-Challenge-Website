@@ -15,6 +15,7 @@ export type AppConfig = {
   publicBaseUrl: string;
   cookieSecret: string;
   logLevel: string;
+  trustProxy: boolean | number | string;
   applicationInsightsConnectionString?: string;
 };
 
@@ -68,8 +69,9 @@ export function loadConfig(validate = true): AppConfig {
   const fallbackPublicBaseUrl = new URL(`http://localhost:${configuredPort}`).toString().replace(/\/$/, "");
   const publicBaseUrl =
     process.env.PUBLIC_BASE_URL ?? settings.PublicBaseUrl ?? settings.ApiBaseUrl ?? fallbackPublicBaseUrl;
-  const configuredCookieSecret = process.env.COOKIE_SECRET ?? process.env.ADMIN_API_KEY;
+  const cookieSecret = process.env.COOKIE_SECRET?.trim();
   const logLevel = process.env.LOG_LEVEL ?? "info";
+  const trustProxy = resolveTrustProxy(process.env.TRUST_PROXY);
   const applicationInsightsConnectionString = resolveApplicationInsightsConnectionString();
 
   const config: AppConfig = {
@@ -81,13 +83,14 @@ export function loadConfig(validate = true): AppConfig {
     twitchChannelLogin,
     youtubeApiKey,
     publicBaseUrl,
-    cookieSecret: configuredCookieSecret ?? crypto.randomBytes(32).toString("hex"),
+    cookieSecret: cookieSecret ?? crypto.randomBytes(32).toString("hex"),
     logLevel,
+    trustProxy,
     ...(applicationInsightsConnectionString ? { applicationInsightsConnectionString } : {})
   };
 
   if (shouldValidateConfig(validate, normalizedNodeEnv)) {
-    validateConfig(config, configuredCookieSecret, normalizedNodeEnv);
+    validateConfig(config, cookieSecret, normalizedNodeEnv);
   }
 
   return config;
@@ -97,14 +100,14 @@ function shouldValidateConfig(validate: boolean, normalizedNodeEnv: string): boo
   return validate && normalizedNodeEnv !== "test" && normalizedNodeEnv !== "testing";
 }
 
-function validateConfig(config: AppConfig, configuredCookieSecret: string | undefined, normalizedNodeEnv: string): void {
-  const errors = configValidationErrors(config, configuredCookieSecret, normalizedNodeEnv);
+function validateConfig(config: AppConfig, cookieSecret: string | undefined, normalizedNodeEnv: string): void {
+  const errors = configValidationErrors(config, cookieSecret, normalizedNodeEnv);
   if (errors.length) {
     throw new Error(`Environment configuration is invalid:\n${errors.join("\n")}`);
   }
 }
 
-function configValidationErrors(config: AppConfig, configuredCookieSecret: string | undefined, normalizedNodeEnv: string): string[] {
+function configValidationErrors(config: AppConfig, cookieSecret: string | undefined, normalizedNodeEnv: string): string[] {
   const errors: string[] = [];
   if (!config.databaseConnectionString) {
     errors.push(
@@ -117,10 +120,32 @@ function configValidationErrors(config: AppConfig, configuredCookieSecret: strin
   if (!config.twitchClientSecret) {
     errors.push("TWITCH_CLIENT_SECRET is required");
   }
-  if (!configuredCookieSecret && normalizedNodeEnv === "production") {
-    errors.push("COOKIE_SECRET or ADMIN_API_KEY is required in Production");
+  if (!cookieSecret && normalizedNodeEnv === "production") {
+    errors.push("COOKIE_SECRET is required in Production");
   }
   return errors;
+}
+
+// Controls which proxy hops Fastify trusts for X-Forwarded-* headers. Defaults
+// to `true` to preserve the existing Azure/nginx behaviour; operators can lock
+// this down with TRUST_PROXY (e.g. "loopback" on Azure, or the proxy subnet CIDR).
+function resolveTrustProxy(value: string | undefined): boolean | number | string {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return true;
+  }
+  const lower = trimmed.toLocaleLowerCase("en-GB");
+  if (lower === "true") {
+    return true;
+  }
+  if (lower === "false") {
+    return false;
+  }
+  const hops = Number(trimmed);
+  if (Number.isInteger(hops) && hops >= 0) {
+    return hops;
+  }
+  return trimmed;
 }
 
 function resolveNodeEnv(): string {

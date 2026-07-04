@@ -22,6 +22,15 @@ describe("auth helpers", () => {
     expect(readSessionCookie(`${invalidPayload}.${invalidSignature}`, "secret")).toBeNull();
   });
 
+  it("rejects expired session cookies and legacy cookies without an expiry", () => {
+    const expired = createSessionCookie({ id: 1, twitchId: "tw-1", username: "Dadson", role: "Admin" }, "secret", -60);
+    expect(readSessionCookie(expired, "secret")).toBeNull();
+
+    const legacyPayload = Buffer.from(JSON.stringify({ id: 1, twitchId: "tw-1", username: "Dadson", role: "Admin" })).toString("base64url");
+    const legacySignature = crypto.createHmac("sha256", "secret").update(legacyPayload).digest("base64url");
+    expect(readSessionCookie(`${legacyPayload}.${legacySignature}`, "secret")).toBeNull();
+  });
+
   it("guards restricted return URLs after login", () => {
     expect(normalizeReturnUrl()).toBe("/");
     expect(normalizeReturnUrl("votes")).toBe("/votes");
@@ -29,6 +38,15 @@ describe("auth helpers", () => {
     expect(sanitizeReturnUrl("/votes/history?round=3")).toBe("/votes/history?round=3");
     expect(sanitizeReturnUrl("/login?returnUrl=/admin")).toBe("/");
     expect(sanitizeReturnUrl("/admin")).toBe("/");
+  });
+
+  it("blocks protocol-relative return URLs that would redirect off-site", () => {
+    expect(normalizeReturnUrl("//evil.example")).toBe("/");
+    expect(normalizeReturnUrl(String.raw`/\evil.example`)).toBe("/");
+    expect(normalizeReturnUrl("%2F%2Fevil.example")).toBe("/");
+    expect(sanitizeReturnUrl("//evil.example")).toBe("/");
+    expect(sanitizeReturnUrl(String.raw`/\evil.example`)).toBe("/");
+    expect(sanitizeReturnUrl("%2F%2Fevil.example/path")).toBe("/");
   });
 
   it("logs API key authentication success without logging the raw key", async () => {

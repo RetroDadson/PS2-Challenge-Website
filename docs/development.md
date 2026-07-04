@@ -41,8 +41,7 @@ Useful environment variables:
 
 - `PORT` - Fastify listen port, default `5001`
 - `PUBLIC_BASE_URL` - fallback public URL when forwarded request headers are unavailable
-- `ADMIN_API_KEY` - deployment secret and fallback cookie signing secret
-- `COOKIE_SECRET` - preferred cookie signing secret
+- `COOKIE_SECRET` - HMAC secret that signs auth cookies and OAuth state (required in Production; random ephemeral value used when unset outside Production)
 - `LOG_LEVEL` - Fastify logger level outside test environments
 - `YOUTUBE_API_KEY` - YouTube Data API v3 key for challenge-runner channel logos when no Twitch URL is available
 - `APPLICATIONINSIGHTS_CONNECTION_STRING` - Azure Application Insights connection string

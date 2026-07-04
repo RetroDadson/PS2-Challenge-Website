@@ -48,8 +48,8 @@ services:
       TWITCH_CLIENT_SECRET: ${TWITCH_CLIENT_SECRET}
       YOUTUBE_API_KEY: ${YOUTUBE_API_KEY:-}
 
-      # Admin API Key
-      ADMIN_API_KEY: ${ADMIN_API_KEY}
+      # Cookie signing secret (required in Production)
+      COOKIE_SECRET: ${COOKIE_SECRET}
 
       # Node/Fastify Configuration
       NODE_ENV: ${NODE_ENV:-Production}

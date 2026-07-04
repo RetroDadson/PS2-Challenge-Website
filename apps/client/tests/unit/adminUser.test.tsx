@@ -162,7 +162,7 @@ describe("User page", () => {
         profileImageUrl: "https://example.com/user.png",
         createdAt: "2024-01-01T00:00:00Z",
         lastLoginAt: "2024-01-02T03:04:00Z",
-        apiKey: "stored-hash"
+        apiKey: null
       },
       "POST /api/user/api-key": { apiKey: "new-raw-key" }
     });
@@ -173,18 +173,20 @@ describe("User page", () => {
     expect(screen.getByText("tw-user")).toBeInTheDocument();
     expect(screen.getAllByText(/2024/).length).toBeGreaterThan(0);
 
-    const apiKeyInput = screen.getByLabelText("API key") as HTMLInputElement;
-    expect(apiKeyInput.type).toBe("password");
-    expect(apiKeyInput.value).toBe("stored-hash");
-
-    fireEvent.click(screen.getByRole("button", { name: "Show API key" }));
-    expect(apiKeyInput.type).toBe("text");
-
-    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
-    await waitFor(() => expect(writeText).toHaveBeenCalledWith("stored-hash"));
+    expect(screen.getByText(/cannot be displayed/)).toBeInTheDocument();
+    expect(screen.queryByLabelText("API key")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Regenerate" }));
-    await waitFor(() => expect(apiKeyInput.value).toBe("new-raw-key"));
+    const apiKeyInput = (await screen.findByLabelText("API key")) as HTMLInputElement;
+    expect(apiKeyInput.value).toBe("new-raw-key");
+    expect(apiKeyInput.type).toBe("text");
+    expect(screen.getByText(/will not be shown again/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Hide API key" }));
+    expect(apiKeyInput.type).toBe("password");
+
+    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith("new-raw-key"));
   });
 });
 
