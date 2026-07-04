@@ -1,5 +1,6 @@
 import path from "node:path";
 import fs from "node:fs";
+import { STATUS_CODES } from "node:http";
 import { fileURLToPath } from "node:url";
 import cookie from "@fastify/cookie";
 import formbody from "@fastify/formbody";
@@ -99,10 +100,51 @@ type RecurringJobOptions = {
 export async function buildApp(config: AppConfig, dependencies: AppDependencies = {}): Promise<FastifyInstance> {
   const app = fastify({
     logger: config.nodeEnv !== "Testing" && config.nodeEnv !== "test" ? { level: config.logLevel } : false,
-    trustProxy: true
+    trustProxy: config.trustProxy
   });
 
-  await app.register(helmet, { contentSecurityPolicy: false });
+  // Registered before routes so every route in this scope binds to it.
+  // Client errors (validation, 4xx) keep their intended, non-sensitive detail;
+  // unexpected 5xx errors are logged and returned generically so internal
+  // details (e.g. database error text) never reach the response body.
+  app.setErrorHandler((error: unknown, request, reply) => {
+    const routeError = error instanceof Error ? error : new Error(String(error));
+    if (routeError.name === "ZodError") {
+      return reply.status(400).send({ statusCode: 400, error: "Bad Request", message: "Invalid request parameters" });
+    }
+    const statusCode = errorStatusCode(routeError);
+    if (statusCode >= 500) {
+      request.log.error({ err: routeError }, "Unhandled route error");
+      return reply.status(500).send({ message: "Internal server error" });
+    }
+    return reply.status(statusCode).send({
+      statusCode,
+      error: STATUS_CODES[statusCode] ?? "Error",
+      message: routeError.message
+    });
+  });
+
+  // Report-only CSP: surfaces violations without blocking the SPA or Swagger UI.
+  // Tailored to what the app actually loads (self, external avatar/cover images,
+  // inline styles used by the UI, and the realtime websocket).
+  await app.register(helmet, {
+    contentSecurityPolicy: {
+      useDefaults: false,
+      reportOnly: true,
+      directives: {
+        "default-src": ["'self'"],
+        "base-uri": ["'self'"],
+        "img-src": ["'self'", "data:", "https:"],
+        "style-src": ["'self'", "'unsafe-inline'"],
+        "script-src": ["'self'"],
+        "connect-src": ["'self'", "ws:", "wss:"],
+        "font-src": ["'self'", "data:"],
+        "object-src": ["'none'"],
+        "frame-ancestors": ["'self'"],
+        "form-action": ["'self'"]
+      }
+    }
+  });
   await app.register(cookie);
   await app.register(formbody);
   await app.register(websocket);
@@ -157,7 +199,12 @@ export async function buildApp(config: AppConfig, dependencies: AppDependencies 
   app.get("/votesHub", { websocket: true }, (socket) => realtimeHub.register("votes", socket));
   app.get("/gamesHub", { websocket: true }, (socket) => realtimeHub.register("games", socket));
 
-  await registerHealthRoutes(app, () => dbClient.db.selectFrom("platform_types").select("platform").limit(1).executeTakeFirst());
+  const includeHealthErrorDetail = config.nodeEnv.toLocaleLowerCase("en-GB") !== "production";
+  await registerHealthRoutes(
+    app,
+    () => dbClient.db.selectFrom("platform_types").select("platform").limit(1).executeTakeFirst(),
+    { includeErrorDetail: includeHealthErrorDetail }
+  );
   await registerAuthRoutes(app, userRepository, config);
   await registerUserRoutes(app, userRepository, config);
   await registerAdminRoutes(app, userRepository, config, twitchStatsService);
@@ -193,11 +240,19 @@ export async function buildApp(config: AppConfig, dependencies: AppDependencies 
     return reply.type("text/html").send("<!doctype html><html><body><div id=\"root\">PS2 Challenge</div></body></html>");
   });
 
+  // Client errors (validation, 4xx) keep their intended, non-sensitive detail;
+  // unexpected 5xx errors are logged and returned generically so internal
+  // details (e.g. database error text) never reach the response body.
   app.addHook("onClose", async () => {
     await closeDbClient(dbClient);
   });
 
   return app;
+}
+
+function errorStatusCode(error: Error): number {
+  const candidate = (error as { statusCode?: unknown }).statusCode;
+  return typeof candidate === "number" && candidate >= 400 && candidate <= 599 ? candidate : 500;
 }
 
 export async function startApp(config: AppConfig): Promise<FastifyInstance> {

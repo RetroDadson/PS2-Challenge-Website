@@ -61,6 +61,25 @@ describe("public site routes", () => {
     expect(response.body).toContain("Sitemap: https://vanity.example/sitemap.xml");
   });
 
+  it("escapes XML metacharacters in the request-derived origin", async () => {
+    app = fastify({ logger: false, trustProxy: true });
+    await registerPublicSiteRoutes(app, config);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/sitemap.xml",
+      headers: {
+        host: "ok.example",
+        "x-forwarded-host": "evil.example&x=<y>",
+        "x-forwarded-proto": "https"
+      }
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toContain("<loc>https://evil.example&amp;x=&lt;y&gt;/</loc>");
+    expect(response.body).not.toContain("<y>");
+  });
+
   it("keeps a forwarded non-default access port when it is sent separately", async () => {
     app = fastify({ logger: false, trustProxy: true });
     await registerPublicSiteRoutes(app, config);
