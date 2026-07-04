@@ -24,7 +24,7 @@ Sitemap: ${origin}/sitemap.xml
   });
 
   app.get("/sitemap.xml", { schema: { hide: true } }, async (request, reply) => {
-    const origin = requestOrigin(request, config.publicBaseUrl);
+    const origin = xmlEscape(requestOrigin(request, config.publicBaseUrl));
     const urls = sitemapPages
       .map(
         ({ path, changefreq, priority }) => `  <url>
@@ -41,4 +41,13 @@ ${urls}
 </urlset>
 `);
   });
+}
+
+function xmlEscape(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&apos;");
 }

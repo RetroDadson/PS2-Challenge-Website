@@ -4,8 +4,15 @@ import { errorMessage } from "../utils/errors.js";
 
 export type DatabaseHealthCheck = () => Promise<unknown>;
 
-export async function registerHealthRoutes(app: FastifyInstance, checkDatabase: DatabaseHealthCheck) {
+export type HealthRouteOptions = {
+  // When false, internal exception text is logged but omitted from the public
+  // health response so DB host/credentials cannot leak to unauthenticated callers.
+  includeErrorDetail?: boolean;
+};
+
+export async function registerHealthRoutes(app: FastifyInstance, checkDatabase: DatabaseHealthCheck, options: HealthRouteOptions = {}) {
   registerOpenApiSchemas(app);
+  const includeErrorDetail = options.includeErrorDetail ?? true;
   async function health(request: FastifyRequest, reply: FastifyReply) {
     try {
       const started = performance.now();
@@ -36,7 +43,7 @@ export async function registerHealthRoutes(app: FastifyInstance, checkDatabase: 
           status: "Unhealthy",
           description: "PostgreSQL connection failed",
           duration: formatDuration(performance.now() - databaseStarted),
-          exception: errorMessage(error),
+          ...(includeErrorDetail ? { exception: errorMessage(error) } : {}),
           tags: ["db", "postgres"]
         });
       }
@@ -63,7 +70,7 @@ export async function registerHealthRoutes(app: FastifyInstance, checkDatabase: 
             status: "Unhealthy",
             description: "Health check failed",
             duration: "00:00:00.000",
-            exception: errorMessage(error),
+            ...(includeErrorDetail ? { exception: errorMessage(error) } : {}),
             tags: ["health"]
           }
         ]

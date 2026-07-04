@@ -59,6 +59,29 @@ describe("health API contract parity", () => {
     expect(warn).toHaveBeenCalledWith(expect.objectContaining({ status: "Unhealthy" }), "Health check failed: Unhealthy");
   });
 
+  it("omits internal exception detail when includeErrorDetail is false", async () => {
+    app = fastify({ logger: false });
+    await registerHealthRoutes(
+      app,
+      async () => {
+        throw new Error("connection to internal-db.example failed for user postgres");
+      },
+      { includeErrorDetail: false }
+    );
+
+    const response = await app.inject({ method: "GET", url: "/api/health" });
+
+    expect(response.statusCode).toBe(503);
+    expect(response.body).not.toContain("internal-db.example");
+    expect(response.json().checks[0]).toEqual({
+      name: "database",
+      status: "Unhealthy",
+      description: "PostgreSQL connection failed",
+      duration: expect.any(String),
+      tags: ["db", "postgres"]
+    });
+  });
+
   it("preserves the C# ping response body", async () => {
     app = fastify({ logger: false });
     await registerHealthRoutes(app, async () => undefined);
