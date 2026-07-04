@@ -31,7 +31,8 @@ async function main() {
       twitchChannelLogin: "retrodadson",
       publicBaseUrl: `http://127.0.0.1:${port}`,
       cookieSecret,
-      logLevel: "silent"
+      logLevel: "silent",
+      trustProxy: true
     },
     { dbClient }
   );

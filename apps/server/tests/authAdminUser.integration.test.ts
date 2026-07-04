@@ -97,7 +97,8 @@ describe("auth, admin, and user API contract parity", () => {
     expect(location.searchParams.get("redirect_uri")).toBe("https://challenge.retrodadson.example/api/auth/callback");
     expect(decodeState(location.searchParams.get("state"))).toEqual({
       returnUrl: "https://example.com/votes?tab=current",
-      redirectUri: "https://challenge.retrodadson.example/api/auth/callback"
+      redirectUri: "https://challenge.retrodadson.example/api/auth/callback",
+      nonce: expect.any(String)
     });
   });
 
@@ -269,7 +270,8 @@ describe("auth, admin, and user API contract parity", () => {
         twitchId: "user-twitch",
         username: "NormalUser",
         role: "User",
-        apiKey: hashApiKey(rawApiKey)
+        // The stored hash must never be echoed back through the profile API.
+        apiKey: null
       })
     );
   });
@@ -461,7 +463,8 @@ function adminHeaders() {
 }
 
 function decodeState(state: string | null) {
-  return JSON.parse(Buffer.from(state ?? "", "base64url").toString("utf8")) as unknown;
+  const [payload] = (state ?? "").split(".");
+  return JSON.parse(Buffer.from(payload ?? "", "base64url").toString("utf8")) as unknown;
 }
 
 function sessionCookie(user: { id: number; twitchId: string; username: string; role: string }) {

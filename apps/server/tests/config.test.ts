@@ -84,7 +84,7 @@ describe("config", () => {
       TWITCH_CHANNEL_LOGIN: "env-channel",
       PUBLIC_BASE_URL: "https://ps2.example",
       LOG_LEVEL: "debug",
-      ADMIN_API_KEY: "legacy-cookie-secret",
+      COOKIE_SECRET: "dedicated-cookie-secret",
       APPINSIGHTS_INSTRUMENTATIONKEY: "instrumentation-key"
     };
 
@@ -95,8 +95,41 @@ describe("config", () => {
     expect(config.publicBaseUrl).toBe("https://ps2.example");
     expect(config.twitchChannelLogin).toBe("env-channel");
     expect(config.logLevel).toBe("debug");
-    expect(config.cookieSecret).toBe("legacy-cookie-secret");
+    expect(config.cookieSecret).toBe("dedicated-cookie-secret");
     expect(config.applicationInsightsConnectionString).toBe("InstrumentationKey=instrumentation-key");
+  });
+
+  it("requires COOKIE_SECRET in production and no longer falls back to the retired ADMIN_API_KEY", () => {
+    process.env = {
+      NODE_ENV: "Production",
+      DATABASE_CONNECTION_STRING: "postgresql://localhost/prod",
+      TWITCH_CLIENT_ID: "client",
+      TWITCH_CLIENT_SECRET: "secret",
+      ADMIN_API_KEY: "legacy-cookie-secret"
+    };
+    expect(() => loadConfig()).toThrow("COOKIE_SECRET is required in Production");
+
+    // Outside production a missing COOKIE_SECRET yields an ephemeral random
+    // secret; ADMIN_API_KEY is ignored entirely.
+    process.env = {
+      NODE_ENV: "Development",
+      DATABASE_CONNECTION_STRING: "postgresql://localhost/dev",
+      TWITCH_CLIENT_ID: "client",
+      TWITCH_CLIENT_SECRET: "secret",
+      ADMIN_API_KEY: "legacy-cookie-secret"
+    };
+    const devConfig = loadConfig();
+    expect(devConfig.cookieSecret).toHaveLength(64);
+    expect(devConfig.cookieSecret).not.toBe("legacy-cookie-secret");
+
+    process.env = {
+      NODE_ENV: "Production",
+      DATABASE_CONNECTION_STRING: "postgresql://localhost/prod",
+      TWITCH_CLIENT_ID: "client",
+      TWITCH_CLIENT_SECRET: "secret",
+      COOKIE_SECRET: "dedicated-secret"
+    };
+    expect(loadConfig().cookieSecret).toBe("dedicated-secret");
   });
 
   it("throws a combined validation error outside the test environment", () => {
@@ -110,7 +143,7 @@ describe("config", () => {
         "A database connection string is required (DATABASE_CONNECTION_STRING, apps/server/appsettings.Development.json ConnectionStrings:DefaultConnection, or App Service POSTGRESQLCONNSTR_*)",
         "TWITCH_CLIENT_ID is required",
         "TWITCH_CLIENT_SECRET is required",
-        "COOKIE_SECRET or ADMIN_API_KEY is required in Production"
+        "COOKIE_SECRET is required in Production"
       ].join("\n")
     );
   });
@@ -190,6 +223,27 @@ describe("config", () => {
     expect(config.twitchClientId).toBe("settings-client");
     expect(config.twitchClientSecret).toBe("settings-secret");
     expect(config.youtubeApiKey).toBe("settings-youtube-key");
+  });
+
+  it("resolves TRUST_PROXY into the value Fastify expects, defaulting to true", () => {
+    const baseEnv = {
+      NODE_ENV: "Testing",
+      DATABASE_CONNECTION_STRING: "postgresql://localhost/test",
+      TWITCH_CLIENT_ID: "client",
+      TWITCH_CLIENT_SECRET: "secret"
+    };
+
+    process.env = { ...baseEnv };
+    expect(loadConfig().trustProxy).toBe(true);
+
+    process.env = { ...baseEnv, TRUST_PROXY: "false" };
+    expect(loadConfig().trustProxy).toBe(false);
+
+    process.env = { ...baseEnv, TRUST_PROXY: "2" };
+    expect(loadConfig().trustProxy).toBe(2);
+
+    process.env = { ...baseEnv, TRUST_PROXY: "loopback, 10.0.0.0/8" };
+    expect(loadConfig().trustProxy).toBe("loopback, 10.0.0.0/8");
   });
 
   it("preserves opaque connection strings and explicit SSL modes", () => {

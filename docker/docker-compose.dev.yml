@@ -72,8 +72,8 @@ services:
       TWITCH_CLIENT_SECRET: ${TWITCH_CLIENT_SECRET:-}
       YOUTUBE_API_KEY: ${YOUTUBE_API_KEY:-}
 
-      # Admin API Key
-      ADMIN_API_KEY: ${ADMIN_API_KEY:-dev-admin-key}
+      # Cookie signing secret (stable value keeps dev sessions across restarts)
+      COOKIE_SECRET: ${COOKIE_SECRET:-dev-cookie-secret}
 
       # Node/Fastify Configuration
       NODE_ENV: Development

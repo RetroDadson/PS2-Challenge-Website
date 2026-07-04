@@ -1,8 +1,20 @@
+import crypto from "node:crypto";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { AppConfig } from "../config.js";
 import { authRouteSchemas, registerOpenApiSchemas } from "../openapi/schemas.js";
 import type { UserRepository } from "../repositories/userRepository.js";
-import { clearAuthCookie, getCookieUser, normalizeReturnUrl, sanitizeReturnUrl, setAuthCookie } from "../auth/session.js";
+import {
+  clearAuthCookie,
+  clearOAuthStateCookie,
+  createOAuthState,
+  getCookieUser,
+  normalizeReturnUrl,
+  oauthStateCookieName,
+  readOAuthState,
+  sanitizeReturnUrl,
+  setAuthCookie,
+  setOAuthStateCookie
+} from "../auth/session.js";
 import { requestOrigin } from "../utils/requestOrigin.js";
 
 type TwitchTokenResponse = {
@@ -23,7 +35,9 @@ export async function registerAuthRoutes(app: FastifyInstance, userRepository: U
   app.get("/api/auth/login", { schema: authRouteSchemas.login }, async (request, reply) => {
     const returnUrl = typeof request.query === "object" && request.query && "returnUrl" in request.query ? String(request.query.returnUrl) : "/";
     const redirectUri = callbackUriForRequest(request, config);
-    const state = Buffer.from(JSON.stringify({ returnUrl, redirectUri }), "utf8").toString("base64url");
+    const nonce = crypto.randomBytes(16).toString("hex");
+    const state = createOAuthState({ returnUrl, redirectUri, nonce }, config.cookieSecret);
+    setOAuthStateCookie(reply, nonce);
     const params = new URLSearchParams({
       client_id: config.twitchClientId,
       redirect_uri: redirectUri,
@@ -40,8 +54,16 @@ export async function registerAuthRoutes(app: FastifyInstance, userRepository: U
       return reply.redirect("/");
     }
 
-    const returnUrl = decodeState(query.state).returnUrl;
-    const redirectUri = decodeState(query.state).redirectUri ?? callbackUriForRequest(request, config);
+    const state = readOAuthState(query.state, config.cookieSecret);
+    const expectedNonce = request.cookies[oauthStateCookieName];
+    clearOAuthStateCookie(reply);
+    if (!state || !expectedNonce || state.nonce !== expectedNonce) {
+      request.log.warn("Rejected OAuth callback with a missing or mismatched state");
+      return reply.redirect("/");
+    }
+
+    const returnUrl = state.returnUrl;
+    const redirectUri = state.redirectUri ?? callbackUriForRequest(request, config);
     const token = await exchangeCodeForToken(query.code, config, redirectUri);
     const twitchUser = await fetchTwitchUser(token.access_token, config);
     if (!twitchUser?.id) {
@@ -102,17 +124,6 @@ export async function registerAuthRoutes(app: FastifyInstance, userRepository: U
       return reply.status(500).send({ message: "Internal server error" });
     }
   });
-}
-
-function decodeState(state: string | undefined): { returnUrl?: string; redirectUri?: string } {
-  if (!state) {
-    return {};
-  }
-  try {
-    return JSON.parse(Buffer.from(state, "base64url").toString("utf8")) as { returnUrl?: string; redirectUri?: string };
-  } catch {
-    return {};
-  }
 }
 
 function callbackUriForRequest(request: FastifyRequest, config: AppConfig): string {

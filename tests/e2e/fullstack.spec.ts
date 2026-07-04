@@ -133,13 +133,15 @@ test("admin maintenance and user profile journeys use the real API", async ({ pa
   await page.goto("/user");
   await expect(page.getByRole("heading", { name: "PlaywrightAdmin" })).toBeVisible();
   await expect(page).toHaveScreenshot("user-profile-seeded.png", { animations: "disabled", fullPage: false, maxDiffPixelRatio: 0.08 });
-  const apiKey = page.getByRole("textbox", { name: "API key" });
-  const previousApiKey = await apiKey.inputValue();
-  await page.getByRole("button", { name: "Show API key" }).click();
+  await expect(page.getByText(/cannot be displayed/)).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "API key" })).toHaveCount(0);
   page.once("dialog", (dialog) => void dialog.accept());
   await page.getByRole("button", { name: "Regenerate" }).click();
-  await expect.poll(() => apiKey.inputValue()).not.toBe(previousApiKey);
-  await expect(page.getByRole("button", { name: "Hide API key" })).toBeVisible();
+  const apiKey = page.getByRole("textbox", { name: "API key" });
+  await expect.poll(() => apiKey.inputValue()).toMatch(/^[0-9a-f]{64}$/);
+  await expect(page.getByText(/will not be shown again/)).toBeVisible();
+  await page.getByRole("button", { name: "Hide API key" }).click();
+  await expect(page.getByRole("button", { name: "Show API key" })).toBeVisible();
 
   await page.goto("/admin");
   await expect(page.getByRole("heading", { name: "Admin Panel" })).toBeVisible();

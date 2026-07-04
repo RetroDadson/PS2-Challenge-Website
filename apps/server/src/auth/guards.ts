@@ -59,11 +59,24 @@ export async function requireAdmin(request: FastifyRequest, reply: FastifyReply,
   if (!user) {
     return null;
   }
-  if (user.role !== "Admin") {
+  const role = user.authMethod === "Cookie" ? await currentRoleFromDatabase(request, userRepository, user.twitchId) : user.role;
+  if (role !== "Admin") {
     await reply.status(403).send();
     return null;
   }
-  return user;
+  return { ...user, role };
+}
+
+// Cookie sessions embed the role for up to 30 days, so admin access is
+// re-checked against the database to make demotions take effect immediately.
+async function currentRoleFromDatabase(request: FastifyRequest, userRepository: UserRepository, twitchId: string): Promise<string | null> {
+  try {
+    const dbUser = await userRepository.getByTwitchId(twitchId);
+    return dbUser?.roleName ?? null;
+  } catch (error) {
+    request.log.error({ err: error, twitchId }, "Error loading user role for admin check");
+    return null;
+  }
 }
 
 export function createRequireAdmin(userRepository: UserRepository, config: AppConfig) {

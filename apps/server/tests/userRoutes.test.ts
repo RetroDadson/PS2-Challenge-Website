@@ -40,7 +40,7 @@ describe("user routes", () => {
     expect(updatePreferences.statusCode).toBe(401);
   });
 
-  it("returns database profile fields while falling back to the signed session", async () => {
+  it("returns database profile fields while falling back to the signed session and never exposing the stored API-key hash", async () => {
     app = await userApp({
       getById: vi.fn(async () => ({
         id: 1,
@@ -50,7 +50,7 @@ describe("user routes", () => {
         profileImageUrl: null,
         createdAt: "2024-01-01T00:00:00.000Z",
         lastLoginAt: null,
-        apiKey: null
+        apiKey: "stored-sha256-hash"
       }))
     });
 

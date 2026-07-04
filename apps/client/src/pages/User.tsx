@@ -7,10 +7,6 @@ import { useAsync } from "../hooks.js";
 
 export function UserPage() {
   const user = useAsync(loadUserProfile, []);
-  const [showApiKey, setShowApiKey] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [apiKeyError, setApiKeyError] = useState<string | null>(null);
-  const [regenerating, setRegenerating] = useState(false);
 
   if (user.loading) return <Loading />;
   if (user.error) return <ErrorMessage message={user.error} />;
@@ -23,34 +19,6 @@ export function UserPage() {
       </section>
     );
   }
-
-  const regenerate = async () => {
-    if (!globalThis.confirm("Are you sure you want to regenerate your API key? This will invalidate the current key.")) {
-      return;
-    }
-    setRegenerating(true);
-    setApiKeyError(null);
-    try {
-      const next = await api.regenerateApiKey();
-      user.setData({ ...user.data!, apiKey: next.apiKey });
-      setShowApiKey(true);
-    } catch (error) {
-      setApiKeyError(error instanceof Error ? error.message : String(error));
-    } finally {
-      setRegenerating(false);
-    }
-  };
-
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(user.data?.apiKey ?? "");
-      setCopied(true);
-      setApiKeyError(null);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      setApiKeyError("Failed to copy API key to clipboard");
-    }
-  };
 
   return (
     <section className="page user-profile-page">
@@ -71,16 +39,7 @@ export function UserPage() {
           <div><dt>Last Login</dt><dd>{formatDateTime(user.data.lastLoginAt)}</dd></div>
         </dl>
 
-        <div className="api-key-section">
-          <h2>API Key</h2>
-          <div className="api-key-row">
-            <input readOnly type={showApiKey ? "text" : "password"} value={user.data.apiKey ?? ""} aria-label="API key" />
-            <button className="icon-button" onClick={() => setShowApiKey(!showApiKey)} aria-label={showApiKey ? "Hide API key" : "Show API key"}>{showApiKey ? <EyeOff /> : <Eye />}</button>
-            <button onClick={copy}><Copy />{copied ? "Copied" : "Copy"}</button>
-            <button onClick={regenerate} disabled={regenerating}><RefreshCw className={regenerating ? "spin" : undefined} />{regenerating ? "Regenerating..." : "Regenerate"}</button>
-          </div>
-          {apiKeyError ? <div className="status error">{apiKeyError}</div> : null}
-        </div>
+        <ApiKeySection apiKey={user.data.apiKey} onRegenerated={(apiKey) => user.setData({ ...user.data!, apiKey })} />
 
         <div className="profile-actions">
           <a className="button-link secondary" href="/">Back to Home</a>
@@ -88,6 +47,61 @@ export function UserPage() {
         </div>
       </section>
     </section>
+  );
+}
+
+function ApiKeySection({ apiKey, onRegenerated }: Readonly<{ apiKey: string | null | undefined; onRegenerated: (apiKey: string) => void }>) {
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [apiKeyError, setApiKeyError] = useState<string | null>(null);
+  const [regenerating, setRegenerating] = useState(false);
+
+  const regenerate = async () => {
+    if (!globalThis.confirm("Are you sure you want to regenerate your API key? This will invalidate the current key.")) {
+      return;
+    }
+    setRegenerating(true);
+    setApiKeyError(null);
+    try {
+      const next = await api.regenerateApiKey();
+      onRegenerated(next.apiKey);
+      setShowApiKey(true);
+    } catch (error) {
+      setApiKeyError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setRegenerating(false);
+    }
+  };
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(apiKey ?? "");
+      setCopied(true);
+      setApiKeyError(null);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      setApiKeyError("Failed to copy API key to clipboard");
+    }
+  };
+
+  return (
+    <div className="api-key-section">
+      <h2>API Key</h2>
+      <div className="api-key-row">
+        {apiKey ? (
+          <>
+            <input readOnly type={showApiKey ? "text" : "password"} value={apiKey} aria-label="API key" />
+            <button className="icon-button" onClick={() => setShowApiKey(!showApiKey)} aria-label={showApiKey ? "Hide API key" : "Show API key"}>{showApiKey ? <EyeOff /> : <Eye />}</button>
+            <button onClick={copy}><Copy />{copied ? "Copied" : "Copy"}</button>
+          </>
+        ) : (
+          <p className="muted">Your API key is stored securely and cannot be displayed. Regenerate to get a new key.</p>
+        )}
+        <button onClick={regenerate} disabled={regenerating}><RefreshCw className={regenerating ? "spin" : undefined} />{regenerating ? "Regenerating..." : "Regenerate"}</button>
+      </div>
+      {apiKey ? <p className="muted">Copy this key now - it will not be shown again after you leave this page.</p> : null}
+      {apiKeyError ? <div className="status error">{apiKeyError}</div> : null}
+    </div>
   );
 }
 

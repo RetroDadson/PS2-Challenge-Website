@@ -3,6 +3,9 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import type { AppConfig } from "../config.js";
 
 export const authCookieName = ".PS2Challenge.Auth";
+export const oauthStateCookieName = ".PS2Challenge.OAuthState";
+export const sessionTtlSeconds = 60 * 60 * 24 * 30;
+export const oauthStateTtlSeconds = 10 * 60;
 
 export type SessionUser = {
   id: number;
@@ -10,6 +13,14 @@ export type SessionUser = {
   username: string;
   role: string;
   profileImageUrl?: string | null;
+};
+
+type SessionPayload = SessionUser & { exp: number };
+
+export type OAuthState = {
+  returnUrl?: string;
+  redirectUri?: string;
+  nonce: string;
 };
 
 function base64UrlEncode(value: string): string {
@@ -30,12 +41,11 @@ function signatureMatches(expectedSignature: string, providedSignature: string):
   return expected.length === provided.length && crypto.timingSafeEqual(expected, provided);
 }
 
-export function createSessionCookie(user: SessionUser, secret: string): string {
-  const payload = base64UrlEncode(JSON.stringify(user));
+function signPayload(payload: string, secret: string): string {
   return `${payload}.${sign(payload, secret)}`;
 }
 
-export function readSessionCookie(value: string | undefined, secret: string): SessionUser | null {
+function readSignedPayload(value: string | undefined, secret: string): unknown {
   if (!value) {
     return null;
   }
@@ -46,10 +56,46 @@ export function readSessionCookie(value: string | undefined, secret: string): Se
   }
 
   try {
-    return JSON.parse(base64UrlDecode(payload)) as SessionUser;
+    return JSON.parse(base64UrlDecode(payload));
   } catch {
     return null;
   }
+}
+
+export function createSessionCookie(user: SessionUser, secret: string, ttlSeconds = sessionTtlSeconds): string {
+  const payload: SessionPayload = { ...user, exp: nowSeconds() + ttlSeconds };
+  return signPayload(base64UrlEncode(JSON.stringify(payload)), secret);
+}
+
+export function readSessionCookie(value: string | undefined, secret: string): SessionUser | null {
+  const payload = readSignedPayload(value, secret);
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+
+  const { exp, ...user } = payload as SessionPayload;
+  if (typeof exp !== "number" || exp <= nowSeconds()) {
+    return null;
+  }
+  return user;
+}
+
+export function createOAuthState(state: OAuthState, secret: string): string {
+  return signPayload(base64UrlEncode(JSON.stringify(state)), secret);
+}
+
+export function readOAuthState(value: string | undefined, secret: string): OAuthState | null {
+  const payload = readSignedPayload(value, secret);
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+
+  const state = payload as OAuthState;
+  return typeof state.nonce === "string" && state.nonce ? state : null;
+}
+
+function nowSeconds(): number {
+  return Math.floor(Date.now() / 1000);
 }
 
 export function getCookieUser(request: FastifyRequest, config: AppConfig): SessionUser | null {
@@ -62,12 +108,30 @@ export function setAuthCookie(reply: FastifyReply, user: SessionUser, config: Ap
     sameSite: "lax",
     secure: requestIsHttps(reply),
     path: "/",
-    maxAge: 60 * 60 * 24 * 30
+    maxAge: sessionTtlSeconds
   });
 }
 
 export function clearAuthCookie(reply: FastifyReply): void {
   reply.clearCookie(authCookieName, {
+    path: "/",
+    sameSite: "lax",
+    httpOnly: true
+  });
+}
+
+export function setOAuthStateCookie(reply: FastifyReply, nonce: string): void {
+  reply.setCookie(oauthStateCookieName, nonce, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: requestIsHttps(reply),
+    path: "/",
+    maxAge: oauthStateTtlSeconds
+  });
+}
+
+export function clearOAuthStateCookie(reply: FastifyReply): void {
+  reply.clearCookie(oauthStateCookieName, {
     path: "/",
     sameSite: "lax",
     httpOnly: true
@@ -92,6 +156,11 @@ export function normalizeReturnUrl(returnUrl?: string): string {
   }
   if (!path.startsWith("/")) {
     path = `/${path}`;
+  }
+  // "//host" and "/\host" are treated as protocol-relative URLs by browsers,
+  // which would turn the redirect into an open redirect to another site.
+  if (path.length > 1 && (path[1] === "/" || path[1] === "\\")) {
+    return "/";
   }
   return path;
 }

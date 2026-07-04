@@ -19,7 +19,9 @@ export async function registerUserRoutes(app: FastifyInstance, userRepository: U
       profileImageUrl: dbUser?.profileImageUrl ?? user.profileImageUrl,
       createdAt: dbUser?.createdAt ?? null,
       lastLoginAt: dbUser?.lastLoginAt ?? null,
-      apiKey: dbUser?.apiKey ?? null
+      // The database only stores the SHA-256 hash of the key; the raw key is
+      // only available from the regenerate endpoint at creation time.
+      apiKey: null
     };
   });
 

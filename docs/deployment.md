@@ -28,7 +28,7 @@ Required in production-like environments:
 - A PostgreSQL connection string
 - `TWITCH_CLIENT_ID`
 - `TWITCH_CLIENT_SECRET`
-- `COOKIE_SECRET` or `ADMIN_API_KEY`
+- `COOKIE_SECRET` (required in Production; outside Production a random ephemeral secret is generated when unset)
 
 The app accepts PostgreSQL connection strings from `POSTGRESQLCONNSTR_*`, `CUSTOMCONNSTR_*`, `DATABASE_CONNECTION_STRING`, `ConnectionStrings__DefaultConnection`, or appsettings. For Azure Database for PostgreSQL, use `sslmode=verify-full` when using URL-style connection strings.
 
@@ -46,7 +46,7 @@ Optional:
 Register callback URLs for each public host that should support login:
 
 ```text
-https://<host>/api/auth/twitch/callback
+https://<host>/api/auth/callback
 ```
 
 ## Docker
