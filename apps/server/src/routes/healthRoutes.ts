@@ -1,18 +1,10 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { healthRouteSchemas, registerOpenApiSchemas } from "../openapi/schemas.js";
-import { errorMessage } from "../utils/errors.js";
 
 export type DatabaseHealthCheck = () => Promise<unknown>;
 
-export type HealthRouteOptions = {
-  // When false, internal exception text is logged but omitted from the public
-  // health response so DB host/credentials cannot leak to unauthenticated callers.
-  includeErrorDetail?: boolean;
-};
-
-export async function registerHealthRoutes(app: FastifyInstance, checkDatabase: DatabaseHealthCheck, options: HealthRouteOptions = {}) {
+export async function registerHealthRoutes(app: FastifyInstance, checkDatabase: DatabaseHealthCheck) {
   registerOpenApiSchemas(app);
-  const includeErrorDetail = options.includeErrorDetail ?? true;
   async function health(request: FastifyRequest, reply: FastifyReply) {
     try {
       const started = performance.now();
@@ -22,7 +14,6 @@ export async function registerHealthRoutes(app: FastifyInstance, checkDatabase: 
         description?: string;
         duration: string;
         tags: string[];
-        exception?: string;
       }> = [];
       let status = "Healthy";
 
@@ -38,12 +29,14 @@ export async function registerHealthRoutes(app: FastifyInstance, checkDatabase: 
         });
       } catch (error) {
         status = "Unhealthy";
+        // Log the failure reason for operators; never expose it in the public
+        // health response, where it could leak DB host/credentials.
+        request.log.warn({ err: error }, "PostgreSQL health check probe failed");
         checks.push({
           name: "database",
           status: "Unhealthy",
           description: "PostgreSQL connection failed",
           duration: formatDuration(performance.now() - databaseStarted),
-          ...(includeErrorDetail ? { exception: errorMessage(error) } : {}),
           tags: ["db", "postgres"]
         });
       }
@@ -70,7 +63,6 @@ export async function registerHealthRoutes(app: FastifyInstance, checkDatabase: 
             status: "Unhealthy",
             description: "Health check failed",
             duration: "00:00:00.000",
-            ...(includeErrorDetail ? { exception: errorMessage(error) } : {}),
             tags: ["health"]
           }
         ]

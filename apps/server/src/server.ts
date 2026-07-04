@@ -199,12 +199,7 @@ export async function buildApp(config: AppConfig, dependencies: AppDependencies 
   app.get("/votesHub", { websocket: true }, (socket) => realtimeHub.register("votes", socket));
   app.get("/gamesHub", { websocket: true }, (socket) => realtimeHub.register("games", socket));
 
-  const includeHealthErrorDetail = config.nodeEnv.toLocaleLowerCase("en-GB") !== "production";
-  await registerHealthRoutes(
-    app,
-    () => dbClient.db.selectFrom("platform_types").select("platform").limit(1).executeTakeFirst(),
-    { includeErrorDetail: includeHealthErrorDetail }
-  );
+  await registerHealthRoutes(app, () => dbClient.db.selectFrom("platform_types").select("platform").limit(1).executeTakeFirst());
   await registerAuthRoutes(app, userRepository, config);
   await registerUserRoutes(app, userRepository, config);
   await registerAdminRoutes(app, userRepository, config, twitchStatsService);
