@@ -1565,6 +1565,7 @@ th { color: var(--heading-accent); font-size: .82rem; text-transform: uppercase;
     inset: 0 auto 0 0;
     width: min(17rem, calc(100vw - 3rem));
     height: 100dvh;
+    padding-top: 4.25rem;
     transform: translateX(-100%);
     transition: transform 180ms ease;
     box-shadow: 16px 0 36px rgba(0, 0, 0, .35);
@@ -1731,7 +1732,6 @@ th { color: var(--heading-accent); font-size: .82rem; text-transform: uppercase;
   .sidebar {
     width: 100vw;
     max-width: 100vw;
-    padding-top: 4.25rem;
     border-right: 0;
     box-shadow: none;
   }
