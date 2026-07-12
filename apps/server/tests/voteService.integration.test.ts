@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { parseDateOnly } from "@ps2-challenge/shared";
 import type pg from "pg";
 import { VoteService } from "../src/services/voteService.js";
 import { seedCurrentVote, seedGame, startIntegrationDatabase, type IntegrationDatabase } from "./helpers/postgres.js";
@@ -15,6 +16,13 @@ type CurrentVoteRow = {
   game_id: number;
   vote_count: number;
   game_number: number;
+};
+
+type ProgressRow = {
+  game_id: number;
+  date_started: string;
+  date_finished: string | null;
+  platform: string;
 };
 
 describe("VoteService parity", () => {
@@ -50,7 +58,7 @@ describe("VoteService parity", () => {
 
     const result = await voteService.archiveCurrentVotes("  Round notes  ");
 
-    expect(result).toEqual({ roundNumber: 1, archivedCount: 3 });
+    expect(result).toEqual({ roundNumber: 1, archivedCount: 3, progressStartedGameTitle: "Top Game" });
 
     const history = await historyRows(db.pool);
     expect(history).toHaveLength(3);
@@ -59,6 +67,9 @@ describe("VoteService parity", () => {
     expect(history.find((row) => row.game_id === 2)?.position).toBe(2);
     expect(history.find((row) => row.game_id === 3)?.position).toBe(3);
     expect(await currentRows(db.pool)).toEqual([]);
+    expect(await progressRows(db.pool)).toEqual([
+      { game_id: 1, date_started: parseDateOnly(new Date()), date_finished: null, platform: "Physical" }
+    ]);
   });
 
   it("uses manual archive positions and stores blank notes as null", async () => {
@@ -71,13 +82,65 @@ describe("VoteService parity", () => {
     await seedCurrentVote(db.pool, 11, 15, 2);
     await seedCurrentVote(db.pool, 12, 10, 3);
 
-    await voteService.archiveCurrentVotes("", { 10: 2, 11: 1, 12: 3 });
+    const result = await voteService.archiveCurrentVotes("", { 10: 2, 11: 1, 12: 3 });
 
+    expect(result.progressStartedGameTitle).toBe("Tie Two");
     const history = await historyRows(db.pool);
     expect(history.find((row) => row.game_id === 10)?.position).toBe(2);
     expect(history.find((row) => row.game_id === 11)?.position).toBe(1);
     expect(history.find((row) => row.game_id === 12)?.position).toBe(3);
     expect(history.every((row) => row.notes === null)).toBe(true);
+    expect((await progressRows(db.pool)).map((row) => row.game_id)).toEqual([11]);
+  });
+
+  it("does not start progress when the top position is an unresolved tie", async () => {
+    await seedGames(db.pool, [
+      [10, "Tie One"],
+      [11, "Tie Two"],
+      [12, "Third"]
+    ]);
+    await seedCurrentVote(db.pool, 10, 15, 1);
+    await seedCurrentVote(db.pool, 11, 15, 2);
+    await seedCurrentVote(db.pool, 12, 10, 3);
+
+    const result = await voteService.archiveCurrentVotes();
+
+    expect(result.progressStartedGameTitle).toBeNull();
+    expect(await progressRows(db.pool)).toEqual([]);
+  });
+
+  it("keeps an existing progress row for the archive winner untouched", async () => {
+    await seedGames(db.pool, [
+      [1, "Top Game"],
+      [2, "Second Game"]
+    ]);
+    await seedCurrentVote(db.pool, 1, 30, 1);
+    await seedCurrentVote(db.pool, 2, 20, 2);
+    await db.pool.query("INSERT INTO progress (game_id, date_started, date_finished, platform) VALUES (1, '2025-01-01', '2025-02-01', 'Emulated')");
+
+    const result = await voteService.archiveCurrentVotes();
+
+    expect(result.progressStartedGameTitle).toBeNull();
+    expect(await progressRows(db.pool)).toEqual([
+      { game_id: 1, date_started: "2025-01-01", date_finished: "2025-02-01", platform: "Emulated" }
+    ]);
+  });
+
+  it("starts progress as Emulated when the winner is not owned physically", async () => {
+    await seedGames(db.pool, [
+      [1, "Top Game"],
+      [2, "Second Game"]
+    ]);
+    await db.pool.query("INSERT INTO game_owned (game_id, own_physical_copy, type_owned) VALUES (1, false, 'Base')");
+    await seedCurrentVote(db.pool, 1, 30, 1);
+    await seedCurrentVote(db.pool, 2, 20, 2);
+
+    const result = await voteService.archiveCurrentVotes();
+
+    expect(result.progressStartedGameTitle).toBe("Top Game");
+    expect(await progressRows(db.pool)).toEqual([
+      { game_id: 1, date_started: parseDateOnly(new Date()), date_finished: null, platform: "Emulated" }
+    ]);
   });
 
   it("throws when setting an empty current-vote payload", async () => {
@@ -222,5 +285,15 @@ async function historyRows(pool: pg.Pool): Promise<HistoryRow[]> {
 
 async function currentRows(pool: pg.Pool, orderBy = "game_id"): Promise<CurrentVoteRow[]> {
   const result = await pool.query<CurrentVoteRow>(`SELECT game_id, vote_count, game_number FROM current_vote ORDER BY ${orderBy}`);
+  return result.rows;
+}
+
+async function progressRows(pool: pg.Pool): Promise<ProgressRow[]> {
+  const result = await pool.query<ProgressRow>(
+    `
+    SELECT game_id, to_char(date_started, 'YYYY-MM-DD') AS date_started, to_char(date_finished, 'YYYY-MM-DD') AS date_finished, platform
+    FROM progress ORDER BY game_id
+    `
+  );
   return result.rows;
 }

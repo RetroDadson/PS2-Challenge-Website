@@ -108,7 +108,8 @@ export async function registerVotesRoutes(
       realtimeHub.broadcastVotesUpdated();
       auditInfo(request.log, user, `AUDIT: Admin ${user.username} archived current votes`, {
         round: result.roundNumber,
-        archivedCount: result.archivedCount
+        archivedCount: result.archivedCount,
+        progressStartedGameTitle: result.progressStartedGameTitle
       });
       return {
         message: "Current votes archived successfully",

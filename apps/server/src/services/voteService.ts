@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import type { CurrentVoteDto, UploadRoundDto, VoteRoundDto } from "@ps2-challenge/shared";
+import { parseDateOnly } from "@ps2-challenge/shared";
 import { sql, type Kysely } from "kysely";
 import type pg from "pg";
 import { createKyselyFromPool, type Database } from "../db/kysely.js";
@@ -126,7 +127,10 @@ export class VoteService {
     return (result.numDeletedRows ?? 0n) > 0n;
   }
 
-  async archiveCurrentVotes(notes?: string | null, manualPositions?: Record<number, number>): Promise<{ roundNumber: number; archivedCount: number }> {
+  async archiveCurrentVotes(
+    notes?: string | null,
+    manualPositions?: Record<number, number>
+  ): Promise<{ roundNumber: number; archivedCount: number; progressStartedGameTitle: string | null }> {
     return this.db
       .transaction()
       .setIsolationLevel("serializable")
@@ -142,9 +146,13 @@ export class VoteService {
           .executeTakeFirst();
         const roundNumber = (maxRound?.max_round ?? 0) + 1;
         const sorted = [...current].sort((left, right) => right.vote_count - left.vote_count);
+        let winnerGameId: number | null = null;
         for (let index = 0; index < sorted.length; index++) {
           const vote = sorted[index]!;
           const position = determinePosition(sorted, index, vote, manualPositions);
+          if (position === 1 && winnerGameId === null) {
+            winnerGameId = vote.game_id;
+          }
           await transaction
             .insertInto("vote_history")
             .values({
@@ -157,8 +165,24 @@ export class VoteService {
             .execute();
         }
         await transaction.deleteFrom("current_vote").execute();
-        return { roundNumber, archivedCount: sorted.length };
+        const progressStartedGameTitle = winnerGameId === null ? null : await this.startProgressForWinner(transaction, winnerGameId);
+        return { roundNumber, archivedCount: sorted.length, progressStartedGameTitle };
       });
+  }
+
+  private async startProgressForWinner(transaction: Kysely<Database>, gameId: number): Promise<string | null> {
+    const existing = await transaction.selectFrom("progress").select("progress_id").where("game_id", "=", gameId).executeTakeFirst();
+    if (existing) {
+      return null;
+    }
+    const owned = await transaction.selectFrom("game_owned").select("own_physical_copy").where("game_id", "=", gameId).executeTakeFirst();
+    const platform = owned?.own_physical_copy === false ? "Emulated" : "Physical";
+    await transaction
+      .insertInto("progress")
+      .values({ game_id: gameId, date_started: parseDateOnly(new Date()), platform })
+      .execute();
+    const game = await transaction.selectFrom("games").select("title").where("game_id", "=", gameId).executeTakeFirst();
+    return game?.title ?? null;
   }
 
   async getVoteHistory(): Promise<VoteRoundDto[]> {
