@@ -159,6 +159,8 @@ describe("votes API contract parity", () => {
       round: 1,
       archivedCount: 2
     });
+    const progress = await db.pool.query<{ game_id: number }>("SELECT game_id FROM progress ORDER BY game_id");
+    expect(progress.rows).toEqual([{ game_id: 1 }]);
   });
 
   it("archives tied current votes with manual positions from the React modal", async () => {
