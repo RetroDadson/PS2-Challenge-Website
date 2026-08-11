@@ -550,6 +550,24 @@ th { color: var(--heading-accent); font-size: .82rem; text-transform: uppercase;
 .data-table {
   min-width: 0;
   table-layout: fixed;
+  overflow: visible;
+}
+.data-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--surface);
+}
+@media (min-width: 821px) {
+  .votes-history-table {
+    overflow: visible;
+  }
+  .votes-history-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--surface);
+  }
 }
 .data-table td {
   overflow-wrap: normal;

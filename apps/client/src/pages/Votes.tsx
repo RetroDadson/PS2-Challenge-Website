@@ -505,7 +505,7 @@ function VoteHistoryTable({
   sortColumn: SortColumn;
 }>) {
   return (
-    <table>
+    <table className="votes-history-table">
       <thead>
         <tr>
           <th><SortButton column="VoteRound" current={sortColumn} ascending={ascending} onSort={onSort}>Round</SortButton></th>
