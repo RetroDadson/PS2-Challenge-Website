@@ -8,6 +8,7 @@ import { SortButton, sortMarker } from "../components/SortButton.js";
 import { Empty, ErrorMessage, Loading } from "../components/Status.js";
 import { useAsync, useCurrentUser, useRealtime } from "../hooks.js";
 import { fullCirclePath, PIE_CHART_COLORS, sectorPath, formatPathNumber } from "../pieChart.js";
+import { buildSearchIndex, matchesSearchIndex, type SearchIndex } from "../searchIndex.js";
 
 type SortColumn = "VoteRound" | "TopGameTitle" | "TopVotes" | "SecondGameTitle" | "SecondVotes" | "LastGameTitle" | "LastVotes";
 
@@ -32,19 +33,34 @@ export function Votes() {
     [current.data]
   );
   const gamesById = useMemo(() => new Map((games.data ?? []).map((game) => [game.id, game])), [games.data]);
+  const gameTitleSearchIndex = useMemo(
+    () => buildSearchIndex(games.data ?? [], (game) => game.id, (game) => [game.title]),
+    [games.data]
+  );
   const titleSuggestions = useMemo(() => {
     const search = newCurrentTitle.trim().toLocaleLowerCase("en-GB");
     if (!search) return [];
     return (games.data ?? [])
+      .filter((game) => matchesSearchIndex(gameTitleSearchIndex, game.id, search))
       .map((game) => game.title)
-      .filter((title) => title.toLocaleLowerCase("en-GB").includes(search))
       .sort((left, right) => left.localeCompare(right, "en-GB"))
       .slice(0, 8);
-  }, [games.data, newCurrentTitle]);
+  }, [gameTitleSearchIndex, games.data, newCurrentTitle]);
   const pieSlices = useMemo(() => buildPieSlices(orderedCurrentVotes), [orderedCurrentVotes]);
+  const voteHistorySearchIndex = useMemo(
+    () =>
+      buildSearchIndex(history.data ?? [], (round) => round.voteRound, (round) => [
+        String(round.voteRound),
+        round.topGameTitle,
+        round.secondGameTitle,
+        round.lastGameTitle,
+        round.notes
+      ]),
+    [history.data]
+  );
   const filteredHistory = useMemo(
-    () => sortVoteHistory(filterVoteHistory(history.data ?? [], filter, showOnlyRoundsWithVotes), sortColumn, sortAscending),
-    [filter, history.data, showOnlyRoundsWithVotes, sortAscending, sortColumn]
+    () => sortVoteHistory(filterVoteHistory(history.data ?? [], voteHistorySearchIndex, filter, showOnlyRoundsWithVotes), sortColumn, sortAscending),
+    [filter, history.data, showOnlyRoundsWithVotes, sortAscending, sortColumn, voteHistorySearchIndex]
   );
 
   const addCurrent = async () => {
@@ -100,7 +116,7 @@ export function Votes() {
 
   return (
     <section className="page">
-      <header className="page-header"><div><p>Community</p><h1>Votes</h1></div><button onClick={() => void refresh()}><RefreshCw />Refresh</button></header>
+      <header className="page-header"><div><p>Community</p><h1>Votes</h1></div><button type="button" onClick={() => void refresh()}><RefreshCw />Refresh</button></header>
       <CurrentVotesPanel
         games={games.data ?? []}
         gamesById={gamesById}
@@ -232,7 +248,7 @@ function CurrentVotesDashboard({
           onUpdateVoteCount={onUpdateVoteCount}
           votes={votes}
         />
-        <button className="secondary" onClick={onRefresh}><RefreshCw />Refresh</button>
+        <button type="button" className="secondary" onClick={onRefresh}><RefreshCw />Refresh</button>
       </div>
       <CurrentVotesPie slices={pieSlices} />
     </div>
@@ -304,7 +320,7 @@ function CurrentVoteRow({
       </td>
       {isAdmin ? (
         <td>
-          <button className="icon-button" onClick={() => onRemove(vote)} aria-label={`Remove ${vote.gameTitle}`}><Trash2 /></button>
+          <button type="button" className="icon-button" onClick={() => onRemove(vote)} aria-label={`Remove ${vote.gameTitle}`}><Trash2 /></button>
         </td>
       ) : null}
     </tr>
@@ -389,9 +405,9 @@ function CurrentVotesAdminToolbar({
           onChange={(event) => onCountChange(Math.max(0, Number(event.target.value) || 0))}
         />
       </label>
-      <button onClick={onAdd}><Plus />Add</button>
-      {votes.length ? <button onClick={onArchiveOpen}><Archive />Archive to History</button> : null}
-      {votes.length < 3 ? <button onClick={onFillRandom}><Dice5 />Fill with Random Games</button> : null}
+      <button type="button" onClick={onAdd}><Plus />Add</button>
+      {votes.length ? <button type="button" onClick={onArchiveOpen}><Archive />Archive to History</button> : null}
+      {votes.length < 3 ? <button type="button" onClick={onFillRandom}><Dice5 />Fill with Random Games</button> : null}
     </div>
   );
 }
@@ -401,7 +417,7 @@ function TitleSuggestions({ suggestions, onSelect }: Readonly<{ suggestions: str
     <ul className="suggestions">
       {suggestions.map((title) => (
         <li key={title}>
-          <button className="suggestion-option" onClick={() => onSelect(title)}>{title}</button>
+          <button type="button" className="suggestion-option" onClick={() => onSelect(title)}>{title}</button>
         </li>
       ))}
     </ul>
@@ -524,26 +540,20 @@ function VoteHistoryRow({ round }: Readonly<{ round: VoteRoundDto }>) {
   );
 }
 
-function filterVoteHistory(rounds: VoteRoundDto[], filter: string, showOnlyRoundsWithVotes: boolean) {
+function filterVoteHistory(rounds: VoteRoundDto[], searchIndex: SearchIndex<number>, filter: string, showOnlyRoundsWithVotes: boolean) {
   const search = filter.trim().toLocaleLowerCase("en-GB");
   return rounds.filter((round) => {
     if (showOnlyRoundsWithVotes && round.topVotes + round.secondVotes + round.lastVotes === 0) {
       return false;
     }
     if (!search) return true;
-    return [
-      String(round.voteRound),
-      round.topGameTitle,
-      round.secondGameTitle,
-      round.lastGameTitle,
-      round.notes ?? ""
-    ].some((value) => value.toLocaleLowerCase("en-GB").includes(search));
+    return matchesSearchIndex(searchIndex, round.voteRound, search);
   });
 }
 
 function sortVoteHistory(rounds: VoteRoundDto[], column: SortColumn, ascending: boolean) {
-  const sorted = [...rounds].sort((left, right) => compareVoteRounds(left, right, column));
-  return ascending ? sorted : sorted.reverse();
+  const direction = ascending ? 1 : -1;
+  return [...rounds].sort((left, right) => direction * compareVoteRounds(left, right, column));
 }
 
 function compareVoteRounds(left: VoteRoundDto, right: VoteRoundDto, column: SortColumn) {
@@ -701,8 +711,8 @@ function VoteArchiveModal({
         ) : null}
         <label><span>Notes</span><textarea rows={3} value={notes} onChange={(event) => setNotes(event.target.value)} /></label>
         <footer>
-          <button className="secondary" onClick={onClose} disabled={busy}>Cancel</button>
-          <button onClick={archive} disabled={busy}>{busy ? "Archiving..." : "Archive"}</button>
+          <button type="button" className="secondary" onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="button" onClick={archive} disabled={busy}>{busy ? "Archiving..." : "Archive"}</button>
         </footer>
     </ModalDialog>
   );

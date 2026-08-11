@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useWindowVirtualizer } from "@tanstack/react-virtual";
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { api } from "./api.js";
 
 type ReloadOptions = {
@@ -46,6 +47,49 @@ export function useAsync<T>(loader: () => Promise<T>, deps: unknown[] = []) {
 
 export function useCurrentUser() {
   return useAsync(() => api.authUser(), []);
+}
+
+type WindowRowVirtualizerOptions = {
+  count: number;
+  estimateRowHeight: number;
+  scrollMarginElementRef: RefObject<HTMLElement | null>;
+  recalculateScrollMarginDeps?: unknown[];
+  overscan?: number;
+};
+
+export function useWindowRowVirtualizer<TItemElement extends Element>({
+  count,
+  estimateRowHeight,
+  scrollMarginElementRef,
+  recalculateScrollMarginDeps = [],
+  overscan = 10
+}: WindowRowVirtualizerOptions) {
+  const [scrollMargin, setScrollMargin] = useState(0);
+
+  useLayoutEffect(() => {
+    const updateScrollMargin = () => {
+      const element = scrollMarginElementRef.current;
+      if (element) {
+        setScrollMargin(element.getBoundingClientRect().top + globalThis.scrollY);
+      }
+    };
+    updateScrollMargin();
+    globalThis.addEventListener("resize", updateScrollMargin);
+    return () => globalThis.removeEventListener("resize", updateScrollMargin);
+  }, recalculateScrollMarginDeps);
+
+  const virtualizer = useWindowVirtualizer<TItemElement>({
+    count,
+    estimateSize: () => estimateRowHeight,
+    overscan,
+    scrollMargin
+  });
+
+  const virtualRows = virtualizer.getVirtualItems();
+  const paddingTop = virtualRows.length > 0 ? virtualRows[0]!.start - scrollMargin : 0;
+  const paddingBottom = virtualRows.length > 0 ? virtualizer.getTotalSize() - virtualRows.at(-1)!.end : 0;
+
+  return { virtualRows, paddingTop, paddingBottom, measureElement: virtualizer.measureElement };
 }
 
 export function useRealtime(path: "/gamesHub" | "/votesHub", onMessage: () => void) {
