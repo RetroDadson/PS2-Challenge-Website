@@ -13,4 +13,6 @@ for (const storageKey of ["localStorage", "sessionStorage"] as const) {
   }
 }
 
+Object.defineProperty(HTMLElement.prototype, "offsetHeight", { configurable: true, value: 48 });
+
 afterEach(() => cleanup());

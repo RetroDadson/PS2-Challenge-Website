@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { gamesPageHelpers } from "../../src/pages/Games.js";
 import { statisticsPageHelpers } from "../../src/pages/Statistics.js";
 import { votesPageHelpers } from "../../src/pages/Votes.js";
+import { buildSearchIndex, matchesSearchIndex } from "../../src/searchIndex.js";
 
 describe("statistics page helpers", () => {
   it("parses and formats duration boundary values", () => {
@@ -117,15 +118,20 @@ describe("votes page helpers", () => {
     voteRound(2, "Zulu", 1, "Beta", 3, "Gamma", 2, null),
     voteRound(1, "Alpha", 0, "Delta", 0, "Echo", 0, "Quiet")
   ];
+  const voteHistorySearchIndex = buildSearchIndex(
+    rounds,
+    (round) => round.voteRound,
+    (round) => [String(round.voteRound), round.topGameTitle, round.secondGameTitle, round.lastGameTitle, round.notes]
+  );
 
   it("filters, sorts, and marks vote history", () => {
     expect(votesPageHelpers.sortMarker("VoteRound", "TopVotes", true)).toBe("");
     expect(votesPageHelpers.sortMarker("VoteRound", "VoteRound", true)).toBe(" ▲");
     expect(votesPageHelpers.sortMarker("VoteRound", "VoteRound", false)).toBe(" ▼");
-    expect(votesPageHelpers.filterVoteHistory(rounds, "", false)).toHaveLength(2);
-    expect(votesPageHelpers.filterVoteHistory(rounds, "quiet", false)).toEqual([rounds[1]]);
-    expect(votesPageHelpers.filterVoteHistory(rounds, "2", false)).toEqual([rounds[0]]);
-    expect(votesPageHelpers.filterVoteHistory(rounds, "", true)).toEqual([rounds[0]]);
+    expect(votesPageHelpers.filterVoteHistory(rounds, voteHistorySearchIndex, "", false)).toHaveLength(2);
+    expect(votesPageHelpers.filterVoteHistory(rounds, voteHistorySearchIndex, "quiet", false)).toEqual([rounds[1]]);
+    expect(votesPageHelpers.filterVoteHistory(rounds, voteHistorySearchIndex, "2", false)).toEqual([rounds[0]]);
+    expect(votesPageHelpers.filterVoteHistory(rounds, voteHistorySearchIndex, "", true)).toEqual([rounds[0]]);
 
     for (const column of ["VoteRound", "TopGameTitle", "TopVotes", "SecondGameTitle", "SecondVotes", "LastGameTitle", "LastVotes"] as const) {
       expect(votesPageHelpers.sortVoteHistory(rounds, column, true)).toHaveLength(2);
@@ -164,17 +170,40 @@ describe("votes page helpers", () => {
 
 describe("games page helpers", () => {
   const games = [
-    game(1, { title: "Beta", developer: null, isOwned: true, howLongToBeatMainStorySeconds: null }),
-    game(2, { title: "Alpha", developer: "Dev", isExcluded: true, howLongToBeatMainStorySeconds: 3600 })
+    game(1, {
+      title: "Beta",
+      developer: null,
+      isOwned: true,
+      howLongToBeatMainStorySeconds: null,
+      publisher: "Pub One",
+      firstReleased: "2001-01-01",
+      regionFirstReleasedIn: "NA"
+    }),
+    game(2, {
+      title: "Alpha",
+      developer: "Dev",
+      isExcluded: true,
+      howLongToBeatMainStorySeconds: 3600,
+      publisher: "Pub Two",
+      firstReleased: "2002-01-01",
+      regionFirstReleasedIn: "EU"
+    })
   ];
 
   it("handles row, search, status, and time variants", () => {
     expect(gamesPageHelpers.gameRowClass(games[1]!)).toBe("excluded-row");
     expect(gamesPageHelpers.gameRowClass(games[0]!)).toBe("owned-row");
     expect(gamesPageHelpers.gameRowClass(game(3))).toBeUndefined();
-    expect(gamesPageHelpers.gameMatchesSearch(games[0]!, "beta", {})).toBe(true);
-    expect(gamesPageHelpers.gameMatchesSearch(games[0]!, "other", { 1: [{ title: "Other Name" }] })).toBe(true);
-    expect(gamesPageHelpers.gameMatchesSearch(games[0]!, "missing", {})).toBe(false);
+    const noAlternateTitlesIndex = buildSearchIndex(games, (item) => item.id, (item) => [item.title, item.developer, item.publisher]);
+    expect(matchesSearchIndex(noAlternateTitlesIndex, games[0]!.id, "beta")).toBe(true);
+    expect(matchesSearchIndex(noAlternateTitlesIndex, games[0]!.id, "missing")).toBe(false);
+    const alternateTitles: Record<string, Array<{ title: string }>> = { 1: [{ title: "Other Name" }] };
+    const withAlternateTitlesIndex = buildSearchIndex(
+      games,
+      (item) => item.id,
+      (item) => [item.title, item.developer, item.publisher, ...(alternateTitles[String(item.id)] ?? []).map((alternateTitle) => alternateTitle.title)]
+    );
+    expect(matchesSearchIndex(withAlternateTitlesIndex, games[0]!.id, "other")).toBe(true);
     expect(gamesPageHelpers.getCompletionStatus({}, 1)).toBe("Not Started");
     expect(["Completed", "In Progress", "Other"].map(gamesPageHelpers.statusClass)).toEqual(["status-completed", "status-inprogress", "status-notstarted"]);
     expect([undefined, 0, -1, 59, 3599, 3600, 3660].map(gamesPageHelpers.formatHowLongToBeatSeconds)).toEqual(["Unknown", "Unknown", "Unknown", "1m", "1h", "1h", "1h 1m"]);

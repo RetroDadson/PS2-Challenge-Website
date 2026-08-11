@@ -1,5 +1,5 @@
 import { Edit3, Plus, Search } from "lucide-react";
-import { useMemo, useState } from "react";
+import { memo, useMemo, useRef, useState } from "react";
 import type { AlternateTitle, GameDto } from "@ps2-challenge/shared";
 import { api } from "../api.js";
 import { CoverImage } from "../components/CoverImage.js";
@@ -12,9 +12,13 @@ import {
   visibleGameTableColumns,
   type GameTableColumn
 } from "../gameTablePreferences.js";
-import { useAsync, useCurrentUser, useRealtime } from "../hooks.js";
+import { useAsync, useCurrentUser, useRealtime, useWindowRowVirtualizer } from "../hooks.js";
+import { buildSearchIndex, matchesSearchIndex } from "../searchIndex.js";
 import { compareNullable } from "../sortHelpers.js";
 import { useGameTablePreferences } from "../useGameTablePreferences.js";
+
+export const EMPTY_ALTERNATE_TITLES: AlternateTitle[] = [];
+const ESTIMATED_ROW_HEIGHT_PX = 56;
 
 type SortColumn =
   | "Title"
@@ -30,6 +34,7 @@ type SortColumn =
 export function Games() {
   const user = useCurrentUser();
   const pageData = useAsync(() => api.gamesPageData(), []);
+  const tableScrollRef = useRef<HTMLDivElement | null>(null);
   const [search, setSearch] = useState("");
   const [showOwnedOnly, setShowOwnedOnly] = useState(localStorage.getItem("showOwnedOnly") === "true");
   const [showExcludedGames, setShowExcludedGames] = useState(localStorage.getItem("showExcludedGames") === "true");
@@ -67,16 +72,35 @@ export function Games() {
     };
   }, [completionStatus, games]);
 
+  const searchIndex = useMemo(
+    () =>
+      buildSearchIndex(games, (game) => game.id, (game) => [
+        game.title,
+        game.developer,
+        game.publisher,
+        ...(alternateTitles[String(game.id)] ?? EMPTY_ALTERNATE_TITLES).map((alternateTitle) => alternateTitle.title)
+      ]),
+    [alternateTitles, games]
+  );
+
   const filtered = useMemo(() => {
     const searchLower = search.trim().toLocaleLowerCase("en-GB");
     const visible = games.filter((game) => {
       if (showOwnedOnly && !game.isOwned) return false;
       if (!showExcludedGames && game.isExcluded) return false;
       if (!searchLower) return true;
-      return gameMatchesSearch(game, searchLower, alternateTitles);
+      return matchesSearchIndex(searchIndex, game.id, searchLower);
     });
     return sortGames(visible, sortColumn, sortAscending, completionStatus);
-  }, [alternateTitles, completionStatus, games, search, showExcludedGames, showOwnedOnly, sortAscending, sortColumn]);
+  }, [completionStatus, games, search, searchIndex, showExcludedGames, showOwnedOnly, sortAscending, sortColumn]);
+
+  const totalColumnCount = visibleColumns.length + (isAdmin ? 1 : 0);
+  const { virtualRows, paddingTop, paddingBottom, measureElement } = useWindowRowVirtualizer<HTMLTableRowElement>({
+    count: filtered.length,
+    estimateRowHeight: ESTIMATED_ROW_HEIGHT_PX,
+    scrollMarginElementRef: tableScrollRef,
+    recalculateScrollMarginDeps: [columnPreferencesSaving, columnPreferencesError]
+  });
 
   const save = async (draft: Partial<GameDto>) => {
     return editing ? api.updateGame(editing.id, draft) : api.createGame(draft);
@@ -118,7 +142,7 @@ export function Games() {
           <p>Library</p>
           <h1>PS2 Games Library</h1>
         </div>
-        {isAdmin ? <button onClick={() => setEditing(null)}><Plus />Add New Game</button> : null}
+        {isAdmin ? <button type="button" onClick={() => setEditing(null)}><Plus />Add New Game</button> : null}
       </header>
       <section className="panel">
         <div className="toolbar">
@@ -170,8 +194,8 @@ export function Games() {
         </div>
       </section>
       {filtered.length ? (
-        <div className="table-scroll">
-          <table className="data-table games-table">
+        <div className="table-scroll" ref={tableScrollRef}>
+          <table className="data-table games-table" aria-rowcount={filtered.length + 1}>
             <colgroup>
               {isAdmin ? <col className="col-games-actions" /> : null}
               {visibleColumns.map((column) => <col key={column.id} className={column.className} />)}
@@ -191,25 +215,27 @@ export function Games() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((game) => {
-                const status = getCompletionStatus(completionStatus, game.id);
+              <tr role="none"><td colSpan={totalColumnCount} style={{ height: paddingTop, padding: 0, border: "none" }} /></tr>
+              {virtualRows.map((virtualRow) => {
+                const game = filtered[virtualRow.index];
+                if (!game) return null;
                 return (
-                  <tr key={game.id} className={gameRowClass(game)}>
-                    {isAdmin ? <td className="col-games-actions" data-label="Actions"><button className="icon-button" onClick={() => setEditing(game)} aria-label={`Edit ${game.title}`}><Edit3 /></button></td> : null}
-                    {visibleColumns.map((column) => (
-                      <GameColumnCell
-                        key={column.id}
-                        column={column}
-                        game={game}
-                        alternateTitles={alternateTitles[String(game.id)] ?? []}
-                        exclusionReason={exclusionReasons[String(game.id)]}
-                        ownedType={ownedTypes[String(game.id)]}
-                        status={status}
-                      />
-                    ))}
-                  </tr>
+                  <GameRow
+                    key={game.id}
+                    game={game}
+                    status={getCompletionStatus(completionStatus, game.id)}
+                    isAdmin={isAdmin}
+                    visibleColumns={visibleColumns}
+                    alternateTitles={alternateTitles[String(game.id)] ?? EMPTY_ALTERNATE_TITLES}
+                    exclusionReason={exclusionReasons[String(game.id)]}
+                    ownedType={ownedTypes[String(game.id)]}
+                    onEdit={setEditing}
+                    rowIndex={virtualRow.index}
+                    measureElement={measureElement}
+                  />
                 );
               })}
+              <tr role="none"><td colSpan={totalColumnCount} style={{ height: paddingBottom, padding: 0, border: "none" }} /></tr>
             </tbody>
           </table>
         </div>
@@ -247,6 +273,51 @@ function GameColumnHeader({
     </th>
   );
 }
+
+const GameRow = memo(function GameRow({
+  game,
+  status,
+  isAdmin,
+  visibleColumns,
+  alternateTitles,
+  exclusionReason,
+  ownedType,
+  onEdit,
+  rowIndex,
+  measureElement
+}: Readonly<{
+  game: GameDto;
+  status: string;
+  isAdmin: boolean;
+  visibleColumns: GameTableColumn[];
+  alternateTitles: AlternateTitle[];
+  exclusionReason: string | undefined;
+  ownedType: string | undefined;
+  onEdit: (game: GameDto) => void;
+  rowIndex: number;
+  measureElement: (element: HTMLTableRowElement | null) => void;
+}>) {
+  return (
+    <tr data-index={rowIndex} ref={measureElement} className={gameRowClass(game)} aria-rowindex={rowIndex + 2}>
+      {isAdmin ? (
+        <td className="col-games-actions" data-label="Actions">
+          <button type="button" className="icon-button" onClick={() => onEdit(game)} aria-label={`Edit ${game.title}`}><Edit3 /></button>
+        </td>
+      ) : null}
+      {visibleColumns.map((column) => (
+        <GameColumnCell
+          key={column.id}
+          column={column}
+          game={game}
+          alternateTitles={alternateTitles}
+          exclusionReason={exclusionReason}
+          ownedType={ownedType}
+          status={status}
+        />
+      ))}
+    </tr>
+  );
+});
 
 function GameColumnCell({
   column,
@@ -371,16 +442,9 @@ function HowLongToBeatTime({ game }: Readonly<{ game: GameDto }>) {
   );
 }
 
-function gameMatchesSearch(game: GameDto, searchLower: string, alternateTitles: Record<string, Array<{ title: string }>>) {
-  if ([game.title, game.developer, game.publisher].filter((value): value is string => !!value).some((value) => value.toLocaleLowerCase("en-GB").includes(searchLower))) {
-    return true;
-  }
-  return (alternateTitles[String(game.id)] ?? []).some((alternateTitle) => alternateTitle.title.toLocaleLowerCase("en-GB").includes(searchLower));
-}
-
 function sortGames(games: GameDto[], column: SortColumn, ascending: boolean, completionStatus: Record<string, string>) {
-  const sorted = [...games].sort((left, right) => compareGames(left, right, column, completionStatus));
-  return ascending ? sorted : sorted.reverse();
+  const direction = ascending ? 1 : -1;
+  return [...games].sort((left, right) => direction * compareGames(left, right, column, completionStatus));
 }
 
 function compareGames(left: GameDto, right: GameDto, column: SortColumn, completionStatus: Record<string, string>) {
@@ -462,7 +526,6 @@ function howLongToBeatTitle(game: GameDto) {
 export const gamesPageHelpers = {
   gameRowClass,
   sortMarker,
-  gameMatchesSearch,
   sortGames,
   compareNullableNumber,
   getCompletionStatus,

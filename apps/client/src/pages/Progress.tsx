@@ -1,5 +1,5 @@
 import { Edit3, Plus } from "lucide-react";
-import { useMemo, useState } from "react";
+import { memo, useCallback, useMemo, useRef, useState } from "react";
 import type { AlternateTitle, GameProgressDto } from "@ps2-challenge/shared";
 import { api } from "../api.js";
 import { CoverImage } from "../components/CoverImage.js";
@@ -7,15 +7,20 @@ import { ProgressModal } from "../components/ProgressModal.js";
 import { SortButton } from "../components/SortButton.js";
 import { Empty, ErrorMessage, Loading } from "../components/Status.js";
 import { formatDateOnly } from "../dateUtils.js";
-import { useAsync, useCurrentUser, useRealtime } from "../hooks.js";
+import { useAsync, useCurrentUser, useRealtime, useWindowRowVirtualizer } from "../hooks.js";
+import { EMPTY_ALTERNATE_TITLES } from "./Games.js";
+import { buildSearchIndex, matchesSearchIndex } from "../searchIndex.js";
 import { compareNullable } from "../sortHelpers.js";
 
 type SortColumn = "ProgressId" | "Status" | "GameTitle" | "DateStarted" | "DateFinished" | "CompletionTime" | "Platform";
+
+const ESTIMATED_ROW_HEIGHT_PX = 56;
 
 export function Progress() {
   const user = useCurrentUser();
   const progress = useAsync(() => api.progress(), []);
   const gamesPageData = useAsync(() => api.gamesPageData(), []);
+  const tableScrollRef = useRef<HTMLDivElement | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [showCompletedOnly, setShowCompletedOnly] = useState(false);
   const [showInProgressOnly, setShowInProgressOnly] = useState(false);
@@ -34,23 +39,33 @@ export function Progress() {
   const completedCount = allProgress.filter((game) => !!game.dateFinished).length;
   const inProgressCount = allProgress.length - completedCount;
 
+  const searchIndex = useMemo(
+    () => buildSearchIndex(allProgress, (entry) => entry.progressId, (entry) => [entry.gameTitle, entry.beatenCriteria, entry.review]),
+    [allProgress]
+  );
+
   const filtered = useMemo(
     () =>
       sortProgress(
         allProgress.filter((game) => {
           if (showCompletedOnly && !game.dateFinished) return false;
           if (showInProgressOnly && game.dateFinished) return false;
-          if (!searchQuery.trim()) return true;
           const query = searchQuery.trim().toLocaleLowerCase("en-GB");
-          return [game.gameTitle, game.beatenCriteria, game.review]
-            .filter((value): value is string => !!value)
-            .some((value) => value.toLocaleLowerCase("en-GB").includes(query));
+          if (!query) return true;
+          return matchesSearchIndex(searchIndex, game.progressId, query);
         }),
         sortColumn,
         sortAscending
       ),
-    [allProgress, searchQuery, showCompletedOnly, showInProgressOnly, sortAscending, sortColumn]
+    [allProgress, searchIndex, searchQuery, showCompletedOnly, showInProgressOnly, sortAscending, sortColumn]
   );
+
+  const totalColumnCount = 10 + (isAdmin ? 1 : 0);
+  const { virtualRows, paddingTop, paddingBottom, measureElement } = useWindowRowVirtualizer<HTMLTableRowElement>({
+    count: filtered.length,
+    estimateRowHeight: ESTIMATED_ROW_HEIGHT_PX,
+    scrollMarginElementRef: tableScrollRef
+  });
 
   const titleSuggestions = useMemo(
     () => [...new Set((gamesPageData.data?.games ?? []).map((game) => game.title).filter(Boolean))].sort((left, right) => left.localeCompare(right, "en-GB")),
@@ -69,10 +84,10 @@ export function Progress() {
     setModalOpen(true);
   };
 
-  const openEditModal = (game: GameProgressDto) => {
+  const openEditModal = useCallback((game: GameProgressDto) => {
     setEditingProgress(game);
     setModalOpen(true);
-  };
+  }, []);
 
   const sortBy = (column: SortColumn) => {
     if (sortColumn === column) {
@@ -90,7 +105,7 @@ export function Progress() {
     <section className="page">
       <header className="page-header">
         <div><p>Challenge</p><h1>Game Progress</h1></div>
-        {isAdmin ? <button onClick={openAddModal}><Plus />Add New Game</button> : null}
+        {isAdmin ? <button type="button" onClick={openAddModal}><Plus />Add New Game</button> : null}
       </header>
       <section className="panel">
         <div className="toolbar progress-toolbar">
@@ -107,8 +122,8 @@ export function Progress() {
         </div>
       </section>
       {filtered.length ? (
-        <div className="table-scroll">
-          <table className="data-table progress-table">
+        <div className="table-scroll" ref={tableScrollRef}>
+          <table className="data-table progress-table" aria-rowcount={filtered.length + 1}>
             <colgroup>
               <col className="col-progress-number" />
               <col className="col-progress-status" />
@@ -138,21 +153,23 @@ export function Progress() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((game) => (
-                <tr key={game.progressId} className={game.dateFinished ? "completed" : "in-progress"}>
-                  <td className="col-progress-number" data-label="Game Number">{game.progressId}</td>
-                  <td className="col-progress-status" data-label="Status"><span className={`status-badge ${game.dateFinished ? "status-completed" : "status-inprogress"}`}>{game.dateFinished ? "Completed" : "In Progress"}</span></td>
-                  <td className="cover-cell col-progress-cover" data-label="Cover"><CoverImage src={game.imageUrl} alt={`${game.gameTitle} cover`} /></td>
-                  <td className="col-progress-title" data-label="Title"><ProgressTitle game={game} alternateTitles={alternateTitles[String(game.gameId)] ?? []} /></td>
-                  <td className="col-progress-started" data-label="Started">{formatDateOnly(game.dateStarted)}</td>
-                  <td className="col-progress-finished" data-label="Finished">{game.dateFinished ? formatDateOnly(game.dateFinished) : "-"}</td>
-                  <td className="col-progress-time" data-label="Time">{formatCompletionTime(game.completionTime)}</td>
-                  <td className="col-progress-platform" data-label="Platform"><span className={`platform-badge platform-${game.platform.toLocaleLowerCase("en-GB")}`}>{game.platform}</span></td>
-                  <td className="col-progress-criteria" data-label="Criteria">{game.beatenCriteria ?? "-"}</td>
-                  <td className="col-progress-review" data-label="Review">{game.review ?? "-"}</td>
-                  {isAdmin ? <td className="col-progress-actions" data-label="Actions"><button className="icon-text-button" onClick={() => openEditModal(game)} aria-label={`Edit ${game.gameTitle}`}><Edit3 />Edit</button></td> : null}
-                </tr>
-              ))}
+              <tr role="none"><td colSpan={totalColumnCount} style={{ height: paddingTop, padding: 0, border: "none" }} /></tr>
+              {virtualRows.map((virtualRow) => {
+                const game = filtered[virtualRow.index];
+                if (!game) return null;
+                return (
+                  <ProgressRow
+                    key={game.progressId}
+                    game={game}
+                    isAdmin={isAdmin}
+                    alternateTitles={alternateTitles[String(game.gameId)] ?? EMPTY_ALTERNATE_TITLES}
+                    onEdit={openEditModal}
+                    rowIndex={virtualRow.index}
+                    measureElement={measureElement}
+                  />
+                );
+              })}
+              <tr role="none"><td colSpan={totalColumnCount} style={{ height: paddingBottom, padding: 0, border: "none" }} /></tr>
             </tbody>
           </table>
         </div>
@@ -171,6 +188,47 @@ export function Progress() {
     </section>
   );
 }
+
+const ProgressRow = memo(function ProgressRow({
+  game,
+  isAdmin,
+  alternateTitles,
+  onEdit,
+  rowIndex,
+  measureElement
+}: Readonly<{
+  game: GameProgressDto;
+  isAdmin: boolean;
+  alternateTitles: AlternateTitle[];
+  onEdit: (game: GameProgressDto) => void;
+  rowIndex: number;
+  measureElement: (element: HTMLTableRowElement | null) => void;
+}>) {
+  return (
+    <tr
+      data-index={rowIndex}
+      ref={measureElement}
+      className={game.dateFinished ? "completed" : "in-progress"}
+      aria-rowindex={rowIndex + 2}
+    >
+      <td className="col-progress-number" data-label="Game Number">{game.progressId}</td>
+      <td className="col-progress-status" data-label="Status"><span className={`status-badge ${game.dateFinished ? "status-completed" : "status-inprogress"}`}>{game.dateFinished ? "Completed" : "In Progress"}</span></td>
+      <td className="cover-cell col-progress-cover" data-label="Cover"><CoverImage src={game.imageUrl} alt={`${game.gameTitle} cover`} /></td>
+      <td className="col-progress-title" data-label="Title"><ProgressTitle game={game} alternateTitles={alternateTitles} /></td>
+      <td className="col-progress-started" data-label="Started">{formatDateOnly(game.dateStarted)}</td>
+      <td className="col-progress-finished" data-label="Finished">{game.dateFinished ? formatDateOnly(game.dateFinished) : "-"}</td>
+      <td className="col-progress-time" data-label="Time">{formatCompletionTime(game.completionTime)}</td>
+      <td className="col-progress-platform" data-label="Platform"><span className={`platform-badge platform-${game.platform.toLocaleLowerCase("en-GB")}`}>{game.platform}</span></td>
+      <td className="col-progress-criteria" data-label="Criteria">{game.beatenCriteria ?? "-"}</td>
+      <td className="col-progress-review" data-label="Review">{game.review ?? "-"}</td>
+      {isAdmin ? (
+        <td className="col-progress-actions" data-label="Actions">
+          <button type="button" className="icon-text-button" onClick={() => onEdit(game)} aria-label={`Edit ${game.gameTitle}`}><Edit3 />Edit</button>
+        </td>
+      ) : null}
+    </tr>
+  );
+});
 
 function ProgressTitle({ game, alternateTitles }: Readonly<{ game: GameProgressDto; alternateTitles: AlternateTitle[] }>) {
   if (!alternateTitles.length) {

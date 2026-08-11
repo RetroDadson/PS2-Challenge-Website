@@ -2,6 +2,7 @@ import path from "node:path";
 import fs from "node:fs";
 import { STATUS_CODES } from "node:http";
 import { fileURLToPath } from "node:url";
+import compress from "@fastify/compress";
 import cookie from "@fastify/cookie";
 import formbody from "@fastify/formbody";
 import helmet from "@fastify/helmet";
@@ -145,6 +146,7 @@ export async function buildApp(config: AppConfig, dependencies: AppDependencies 
       }
     }
   });
+  await app.register(compress);
   await app.register(cookie);
   await app.register(formbody);
   await app.register(websocket);
