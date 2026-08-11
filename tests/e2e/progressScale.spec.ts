@@ -44,6 +44,13 @@ test("Progress page search stays responsive and does not crash the browser at pr
   const longestTaskMs = longTaskDurations.length ? Math.max(...longTaskDurations) : 0;
   expect(longestTaskMs, `Longest main-thread task while searching: ${longestTaskMs}ms`).toBeLessThan(LONG_TASK_THRESHOLD_MS);
 
+  const tableHeader = page.locator("thead th").first();
+  await page.mouse.wheel(0, 800);
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
+  expect((await tableHeader.boundingBox())?.y).toBeCloseTo(0, 0);
+  await page.mouse.wheel(0, 800);
+  expect((await tableHeader.boundingBox())?.y).toBeCloseTo(0, 0);
+
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.getByRole("heading", { name: "Game Progress" })).toBeVisible();
   await expect(page.getByRole("row").first()).toBeVisible();

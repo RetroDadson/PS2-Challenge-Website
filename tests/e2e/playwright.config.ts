@@ -4,7 +4,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const responsiveRouteSpecs = "routes.spec.ts";
-const fullStackSpecs = ["fullstack.spec.ts", "gamesScale.spec.ts", "progressScale.spec.ts"];
+const fullStackSpecs = ["fullstack.spec.ts", "gamesScale.spec.ts", "progressScale.spec.ts", "votesHistoryScale.spec.ts"];
 const systemChrome = { browserName: "chromium" as const, channel: "chrome" as const, defaultBrowserType: "chromium" as const };
 const chromeDevice = (device: NonNullable<(typeof devices)[string]>) => ({ ...device, ...systemChrome });
 
