@@ -4,5 +4,12 @@
     "config:recommended",
     "schedule:daily"
   ],
-  "commitMessagePrefix": "Chore: "
+  "commitMessagePrefix": "Chore: ",
+  "platformAutomerge": true,
+  "packageRules": [
+    {
+      "matchUpdateTypes": ["minor", "patch", "pin", "digest"],
+      "automerge": true
+    }
+  ]
 }
