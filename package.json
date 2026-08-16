@@ -87,13 +87,13 @@
     "@opentelemetry/exporter-trace-otlp-proto": "0.221.0",
     "@opentelemetry/exporter-zipkin": "2.10.0",
     "@opentelemetry/instrumentation": "0.221.0",
-    "@opentelemetry/instrumentation-bunyan": "0.64.0",
+    "@opentelemetry/instrumentation-bunyan": "0.66.0",
     "@opentelemetry/instrumentation-http": "0.221.0",
-    "@opentelemetry/instrumentation-mongodb": "0.72.0",
-    "@opentelemetry/instrumentation-mysql": "0.65.0",
-    "@opentelemetry/instrumentation-pg": "0.71.0",
-    "@opentelemetry/instrumentation-redis": "0.67.0",
-    "@opentelemetry/instrumentation-winston": "0.63.0",
+    "@opentelemetry/instrumentation-mongodb": "0.74.0",
+    "@opentelemetry/instrumentation-mysql": "0.67.0",
+    "@opentelemetry/instrumentation-pg": "0.73.0",
+    "@opentelemetry/instrumentation-redis": "0.69.0",
+    "@opentelemetry/instrumentation-winston": "0.65.0",
     "@opentelemetry/otlp-exporter-base": "0.221.0",
     "@opentelemetry/otlp-grpc-exporter-base": "0.221.0",
     "@opentelemetry/otlp-transformer": {
@@ -102,7 +102,7 @@
     },
     "@opentelemetry/propagator-b3": "2.10.0",
     "@opentelemetry/propagator-jaeger": "2.10.0",
-    "@opentelemetry/resource-detector-azure": "0.27.0",
+    "@opentelemetry/resource-detector-azure": "0.29.0",
     "@opentelemetry/resources": "2.10.0",
     "@opentelemetry/sdk-logs": "0.221.0",
     "@opentelemetry/sdk-metrics": "2.10.0",
@@ -112,7 +112,7 @@
     "@opentelemetry/sdk-trace-web": "2.10.0",
     "@opentelemetry/semantic-conventions": "1.43.0",
     "@opentelemetry/sql-common": "0.42.0",
-    "@opentelemetry/winston-transport": "0.29.0",
+    "@opentelemetry/winston-transport": "0.31.0",
     "ws": "8.21.3"
   }
 }
