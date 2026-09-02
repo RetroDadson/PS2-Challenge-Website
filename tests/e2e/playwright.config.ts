@@ -11,6 +11,7 @@ const chromeDevice = (device: NonNullable<(typeof devices)[string]>) => ({ ...de
 export default defineConfig({
   testDir: ".",
   snapshotPathTemplate: "{testDir}/__screenshots__/{platform}/{projectName}/{arg}{ext}",
+  ...(process.env.CI ? { workers: 1 } : {}),
   use: {
     baseURL: "http://127.0.0.1:4173",
     trace: "on-first-retry"
