@@ -96,10 +96,7 @@
     "@opentelemetry/instrumentation-winston": "0.65.0",
     "@opentelemetry/otlp-exporter-base": "0.221.0",
     "@opentelemetry/otlp-grpc-exporter-base": "0.221.0",
-    "@opentelemetry/otlp-transformer": {
-      ".": "0.221.0",
-      "protobufjs": "7.6.5"
-    },
+    "@opentelemetry/otlp-transformer": "0.221.0",
     "@opentelemetry/propagator-b3": "2.10.0",
     "@opentelemetry/propagator-jaeger": "2.10.0",
     "@opentelemetry/resource-detector-azure": "0.29.0",
@@ -113,6 +110,7 @@
     "@opentelemetry/semantic-conventions": "1.43.0",
     "@opentelemetry/sql-common": "0.42.0",
     "@opentelemetry/winston-transport": "0.31.0",
+    "protobufjs": "8.8.0",
     "ws": "8.21.3"
   }
 }
