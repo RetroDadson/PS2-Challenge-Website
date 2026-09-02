@@ -15,7 +15,7 @@ export type AppConfig = {
   publicBaseUrl: string;
   cookieSecret: string;
   logLevel: string;
-  trustProxy: boolean | number | string;
+  trustProxy: boolean | string;
   applicationInsightsConnectionString?: string;
 };
 
@@ -129,7 +129,7 @@ function configValidationErrors(config: AppConfig, cookieSecret: string | undefi
 // Controls which proxy hops Fastify trusts for X-Forwarded-* headers. Defaults
 // to `true` to preserve the existing Azure/nginx behaviour; operators can lock
 // this down with TRUST_PROXY (e.g. "loopback" on Azure, or the proxy subnet CIDR).
-function resolveTrustProxy(value: string | undefined): boolean | number | string {
+function resolveTrustProxy(value: string | undefined): boolean | string {
   const trimmed = value?.trim();
   if (!trimmed) {
     return true;
@@ -141,9 +141,10 @@ function resolveTrustProxy(value: string | undefined): boolean | number | string
   if (lower === "false") {
     return false;
   }
-  const hops = Number(trimmed);
-  if (Number.isInteger(hops) && hops >= 0) {
-    return hops;
+  if (/^\d+$/.test(trimmed)) {
+    throw new Error(
+      `TRUST_PROXY no longer accepts a hop count ("${trimmed}"); use true, false, or a comma-separated list of trusted IPs, CIDRs, or keywords such as "loopback"`
+    );
   }
   return trimmed;
 }

@@ -225,7 +225,7 @@ describe("config", () => {
     expect(config.youtubeApiKey).toBe("settings-youtube-key");
   });
 
-  it("resolves TRUST_PROXY into the value Fastify expects, defaulting to true", () => {
+  it("resolves TRUST_PROXY into the value Fastify expects, rejecting hop counts, defaulting to true", () => {
     const baseEnv = {
       NODE_ENV: "Testing",
       DATABASE_CONNECTION_STRING: "postgresql://localhost/test",
@@ -240,7 +240,7 @@ describe("config", () => {
     expect(loadConfig().trustProxy).toBe(false);
 
     process.env = { ...baseEnv, TRUST_PROXY: "2" };
-    expect(loadConfig().trustProxy).toBe(2);
+    expect(() => loadConfig()).toThrow(/TRUST_PROXY no longer accepts a hop count/);
 
     process.env = { ...baseEnv, TRUST_PROXY: "loopback, 10.0.0.0/8" };
     expect(loadConfig().trustProxy).toBe("loopback, 10.0.0.0/8");
