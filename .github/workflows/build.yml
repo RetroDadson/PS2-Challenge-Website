@@ -205,6 +205,16 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Print Trivy vulnerability table
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: table
+          severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '0'
+
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@v0.36.0
         with:
