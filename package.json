@@ -111,6 +111,6 @@
     "@opentelemetry/sql-common": "0.42.0",
     "@opentelemetry/winston-transport": "0.31.0",
     "protobufjs": "8.8.0",
-    "ws": "8.21.3"
+    "ws": "8.22.0"
   }
 }
