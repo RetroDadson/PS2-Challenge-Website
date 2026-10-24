@@ -16,6 +16,11 @@
     {
       "matchUpdateTypes": ["minor", "patch", "pin", "digest"],
       "automerge": true
+    },
+    {
+      "matchPackageNames": ["@opentelemetry/**", "@azure/monitor-opentelemetry**"],
+      "groupName": "OpenTelemetry",
+      "automerge": false
     }
   ]
 }
