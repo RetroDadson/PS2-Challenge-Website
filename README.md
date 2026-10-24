@@ -112,6 +112,12 @@ OpenTelemetry is used only through `@azure/monitor-opentelemetry`, which is load
 
 To take a new Azure Monitor release, update `@azure/monitor-opentelemetry` and in the same PR set each `@opentelemetry/*` override to the newest version that satisfies the release's declared ranges (`npm view @azure/monitor-opentelemetry@<version> dependencies`). Then run `npm run test:integration`; `apps/server/tests/startup.integration.test.ts` boots the built server with the production `start` command and Azure Monitor enabled.
 
+### Ignored Trivy Findings
+
+`.trivyignore` lists vulnerabilities that CI's Trivy scan skips. Each entry needs a reason here and an `exp:` date so it is re-checked:
+
+- `CVE-2026-109461` (`@azure/msal-node` 6.0.1, expires 2026-12-23): the package arrives via `@azure/monitor-opentelemetry` → `@azure/identity` 4.14.0. The fix is only in msal-node 7.1.0, and no `@azure/identity` release supports msal-node 7 yet. The vulnerable MSAL authorization-code flow is never used: telemetry authenticates with a connection string, not an Entra ID credential. Remove the entry once `@azure/identity` depends on msal-node 7.1.0 or later.
+
 ## Documentation
 
 - [Development guide](docs/development.md)
