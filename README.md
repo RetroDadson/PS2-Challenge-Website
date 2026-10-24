@@ -98,6 +98,20 @@ npm run test:e2e
 npm run coverage
 ```
 
+## Dependency Updates
+
+Renovate groups minor and patch updates into one PR per day and merges it automatically once CI passes. Major updates arrive as separate PRs for manual review.
+
+### OpenTelemetry
+
+OpenTelemetry is used only through `@azure/monitor-opentelemetry`, which is loaded at startup via `npm start` (`--import @azure/monitor-opentelemetry/loader`). Azure Monitor decides which OpenTelemetry versions are supported:
+
+- The root `package.json` `overrides` pin every `@opentelemetry/*` package so the install contains one copy of each. The pinned versions must match the ranges declared by the installed `@azure/monitor-opentelemetry` release.
+- OpenTelemetry's experimental `0.x` packages require its stable `2.x`/`3.x` packages at exact versions, so all the pins have to move together. Upgrading some of them on their own once crashed production on startup (`@opentelemetry/core` does not provide an export named `AddAttributeDecision`).
+- Renovate is therefore disabled for `@opentelemetry/*`. `@azure/monitor-opentelemetry` is pinned to an exact version, and Renovate raises its updates as PRs that are not merged automatically.
+
+To take a new Azure Monitor release, update `@azure/monitor-opentelemetry` and in the same PR set each `@opentelemetry/*` override to the newest version that satisfies the release's declared ranges (`npm view @azure/monitor-opentelemetry@<version> dependencies`). Then run `npm run test:integration`; `apps/server/tests/startup.integration.test.ts` boots the built server with the production `start` command and Azure Monitor enabled.
+
 ## Documentation
 
 - [Development guide](docs/development.md)
