@@ -18,8 +18,11 @@
       "automerge": true
     },
     {
-      "matchPackageNames": ["@opentelemetry/**", "@azure/monitor-opentelemetry**"],
-      "groupName": "OpenTelemetry",
+      "matchPackageNames": ["@opentelemetry/**"],
+      "enabled": false
+    },
+    {
+      "matchPackageNames": ["@azure/monitor-opentelemetry"],
       "automerge": false
     }
   ]
