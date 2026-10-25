@@ -22,12 +22,15 @@ export const uploadRoundSchema = z.object({
 
 export const voteRoundSchema = z.object({
   voteRound: z.number().int(),
+  topGameId: z.number().int().nullable().optional(),
   topGameTitle: z.string(),
   topVotes: z.number().int(),
   topPosition: z.number().int().nullable().optional(),
+  secondGameId: z.number().int().nullable().optional(),
   secondGameTitle: z.string(),
   secondVotes: z.number().int(),
   secondPosition: z.number().int().nullable().optional(),
+  lastGameId: z.number().int().nullable().optional(),
   lastGameTitle: z.string(),
   lastVotes: z.number().int(),
   lastPosition: z.number().int().nullable().optional(),

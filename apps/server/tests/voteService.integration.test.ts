@@ -228,13 +228,45 @@ describe("VoteService parity", () => {
     expect(history).toEqual([
       expect.objectContaining({
         voteRound: 3,
+        topGameId: 1,
         topGameTitle: "Top Game",
         topVotes: 50,
+        secondGameId: 2,
         secondGameTitle: "Second Game",
         secondVotes: 40,
+        lastGameId: 3,
         lastGameTitle: "Last Game",
         lastVotes: 30,
         notes: "Round 3 notes"
+      })
+    ]);
+  });
+
+  it("returns null game IDs for empty history positions", async () => {
+    await seedGames(db.pool, [
+      [7, "Winner"],
+      [8, "Runner Up"]
+    ]);
+    await db.pool.query(
+      `
+      INSERT INTO vote_history (game_id, vote_round, vote_count, position, notes)
+      VALUES
+        (7, 1, 9, 1, null),
+        (8, 1, 4, 2, null)
+      `
+    );
+
+    const history = await voteService.getVoteHistory();
+
+    expect(history).toEqual([
+      expect.objectContaining({
+        topGameId: 7,
+        topGameTitle: "Winner",
+        secondGameId: 8,
+        secondGameTitle: "Runner Up",
+        lastGameId: null,
+        lastGameTitle: "",
+        lastVotes: 0
       })
     ]);
   });

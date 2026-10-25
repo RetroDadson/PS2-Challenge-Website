@@ -212,12 +212,15 @@ export class VoteService {
 
       return {
         voteRound: round,
+        topGameId: top?.game_id ?? null,
         topGameTitle: top?.game_title ?? "",
         topVotes: top?.vote_count ?? 0,
         topPosition: top?.position ?? undefined,
+        secondGameId: second?.game_id ?? null,
         secondGameTitle: second?.game_title ?? "",
         secondVotes: second?.vote_count ?? 0,
         secondPosition: second?.position ?? undefined,
+        lastGameId: last?.game_id ?? null,
         lastGameTitle: last?.game_title ?? "",
         lastVotes: last?.vote_count ?? 0,
         lastPosition: last?.position ?? undefined,
