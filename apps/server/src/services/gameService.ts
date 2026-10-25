@@ -1,10 +1,10 @@
-import type { GameDto, GameProgressDto, GamesPageDataDto } from "@ps2-challenge/shared";
+import type { DeathCounterDto, GameDto, GameProgressDto, GamesPageDataDto, UpdateProgressRequest } from "@ps2-challenge/shared";
 import { parseDurationToSeconds } from "@ps2-challenge/shared";
-import { sql, type Kysely } from "kysely";
+import { sql, type Kysely, type RawBuilder } from "kysely";
 import type pg from "pg";
 import { createKyselyFromPool, type Database } from "../db/kysely.js";
 import { GameRepository } from "../repositories/gameRepository.js";
-import { mapAlternateTitle, mapProgress } from "../utils/dbRows.js";
+import { mapAlternateTitle, mapDeathCounter, mapProgress } from "../utils/dbRows.js";
 
 const noReasonProvided = "No reason provided";
 
@@ -110,57 +110,80 @@ export class GameService {
     return this.repository.ownedTypesMap();
   }
 
-  async upsertProgress(
-    title: string,
-    dateStarted: string,
-    dateFinished: string | null | undefined,
-    completionTimeString: string | null | undefined,
-    beatenCriteria: string | null | undefined,
-    review: string | null | undefined,
-    platform: string
-  ) {
-    const game = await this.repository.findByTitle(title);
+  async upsertProgress(request: UpdateProgressRequest) {
+    const game = await this.repository.findByTitle(request.title);
     if (!game) {
-      throw new Error(`No game found with title '${title}'`);
+      throw new Error(`No game found with title '${request.title}'`);
     }
-    const completionSeconds = parseDurationToSeconds(completionTimeString);
+    const completionSeconds = parseDurationToSeconds(request.completionTime);
     const interval = completionSeconds === null ? null : `${completionSeconds} seconds`;
-    const existing = await this.db.selectFrom("progress").select("progress_id").where("game_id", "=", game.id).executeTakeFirst();
+    const values = {
+      date_started: request.dateStarted,
+      date_finished: request.dateFinished ?? null,
+      completion_time: interval === null ? null : sql<Database["progress"]["completion_time"]>`${interval}::interval`,
+      beaten_criteria: request.beatenCriteria ?? null,
+      review: request.review ?? null,
+      platform: request.platform
+    };
+    const counterValues = {
+      ...(request.deaths === undefined ? {} : { deaths: request.deaths }),
+      ...(request.deathLabel === undefined ? {} : { death_label: request.deathLabel?.trim() || null })
+    };
 
-    let progressId: number;
-    if (existing) {
-      const result = await this.db
-        .updateTable("progress")
-        .set({
-          date_started: dateStarted,
-          date_finished: dateFinished ?? null,
-          completion_time: interval === null ? null : sql`${interval}::interval`,
-          beaten_criteria: beatenCriteria ?? null,
-          review: review ?? null,
-          platform
-        })
-        .where("game_id", "=", game.id)
-        .returning("progress_id")
-        .executeTakeFirstOrThrow();
-      progressId = result.progress_id;
-    } else {
-      const result = await this.db
-        .insertInto("progress")
-        .values({
-          game_id: game.id,
-          date_started: dateStarted,
-          date_finished: dateFinished ?? null,
-          completion_time: interval === null ? null : sql`${interval}::interval`,
-          beaten_criteria: beatenCriteria ?? null,
-          review: review ?? null,
-          platform
-        })
-        .returning("progress_id")
-        .executeTakeFirstOrThrow();
-      progressId = result.progress_id;
-    }
+    const progressId = await this.db.transaction().execute(async (transaction) => {
+      const existing = await transaction.selectFrom("progress").select("progress_id").where("game_id", "=", game.id).executeTakeFirst();
+      const result = existing
+        ? await transaction.updateTable("progress").set(values).where("game_id", "=", game.id).returning("progress_id").executeTakeFirstOrThrow()
+        : await transaction.insertInto("progress").values({ game_id: game.id, ...values }).returning("progress_id").executeTakeFirstOrThrow();
+      if (Object.keys(counterValues).length) {
+        await transaction
+          .insertInto("progress_death_counters")
+          .values({ progress_id: result.progress_id, ...counterValues })
+          .onConflict((oc) => oc.column("progress_id").doUpdateSet({ ...counterValues, updated_at: sql`CURRENT_TIMESTAMP` }))
+          .execute();
+      }
+      return result.progress_id;
+    });
 
     return this.getProgressById(progressId);
+  }
+
+  async currentDeathCounter(): Promise<DeathCounterDto | null> {
+    const row = await this.progressQuery()
+      .where("p.progress_id", "=", this.currentProgressIdQuery())
+      .executeTakeFirst();
+    return row ? mapDeathCounter(row) : null;
+  }
+
+  adjustCurrentDeaths(delta: number): Promise<DeathCounterDto | null> {
+    return this.updateCurrentDeaths(Math.max(delta, 0), sql<number>`GREATEST(progress_death_counters.deaths + ${delta}, 0)`);
+  }
+
+  setCurrentDeaths(deaths: number): Promise<DeathCounterDto | null> {
+    return this.updateCurrentDeaths(deaths, deaths);
+  }
+
+  private async updateCurrentDeaths(initialDeaths: number, updatedDeaths: number | RawBuilder<number>): Promise<DeathCounterDto | null> {
+    const current = await this.currentProgressIdQuery().executeTakeFirst();
+    if (!current) {
+      return null;
+    }
+    await this.db
+      .insertInto("progress_death_counters")
+      .values({ progress_id: current.progress_id, deaths: initialDeaths })
+      .onConflict((oc) => oc.column("progress_id").doUpdateSet({ deaths: updatedDeaths, updated_at: sql`CURRENT_TIMESTAMP` }))
+      .execute();
+    return mapDeathCounter(await this.progressQuery().where("p.progress_id", "=", current.progress_id).executeTakeFirstOrThrow());
+  }
+
+  private currentProgressIdQuery() {
+    return this.db
+      .selectFrom("progress as current")
+      .select("current.progress_id")
+      .where("current.date_finished", "is", null)
+      .orderBy("current.date_started", "desc")
+      .orderBy("current.progress_id", "desc")
+      .limit(1);
   }
 
   private async getProgressById(progressId: number): Promise<GameProgressDto> {
@@ -239,6 +262,7 @@ export class GameService {
     return this.db
       .selectFrom("progress as p")
       .innerJoin("games as g", "g.game_id", "p.game_id")
+      .leftJoin("progress_death_counters as d", "d.progress_id", "p.progress_id")
       .select([
         "p.progress_id as progress_id",
         "p.game_id as game_id",
@@ -249,7 +273,9 @@ export class GameService {
         sql<string | null>`p.completion_time::text`.as("completion_time"),
         "p.beaten_criteria as beaten_criteria",
         "p.review as review",
-        "p.platform as platform"
+        "p.platform as platform",
+        sql<number>`COALESCE(d.deaths, 0)`.as("deaths"),
+        "d.death_label as death_label"
       ]);
   }
 }

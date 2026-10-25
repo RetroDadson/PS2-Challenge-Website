@@ -103,7 +103,7 @@ async function seedDatabase(client: DbClient) {
 
   await db.insertInto("excluded_games").values({ game_id: boogieId, reason: "Not part of the current challenge rules" }).execute();
   await db.insertInto("alternate_titles").values({ game_id: amplitudeId, title: "Amplitude: Special Edition", notes: "Seeded e2e alternate title" }).execute();
-  await db
+  const insertedProgress = await db
     .insertInto("progress")
     .values([
       {
@@ -125,7 +125,10 @@ async function seedDatabase(client: DbClient) {
         platform: "Emulated"
       }
     ])
+    .returning(["progress_id", "game_id"])
     .execute();
+  const burnoutProgressId = insertedProgress.find((row) => row.game_id === burnoutId)!.progress_id;
+  await db.insertInto("progress_death_counters").values({ progress_id: burnoutProgressId, deaths: 3, death_label: "Crashes" }).execute();
 
   await db
     .insertInto("current_vote")

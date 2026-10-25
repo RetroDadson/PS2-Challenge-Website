@@ -99,6 +99,12 @@ export interface Database {
     review: string | null;
     platform: string;
   };
+  progress_death_counters: {
+    progress_id: number;
+    deaths: Generated<number>;
+    death_label: string | null;
+    updated_at: Timestamp;
+  };
   roles: {
     id: Generated<number>;
     name: string;

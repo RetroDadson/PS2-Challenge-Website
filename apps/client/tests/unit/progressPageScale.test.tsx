@@ -67,7 +67,8 @@ function largeProgressRows(count: number): GameProgressDto[] {
       completionTime: null,
       beatenCriteria: "Credits",
       review: null,
-      platform: "Physical"
+      platform: "Physical",
+      deaths: 0
     });
   }
   return rows;

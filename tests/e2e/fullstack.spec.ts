@@ -69,6 +69,10 @@ test("public pages load seeded data through Fastify and Postgres", async ({ page
   await expect(collectionCards.filter({ hasText: "Total Games Owned" }).locator("[data-testid='stat-value']")).toHaveText("5");
   await expect(collectionCards.filter({ hasText: "Challenge Collection Rate" }).locator("[data-testid='stat-value']")).toHaveText("100.00%");
   await expect(collectionCards.filter({ hasText: "Total Collection Rate" }).locator("[data-testid='stat-value']")).toHaveText("83.33%");
+  const deathCards = page.locator("section[aria-labelledby='death-statistics-heading'] article.stat");
+  await expect(deathCards.filter({ hasText: "Total Deaths / Fails" }).locator("[data-testid='stat-value']")).toHaveText("3");
+  await expect(deathCards.filter({ hasText: "Most Deaths / Fails" }).locator("[data-testid='stat-value']")).toHaveText("Burnout 3: Takedown (3)");
+  await expect(page.getByRole("figure", { name: "Top 1 Game by Deaths / Fails" }).getByRole("listitem")).toHaveText("Burnout 3: Takedown3 Crashes");
 
   await page.goto("/votes");
   await expect(page.getByRole("heading", { name: "Votes", exact: true })).toBeVisible();
@@ -85,6 +89,11 @@ test("public pages load seeded data through Fastify and Postgres", async ({ page
   await expect(page.getByText("Games Completed")).toBeVisible();
   await expect(page.getByText("1 / 5")).toBeVisible();
   await expect(page.locator(".progress-overlay-frame")).toHaveScreenshot("progress-overlay-seeded.png", { animations: "disabled", maxDiffPixelRatio: 0.08 });
+
+  await page.goto("/deaths-overlay");
+  await expect(page.getByTestId("death-overlay-count")).toHaveText("3");
+  await expect(page.locator(".death-overlay-icon")).toBeVisible();
+  await expect(page.locator(".death-overlay-frame")).not.toContainText("Burnout 3: Takedown");
 
   await page.goto("/swagger");
   await expect(page.getByText("PS2 Challenge API")).toBeVisible();
@@ -234,6 +243,39 @@ test("admin vote updates, archiving, and fill-random flow through API and websoc
 
   expectNoUnexpectedBrowserErrors(overlayFailures);
   await overlay.close();
+});
+
+test("death counter API drives the live overlay for the current game", async ({ page, playwright, baseURL }) => {
+  if (!baseURL) {
+    throw new Error("Playwright baseURL is required for death counter API tests");
+  }
+  await signInAsAdmin(page.context(), baseURL);
+  const { apiKey } = await (await page.request.post("/api/user/api-key", { data: {} })).json() as { apiKey: string };
+  const streamDeck = await playwright.request.newContext({ baseURL, extraHTTPHeaders: { "x-api-key": apiKey } });
+  const anonymous = await playwright.request.newContext({ baseURL });
+  try {
+    const before = await (await anonymous.get("/api/games/progress/current/deaths")).json() as { gameTitle: string; deaths: number; deathLabel: string };
+    expect((await anonymous.post("/api/games/progress/current/deaths/increment")).status()).toBe(401);
+
+    await page.goto("/deaths-overlay");
+    const count = page.getByTestId("death-overlay-count");
+    await expect(count).toHaveText(String(before.deaths));
+
+    expect((await streamDeck.post("/api/games/progress/current/deaths/increment")).ok()).toBe(true);
+    const incremented = await streamDeck.post("/api/games/progress/current/deaths/increment");
+    expect(await incremented.json()).toEqual(expect.objectContaining({ gameTitle: before.gameTitle, deaths: before.deaths + 2 }));
+    await expect(count).toHaveText(String(before.deaths + 2), { timeout: 5_000 });
+
+    await streamDeck.post("/api/games/progress/current/deaths/decrement");
+    await expect(count).toHaveText(String(before.deaths + 1), { timeout: 5_000 });
+
+    const reset = await streamDeck.put("/api/games/progress/current/deaths", { data: { deaths: before.deaths } });
+    expect(reset.ok()).toBe(true);
+    await expect(count).toHaveText(String(before.deaths), { timeout: 5_000 });
+  } finally {
+    await streamDeck.dispose();
+    await anonymous.dispose();
+  }
 });
 
 test("admin progress journey creates and edits real progress records", async ({ page, baseURL }) => {

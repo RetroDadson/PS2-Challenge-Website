@@ -92,6 +92,11 @@ export const addAlternateTitleRequestSchema = z.object({
   notes: z.string().max(500, "Notes cannot exceed 500 characters").nullable().optional()
 });
 
+export const DEFAULT_DEATH_LABEL = "Deaths";
+
+const deathCountSchema = z.number().int("Deaths must be a whole number").min(0, "Deaths cannot be negative");
+const deathLabelSchema = z.string().max(50, "Death label cannot exceed 50 characters").nullable().optional();
+
 export const gameProgressSchema = z.object({
   progressId: z.number().int(),
   gameId: z.number().int(),
@@ -102,7 +107,9 @@ export const gameProgressSchema = z.object({
   completionTime: z.string().nullable().optional(),
   beatenCriteria: z.string().nullable().optional(),
   review: z.string().nullable().optional(),
-  platform: z.string()
+  platform: z.string(),
+  deaths: z.number().int().default(0),
+  deathLabel: z.string().nullable().optional()
 });
 
 export const updateProgressRequestSchema = z.object({
@@ -112,7 +119,22 @@ export const updateProgressRequestSchema = z.object({
   completionTime: z.string().nullable().optional(),
   beatenCriteria: z.string().nullable().optional(),
   review: z.string().nullable().optional(),
-  platform: requiredString("Platform")
+  platform: requiredString("Platform"),
+  deaths: deathCountSchema.optional(),
+  deathLabel: deathLabelSchema
+});
+
+export const deathCounterSchema = z.object({
+  progressId: z.number().int(),
+  gameId: z.number().int(),
+  gameTitle: z.string(),
+  imageUrl: z.string().nullable().optional(),
+  deaths: z.number().int(),
+  deathLabel: z.string()
+});
+
+export const setDeathsRequestSchema = z.object({
+  deaths: deathCountSchema
 });
 
 export const gamesPageDataSchema = z.object({
@@ -130,4 +152,6 @@ export type AddGameOwnedRequest = z.infer<typeof addGameOwnedRequestSchema>;
 export type AlternateTitle = z.infer<typeof alternateTitleSchema>;
 export type GameProgressDto = z.infer<typeof gameProgressSchema>;
 export type UpdateProgressRequest = z.infer<typeof updateProgressRequestSchema>;
+export type DeathCounterDto = z.infer<typeof deathCounterSchema>;
+export type SetDeathsRequest = z.infer<typeof setDeathsRequestSchema>;
 export type GamesPageDataDto = z.infer<typeof gamesPageDataSchema>;

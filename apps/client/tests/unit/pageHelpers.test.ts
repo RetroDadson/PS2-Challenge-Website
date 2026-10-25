@@ -67,8 +67,8 @@ describe("statistics page helpers", () => {
       progressEntry(3, "2023-02-01", null, null)
     ];
     expect(statisticsPageHelpers.calculateYearlyStatistics(progress, 4)).toEqual([
-      { year: 2024, gamesStarted: 0, gamesCompleted: 1, completionPercentage: 25 },
-      { year: 2023, gamesStarted: 2, gamesCompleted: 0, completionPercentage: 0 }
+      { year: 2024, gamesStarted: 0, gamesCompleted: 1, completionPercentage: 25, deaths: 0 },
+      { year: 2023, gamesStarted: 2, gamesCompleted: 0, completionPercentage: 0, deaths: 0 }
     ]);
     expect(statisticsPageHelpers.calculateYearlyStatistics(progress, 0)[0]?.completionPercentage).toBe(0);
 
@@ -237,7 +237,7 @@ function game(id: number, overrides: Partial<GameDto> = {}): GameDto {
 }
 
 function progressEntry(progressId: number, dateStarted: string, dateFinished: string | null, completionTime: string | null): GameProgressDto {
-  return { progressId, gameId: progressId, gameTitle: `Game ${progressId}`, dateStarted, dateFinished, completionTime, platform: "PS2" };
+  return { progressId, gameId: progressId, gameTitle: `Game ${progressId}`, dateStarted, dateFinished, completionTime, platform: "PS2", deaths: 0 };
 }
 
 function voteRound(voteRoundNumber: number, topGameTitle: string, topVotes: number, secondGameTitle: string, secondVotes: number, lastGameTitle: string, lastVotes: number, notes: string | null = null, topPosition?: number): VoteRoundDto {

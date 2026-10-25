@@ -3,6 +3,7 @@ import type {
   ChallengeRunnerDto,
   ChallengeRunnerInput,
   CurrentVoteDto,
+  DeathCounterDto,
   GameDto,
   GameTablePreferencesDto,
   GameTablePreferencesResponseDto,
@@ -108,6 +109,17 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
+async function requestOrNullWhenMissing<T>(url: string): Promise<T | null> {
+  const response = await fetch(url, { credentials: "include" });
+  if (response.status === 404) {
+    return null;
+  }
+  if (!response.ok) {
+    throw new Error(await errorDetail(response));
+  }
+  return (await response.json()) as T;
+}
+
 function statusMessage(status: number) {
   if (status === 401) return "Unauthorized";
   if (status === 403) return "Forbidden";
@@ -136,6 +148,7 @@ export const api = {
   updateOwnership: (id: number, ownPhysicalCopy: boolean, typeOwned: string) =>
     request<{ message: string }>(`/api/games/${id}/ownership`, { method: "PUT", body: JSON.stringify({ ownPhysicalCopy, typeOwned }) }),
   progress: () => request<GameProgressDto[]>("/api/games/progress"),
+  currentDeathCounter: () => requestOrNullWhenMissing<DeathCounterDto>("/api/games/progress/current/deaths"),
   twitchStreamStats: () => request<TwitchStreamStatsDto>("/api/twitch/stream-stats"),
   updateProgress: (payload: Record<string, unknown>) => request("/api/games/progress", { method: "POST", body: JSON.stringify(payload) }),
   ownedTypes: () => request<Record<string, string>>("/api/games/owned-types"),

@@ -369,6 +369,103 @@ describe("games API contract parity", () => {
     );
   });
 
+  it("stores progress death counters and keeps them when callers omit the field", async () => {
+    await seedGame(db.pool, 1, "Burnout 3: Takedown");
+
+    const created = await app.inject({
+      method: "POST",
+      url: "/api/games/progress",
+      headers: adminHeaders(),
+      payload: { title: "Burnout 3: Takedown", dateStarted: "2024-01-01", platform: "Physical", deaths: 7, deathLabel: " Crashes " }
+    });
+    expect(created.statusCode).toBe(200);
+    expect(created.json()).toEqual(expect.objectContaining({ deaths: 7, deathLabel: "Crashes" }));
+
+    const updatedWithoutDeaths = await app.inject({
+      method: "POST",
+      url: "/api/games/progress",
+      headers: adminHeaders(),
+      payload: { title: "Burnout 3: Takedown", dateStarted: "2024-01-01", platform: "Emulated" }
+    });
+    expect(updatedWithoutDeaths.json()).toEqual(expect.objectContaining({ platform: "Emulated", deaths: 7, deathLabel: "Crashes" }));
+
+    const clearedLabel = await app.inject({
+      method: "POST",
+      url: "/api/games/progress",
+      headers: adminHeaders(),
+      payload: { title: "Burnout 3: Takedown", dateStarted: "2024-01-01", platform: "Physical", deaths: 0, deathLabel: "  " }
+    });
+    expect(clearedLabel.json()).toEqual(expect.objectContaining({ deaths: 0, deathLabel: null }));
+
+    const negative = await app.inject({
+      method: "POST",
+      url: "/api/games/progress",
+      headers: adminHeaders(),
+      payload: { title: "Burnout 3: Takedown", dateStarted: "2024-01-01", platform: "Physical", deaths: -1 }
+    });
+    expect(negative.statusCode).toBe(400);
+    expect(negative.json()).toEqual({ errors: ["Deaths cannot be negative"] });
+
+    const list = await app.inject({ method: "GET", url: "/api/games/progress" });
+    expect(list.json()).toEqual([expect.objectContaining({ gameTitle: "Burnout 3: Takedown", deaths: 0, deathLabel: null })]);
+  });
+
+  it("tracks deaths for the most recently started unfinished game", async () => {
+    const missing = await app.inject({ method: "GET", url: "/api/games/progress/current/deaths" });
+    expect(missing.statusCode).toBe(404);
+    expect(missing.json()).toEqual({ message: "No game is currently in progress" });
+    const incrementWithoutGame = await app.inject({ method: "POST", url: "/api/games/progress/current/deaths/increment", headers: adminHeaders() });
+    expect(incrementWithoutGame.statusCode).toBe(404);
+
+    await seedGame(db.pool, 1, "Older Game");
+    await seedGame(db.pool, 2, "Finished Game");
+    await seedGame(db.pool, 3, "Current Game");
+    for (const payload of [
+      { title: "Older Game", dateStarted: "2024-01-01", platform: "Physical", deaths: 4 },
+      { title: "Finished Game", dateStarted: "2024-03-01", dateFinished: "2024-03-05", platform: "Physical" },
+      { title: "Current Game", dateStarted: "2024-02-01", platform: "Physical", deathLabel: "Fails" }
+    ]) {
+      expect((await app.inject({ method: "POST", url: "/api/games/progress", headers: adminHeaders(), payload })).statusCode).toBe(200);
+    }
+
+    const current = await app.inject({ method: "GET", url: "/api/games/progress/current/deaths" });
+    expect(current.statusCode).toBe(200);
+    expect(current.json()).toEqual({ progressId: 3, gameId: 3, gameTitle: "Current Game", imageUrl: null, deaths: 0, deathLabel: "Fails" });
+
+    const unauthenticated = await app.inject({ method: "POST", url: "/api/games/progress/current/deaths/increment" });
+    expect(unauthenticated.statusCode).toBe(401);
+    await seedUser(db.pool, "User", "user-api-key", { twitchId: "regular-user", username: "RegularUser" });
+    const forbidden = await app.inject({ method: "POST", url: "/api/games/progress/current/deaths/increment", headers: { "x-api-key": "user-api-key" } });
+    expect(forbidden.statusCode).toBe(403);
+
+    await app.inject({ method: "POST", url: "/api/games/progress/current/deaths/increment", headers: adminHeaders() });
+    const incremented = await app.inject({ method: "POST", url: "/api/games/progress/current/deaths/increment", headers: { authorization: `Bearer ${adminApiKey}` } });
+    expect(incremented.json()).toEqual(expect.objectContaining({ gameTitle: "Current Game", deaths: 2 }));
+
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await app.inject({ method: "POST", url: "/api/games/progress/current/deaths/decrement", headers: adminHeaders() });
+    }
+    const floored = await app.inject({ method: "POST", url: "/api/games/progress/current/deaths/decrement", headers: adminHeaders() });
+    expect(floored.json()).toEqual(expect.objectContaining({ deaths: 0 }));
+
+    const invalidSet = await app.inject({ method: "PUT", url: "/api/games/progress/current/deaths", headers: adminHeaders(), payload: { deaths: -3 } });
+    expect(invalidSet.statusCode).toBe(400);
+    expect(invalidSet.json()).toEqual({ errors: ["Deaths cannot be negative"] });
+
+    const set = await app.inject({ method: "PUT", url: "/api/games/progress/current/deaths", headers: adminHeaders(), payload: { deaths: 42 } });
+    expect(set.statusCode).toBe(200);
+    expect(set.json()).toEqual(expect.objectContaining({ gameTitle: "Current Game", deaths: 42, deathLabel: "Fails" }));
+
+    const progress = (await app.inject({ method: "GET", url: "/api/games/progress" })).json() as Array<{ gameTitle: string; deaths: number }>;
+    expect(Object.fromEntries(progress.map((entry) => [entry.gameTitle, entry.deaths]))).toEqual({ "Older Game": 4, "Finished Game": 0, "Current Game": 42 });
+
+    const counterRows = await db.pool.query<{ progress_id: number; deaths: number }>("SELECT progress_id, deaths FROM progress_death_counters ORDER BY progress_id");
+    expect(counterRows.rows).toEqual([
+      { progress_id: 1, deaths: 4 },
+      { progress_id: 3, deaths: 42 }
+    ]);
+  });
+
   it("returns C# public read shapes for missing games and ownership types", async () => {
     const missing = await app.inject({ method: "GET", url: "/api/games/999" });
     expect(missing.statusCode).toBe(404);

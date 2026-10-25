@@ -82,6 +82,16 @@ describe("Progress page", () => {
     rows = screen.getAllByRole("row").slice(1);
     expect(within(rows[0]!).getByText("Game One")).toBeInTheDocument();
     expect(within(rows[1]!).getByText("Game Two")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Deaths/i }));
+    rows = screen.getAllByRole("row").slice(1);
+    expect(rows[0]!.querySelector(".col-progress-deaths")).toHaveTextContent("7 Crashes");
+    expect(rows[1]!.querySelector(".col-progress-deaths")).toHaveTextContent(/^9$/);
+
+    fireEvent.click(screen.getByRole("button", { name: /Deaths/i }));
+    rows = screen.getAllByRole("row").slice(1);
+    expect(within(rows[0]!).getByText("Game Two")).toBeInTheDocument();
+    expect(within(rows[1]!).getByText("Game One")).toBeInTheDocument();
   });
 
   it("lets admins edit existing progress with split completion time fields", async () => {
@@ -117,7 +127,9 @@ describe("Progress page", () => {
               dateFinished: "2025-01-20",
               completionTime: "13:05:09",
               review: "Still excellent",
-              platform: "Physical"
+              platform: "Physical",
+              deaths: 7,
+              deathLabel: "Crashes"
             })
           })
         ])
@@ -138,7 +150,9 @@ function progressRows() {
       completionTime: "12:30:00",
       beatenCriteria: "Credits",
       review: "Great fun",
-      platform: "Physical"
+      platform: "Physical",
+      deaths: 7,
+      deathLabel: "Crashes"
     },
     {
       progressId: 102,
@@ -150,7 +164,9 @@ function progressRows() {
       completionTime: null,
       beatenCriteria: "Any%",
       review: "Hidden gem",
-      platform: "Emulated"
+      platform: "Emulated",
+      deaths: 9,
+      deathLabel: null
     }
   ];
 }
