@@ -18,6 +18,10 @@ describe("ProgressModal", () => {
 
     fireEvent.change(screen.getByLabelText("Beaten Criteria"), { target: { value: "  Credits  " } });
     fireEvent.change(screen.getByLabelText("Review"), { target: { value: "  Loved it  " } });
+    expect(screen.getByLabelText("Death Counter")).toHaveValue(3);
+    expect(screen.getByLabelText("Counter Label (optional)")).toHaveValue("Crashes");
+    fireEvent.change(screen.getByLabelText("Death Counter"), { target: { value: "12" } });
+    fireEvent.change(screen.getByLabelText("Counter Label (optional)"), { target: { value: "  Wrecks  " } });
     fireEvent.click(screen.getByRole("button", { name: "Update" }));
 
     await waitFor(() =>
@@ -28,7 +32,9 @@ describe("ProgressModal", () => {
         completionTime: "26:03:04",
         beatenCriteria: "Credits",
         review: "Loved it",
-        platform: "Physical"
+        platform: "Physical",
+        deaths: 12,
+        deathLabel: "Wrecks"
       })
     );
   });
@@ -50,6 +56,8 @@ describe("ProgressModal", () => {
     fireEvent.change(screen.getByLabelText("hours"), { target: { value: "-4" } });
     fireEvent.change(screen.getByLabelText("minutes"), { target: { value: "99" } });
     fireEvent.change(screen.getByLabelText("seconds"), { target: { value: "not-a-number" } });
+    expect(screen.getByLabelText("Counter Label (optional)")).toHaveAttribute("placeholder", "Deaths");
+    fireEvent.change(screen.getByLabelText("Death Counter"), { target: { value: "-5" } });
     fireEvent.click(screen.getByRole("button", { name: "Add" }));
 
     await waitFor(() =>
@@ -60,7 +68,9 @@ describe("ProgressModal", () => {
         completionTime: "00:59:00",
         beatenCriteria: null,
         review: null,
-        platform: "Emulated"
+        platform: "Emulated",
+        deaths: 0,
+        deathLabel: null
       })
     );
 
@@ -80,5 +90,7 @@ const progress: GameProgressDto = {
   completionTime: "1.02:03:04",
   beatenCriteria: "Any%",
   review: "Good",
-  platform: "Physical"
+  platform: "Physical",
+  deaths: 3,
+  deathLabel: "Crashes"
 };

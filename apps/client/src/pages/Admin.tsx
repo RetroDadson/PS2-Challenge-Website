@@ -136,6 +136,7 @@ export function Admin() {
           <a href="/votes-overlay" target="_blank" rel="noreferrer">Votes Overlay <ExternalLink /></a>
           <a href="/vote-covers-overlay" target="_blank" rel="noreferrer">Vote Covers Overlay <ExternalLink /></a>
           <a href="/progress-overlay" target="_blank" rel="noreferrer">Progress Overlay <ExternalLink /></a>
+          <a href="/deaths-overlay" target="_blank" rel="noreferrer">Death Counter Overlay <ExternalLink /></a>
           <a href="/blank-overlay" target="_blank" rel="noreferrer">Blank Overlay <ExternalLink /></a>
         </div>
       </section>

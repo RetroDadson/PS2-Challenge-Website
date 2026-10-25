@@ -1,6 +1,6 @@
 import { act, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ProgressOverlay, VoteCoversOverlay, VotesOverlay } from "../../src/pages/Overlays.js";
+import { DeathCounterOverlay, ProgressOverlay, VoteCoversOverlay, VotesOverlay } from "../../src/pages/Overlays.js";
 
 type MockWebSocketEvent = {
   data?: string;
@@ -163,6 +163,44 @@ describe("stream overlays", () => {
     expect(await screen.findByText("Games Completed")).toBeInTheDocument();
     expect(screen.getByText("1 / 2")).toBeInTheDocument();
     expect(screen.getByText("50.00%")).toBeInTheDocument();
+  });
+
+  it("shows the current game's death counter and refreshes it on games updates", async () => {
+    const fetchSpy = mockFetch({
+      "/api/games/progress/current/deaths": { progressId: 4, gameId: 9, gameTitle: "Burnout 3: Takedown", deaths: 12, deathLabel: "Crashes" }
+    });
+
+    render(<DeathCounterOverlay />);
+
+    expect(await screen.findByTestId("death-overlay-count")).toHaveTextContent("12");
+    expect(screen.getByText("Crashes")).toHaveClass("visually-hidden");
+    expect(screen.queryByText("Burnout 3: Takedown")).not.toBeInTheDocument();
+
+    mockFetch({
+      "/api/games/progress/current/deaths": { progressId: 4, gameId: 9, gameTitle: "Burnout 3: Takedown", deaths: 13, deathLabel: "Crashes" }
+    });
+    await act(async () => {
+      MockWebSocket.instances.find((socket) => socket.url.endsWith("/gamesHub"))?.emitMessage(JSON.stringify({ type: "GamesUpdated" }));
+    });
+
+    expect(await screen.findByText("13")).toBeInTheDocument();
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows an empty death counter state when no game is in progress", async () => {
+    mockFetch({});
+
+    render(<DeathCounterOverlay />);
+
+    expect(await screen.findByText("No game in progress")).toBeInTheDocument();
+  });
+
+  it("shows an error when the death counter cannot be loaded", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ message: "Boom" }), { status: 500 })));
+
+    render(<DeathCounterOverlay />);
+
+    expect(await screen.findByText("Error loading death counter")).toBeInTheDocument();
   });
 
   it("cycles vote cover images every two seconds", async () => {

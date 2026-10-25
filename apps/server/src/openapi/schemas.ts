@@ -273,7 +273,9 @@ const openApiSchemas = [
       completionTime: stringNullable,
       beatenCriteria: stringNullable,
       review: stringNullable,
-      platform: { type: "string", minLength: 1 }
+      platform: { type: "string", minLength: 1 },
+      deaths: { ...count, description: "Omit to keep the existing count" },
+      deathLabel: { type: "string", maxLength: 50, nullable: true, description: "What the counter tracks, e.g. Crashes; defaults to Deaths" }
     }
   },
   {
@@ -290,8 +292,29 @@ const openApiSchemas = [
       completionTime: stringNullable,
       beatenCriteria: stringNullable,
       review: stringNullable,
-      platform: { type: "string" }
+      platform: { type: "string" },
+      deaths: count,
+      deathLabel: stringNullable
     }
+  },
+  {
+    $id: "DeathCounter",
+    type: "object",
+    required: ["progressId", "gameId", "gameTitle", "deaths", "deathLabel"],
+    properties: {
+      progressId: { type: "integer" },
+      gameId: { type: "integer" },
+      gameTitle: { type: "string" },
+      imageUrl: stringNullable,
+      deaths: count,
+      deathLabel: { type: "string" }
+    }
+  },
+  {
+    $id: "SetDeathsRequest",
+    type: "object",
+    required: ["deaths"],
+    properties: { deaths: count }
   },
   {
     $id: "AddSerialNumberRequest",
@@ -772,6 +795,36 @@ export const gameRouteSchemas = {
     summary: "List game progress",
     operationId: "listGameProgress",
     response: { 200: arrayOf("GameProgress") }
+  }),
+  currentDeaths: route({
+    tags: ["Death Counter"],
+    summary: "Get the current game's death counter",
+    description: "The current game is the unfinished progress entry with the latest start date.",
+    operationId: "getCurrentDeaths",
+    response: { 200: ref("DeathCounter"), ...notFound }
+  }),
+  incrementCurrentDeaths: route({
+    tags: ["Death Counter"],
+    summary: "Add one to the current game's death counter",
+    operationId: "incrementCurrentDeaths",
+    security: adminSecurity,
+    response: { 200: ref("DeathCounter"), ...unauthorizedForbidden, ...notFound }
+  }),
+  decrementCurrentDeaths: route({
+    tags: ["Death Counter"],
+    summary: "Remove one from the current game's death counter",
+    description: "The counter never goes below zero.",
+    operationId: "decrementCurrentDeaths",
+    security: adminSecurity,
+    response: { 200: ref("DeathCounter"), ...unauthorizedForbidden, ...notFound }
+  }),
+  setCurrentDeaths: route({
+    tags: ["Death Counter"],
+    summary: "Set the current game's death counter",
+    operationId: "setCurrentDeaths",
+    security: adminSecurity,
+    body: ref("SetDeathsRequest"),
+    response: { 200: ref("DeathCounter"), ...validationBadRequest, ...unauthorizedForbidden, ...notFound }
   }),
   getById: route({
     tags: ["Games"],

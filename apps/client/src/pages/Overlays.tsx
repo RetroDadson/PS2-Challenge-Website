@@ -1,3 +1,4 @@
+import { Skull } from "lucide-react";
 import { api } from "../api.js";
 import { useAsync, useRealtime } from "../hooks.js";
 import { useEffect, useMemo, useState } from "react";
@@ -90,6 +91,26 @@ export function ProgressOverlay() {
           <div className="progress-overlay-label">Games Completed</div>
           <div className="progress-overlay-count">{gamesCompletedCount} / {gamesInChallengeCount}</div>
           <div className="progress-overlay-percentage">{percentageComplete.toFixed(2)}%</div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+export function DeathCounterOverlay() {
+  const counter = useAsync(() => api.currentDeathCounter(), []);
+  useRealtime("/gamesHub", () => void counter.reload());
+
+  return (
+    <div className="stream-overlay death-overlay-frame">
+      {counter.loading ? <OverlayMessage>Loading...</OverlayMessage> : null}
+      {counter.error ? <OverlayMessage>Error loading death counter</OverlayMessage> : null}
+      {!counter.loading && !counter.error && !counter.data ? <OverlayMessage>No game in progress</OverlayMessage> : null}
+      {!counter.loading && !counter.error && counter.data ? (
+        <div className="death-overlay-badge">
+          <Skull className="death-overlay-icon" aria-hidden="true" />
+          <span className="visually-hidden">{counter.data.deathLabel}</span>
+          <span className="death-overlay-count" data-testid="death-overlay-count">{counter.data.deaths}</span>
         </div>
       ) : null}
     </div>

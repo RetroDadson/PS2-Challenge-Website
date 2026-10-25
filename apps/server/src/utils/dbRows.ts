@@ -1,4 +1,12 @@
-import { parseDateOnly, parseNullableDateOnly, type AlternateTitle, type GameDto, type GameProgressDto } from "@ps2-challenge/shared";
+import {
+  DEFAULT_DEATH_LABEL,
+  parseDateOnly,
+  parseNullableDateOnly,
+  type AlternateTitle,
+  type DeathCounterDto,
+  type GameDto,
+  type GameProgressDto
+} from "@ps2-challenge/shared";
 
 export type GameRow = {
   game_id: number;
@@ -28,6 +36,8 @@ export type ProgressRow = {
   beaten_criteria: string | null;
   review: string | null;
   platform: string;
+  deaths: number;
+  death_label: string | null;
 };
 
 export type AlternateTitleRow = {
@@ -67,7 +77,20 @@ export function mapProgress(row: ProgressRow): GameProgressDto {
     completionTime: normalizePgInterval(row.completion_time),
     beatenCriteria: row.beaten_criteria,
     review: row.review,
-    platform: row.platform
+    platform: row.platform,
+    deaths: row.deaths,
+    deathLabel: row.death_label
+  };
+}
+
+export function mapDeathCounter(row: ProgressRow): DeathCounterDto {
+  return {
+    progressId: row.progress_id,
+    gameId: row.game_id,
+    gameTitle: row.game_title,
+    imageUrl: row.image_url,
+    deaths: row.deaths,
+    deathLabel: row.death_label || DEFAULT_DEATH_LABEL
   };
 }
 

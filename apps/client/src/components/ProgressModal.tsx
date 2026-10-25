@@ -1,6 +1,6 @@
 import { Save } from "lucide-react";
 import { useEffect, useState } from "react";
-import type { GameProgressDto } from "@ps2-challenge/shared";
+import { DEFAULT_DEATH_LABEL, type GameProgressDto } from "@ps2-challenge/shared";
 import { toDateInputValue } from "../dateUtils.js";
 import { ModalDialog } from "./ModalDialog.js";
 
@@ -14,6 +14,8 @@ type ProgressDraft = {
   completionHours: string;
   completionMinutes: string;
   completionSeconds: string;
+  deaths: string;
+  deathLabel: string;
 };
 
 export function ProgressModal({
@@ -43,7 +45,9 @@ export function ProgressModal({
       completionTime,
       beatenCriteria: draft.beatenCriteria.trim() || null,
       review: draft.review.trim() || null,
-      platform: draft.platform.trim() || "Physical"
+      platform: draft.platform.trim() || "Physical",
+      deaths: Math.max(0, Number.parseInt(draft.deaths, 10) || 0),
+      deathLabel: draft.deathLabel.trim() || null
     });
   };
 
@@ -78,6 +82,21 @@ export function ProgressModal({
             <option>Emulated</option>
           </select>
         </label>
+        <div className="form-grid">
+          <label>
+            <span>Death Counter</span>
+            <input type="number" min="0" value={draft.deaths} onChange={(event) => setDraft({ ...draft, deaths: event.target.value })} />
+          </label>
+          <label>
+            <span>Counter Label (optional)</span>
+            <input
+              maxLength={50}
+              placeholder={DEFAULT_DEATH_LABEL}
+              value={draft.deathLabel}
+              onChange={(event) => setDraft({ ...draft, deathLabel: event.target.value })}
+            />
+          </label>
+        </div>
         <label>
           <span>Beaten Criteria</span>
           <input value={draft.beatenCriteria} onChange={(event) => setDraft({ ...draft, beatenCriteria: event.target.value })} />
@@ -139,7 +158,9 @@ function createDraft(progress?: GameProgressDto | null): ProgressDraft {
     review: progress?.review ?? "",
     completionHours: hours,
     completionMinutes: minutes,
-    completionSeconds: seconds
+    completionSeconds: seconds,
+    deaths: String(progress?.deaths ?? 0),
+    deathLabel: progress?.deathLabel ?? ""
   };
 }
 

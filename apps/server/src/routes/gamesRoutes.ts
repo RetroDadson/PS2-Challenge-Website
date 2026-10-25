@@ -9,6 +9,7 @@ import { GameService } from "../services/gameService.js";
 import { auditInfo } from "../utils/audit.js";
 import { errorMessage } from "../utils/errors.js";
 import { validationMessages } from "../utils/validation.js";
+import { registerDeathCounterRoutes } from "./deathCounterRoutes.js";
 import { registerGameOwnershipRoutes } from "./gameOwnershipRoutes.js";
 import { registerGameRefreshRoutes } from "./gameRefreshRoutes.js";
 import { registerGameSerialNumberRoutes } from "./gameSerialNumberRoutes.js";
@@ -113,6 +114,7 @@ export async function registerGamesRoutes(
     return { message: `Game '${game.title}' has been deleted` };
   });
 
+  registerDeathCounterRoutes(app, gameService, requireAdminOrStop, realtimeHub);
   registerGameOwnershipRoutes(app, gameService, requireAdminOrStop, realtimeHub);
   registerGameSerialNumberRoutes(app, gameService, requireAdminOrStop, realtimeHub);
   registerGameRefreshRoutes(app, gameService, requireAdminOrStop, realtimeHub);

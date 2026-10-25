@@ -1,8 +1,10 @@
 import {
   Archive,
   Boxes,
+  Calculator,
   CalendarClock,
   CheckCircle2,
+  Flame,
   Clock3,
   Gamepad2,
   Hourglass,
@@ -13,12 +15,13 @@ import {
   PieChart,
   Radio,
   RotateCcw,
+  Skull,
   ZoomIn,
   ZoomOut,
   type LucideIcon
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { GameDto, GameProgressDto } from "@ps2-challenge/shared";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { DEFAULT_DEATH_LABEL, type GameDto, type GameProgressDto } from "@ps2-challenge/shared";
 import type { TwitchStreamStatsDto } from "../api.js";
 import { api } from "../api.js";
 import { Empty, ErrorMessage, Loading } from "../components/Status.js";
@@ -30,6 +33,14 @@ type YearlyStatistic = {
   gamesStarted: number;
   gamesCompleted: number;
   completionPercentage: number;
+  deaths: number;
+};
+
+type DeathRow = {
+  progressId: number;
+  gameTitle: string;
+  deaths: number;
+  deathLabel: string;
 };
 
 type OwnershipSlice = {
@@ -89,11 +100,21 @@ export function Statistics() {
         {stats.durationRows.length ? <DurationChart rows={stats.durationRows} /> : <p className="muted">No completed games with duration data yet.</p>}
       </section>
 
+      <section className="panel" aria-labelledby="death-statistics-heading">
+        <h2 id="death-statistics-heading">Death Counter</h2>
+        <div className="stats-grid">
+          <Stat tone="deaths" icon={Skull} label="Total Deaths / Fails" value={stats.deaths.total} />
+          <Stat tone="deaths-average" icon={Calculator} label="Average per Completed Game" value={formatAverageDeaths(stats.deaths.averagePerCompletedGame)} />
+          <Stat tone="deaths-most" icon={Flame} label="Most Deaths / Fails" value={formatDeathRow(stats.deaths.topGames[0])} />
+        </div>
+        {stats.deaths.topGames.length ? <DeathsChart rows={stats.deaths.topGames} /> : <p className="muted">No deaths or fails recorded yet.</p>}
+      </section>
+
       <section className="panel">
         <h2>Game Completion by Year</h2>
         {stats.yearlyStats.length ? (
           <table>
-            <thead><tr><th>Year</th><th>Games Started</th><th>Games Completed</th><th>% of Challenge Completed</th></tr></thead>
+            <thead><tr><th>Year</th><th>Games Started</th><th>Games Completed</th><th>% of Challenge Completed</th><th>Deaths / Fails</th></tr></thead>
             <tbody>
               {stats.yearlyStats.map((year) => (
                 <tr key={year.year}>
@@ -101,6 +122,7 @@ export function Statistics() {
                   <td>{year.gamesStarted}</td>
                   <td>{year.gamesCompleted}</td>
                   <td>{year.completionPercentage.toFixed(2)}%</td>
+                  <td>{year.deaths}</td>
                 </tr>
               ))}
             </tbody>
@@ -110,6 +132,7 @@ export function Statistics() {
                 <td><strong>{stats.yearlyStats.reduce((sum, year) => sum + year.gamesStarted, 0)}</strong></td>
                 <td><strong>{stats.yearlyStats.reduce((sum, year) => sum + year.gamesCompleted, 0)}</strong></td>
                 <td><strong>{stats.percentageComplete.toFixed(2)}%</strong></td>
+                <td><strong>{stats.yearlyStats.reduce((sum, year) => sum + year.deaths, 0)}</strong></td>
               </tr>
             </tfoot>
           </table>
@@ -309,6 +332,27 @@ function DurationChart({ rows }: Readonly<{ rows: DurationRow[] }>) {
   );
 }
 
+function DeathsChart({ rows }: Readonly<{ rows: DeathRow[] }>) {
+  const captionId = useId();
+  const max = Math.max(...rows.map((row) => row.deaths));
+  return (
+    <figure className="deaths-chart-card" aria-labelledby={captionId}>
+      <figcaption id={captionId}>Top {rows.length} {rows.length === 1 ? "Game" : "Games"} by Deaths / Fails</figcaption>
+      <ol className="deaths-chart">
+        {rows.map((row) => (
+          <li key={row.progressId} title={`${row.gameTitle}: ${row.deaths} ${row.deathLabel}`}>
+            <span className="deaths-chart-title">{row.gameTitle}</span>
+            <span className="deaths-chart-track" aria-hidden="true">
+              <span className="deaths-chart-bar" style={{ width: `${(row.deaths / max) * 100}%` }} />
+            </span>
+            <span className="deaths-chart-value">{row.deaths} <span className="muted">{row.deathLabel}</span></span>
+          </li>
+        ))}
+      </ol>
+    </figure>
+  );
+}
+
 function Stat({
   icon: Icon,
   label,
@@ -411,6 +455,7 @@ function calculateStatistics(games: GameDto[], progress: GameProgressDto[], owne
     collectionPercentageTotal,
     yearlyStats,
     durationRows,
+    deaths: calculateDeathStatistics(progress),
     ownershipSlices: buildOwnershipSlices(ownedTypes)
   };
 }
@@ -425,9 +470,37 @@ function calculateEstimatedStreamingWeeks(estimatedRemainingSeconds: number | nu
   return estimatedRemainingSeconds / averageWeeklyStreamSeconds;
 }
 
+function calculateDeathStatistics(progress: GameProgressDto[]) {
+  const completed = progress.filter((game) => !!game.dateFinished);
+  const topGames: DeathRow[] = progress
+    .filter((game) => game.deaths > 0)
+    .sort((left, right) => right.deaths - left.deaths || left.gameTitle.localeCompare(right.gameTitle, "en-GB"))
+    .slice(0, 10)
+    .map((game) => ({
+      progressId: game.progressId,
+      gameTitle: game.gameTitle,
+      deaths: game.deaths,
+      deathLabel: game.deathLabel || DEFAULT_DEATH_LABEL
+    }));
+  return {
+    total: progress.reduce((sum, game) => sum + game.deaths, 0),
+    averagePerCompletedGame: completed.length ? completed.reduce((sum, game) => sum + game.deaths, 0) / completed.length : null,
+    topGames
+  };
+}
+
+function formatAverageDeaths(value: number | null) {
+  return value === null ? "-" : value.toFixed(1);
+}
+
+function formatDeathRow(row: DeathRow | undefined) {
+  return row ? `${row.gameTitle} (${row.deaths})` : "-";
+}
+
 function calculateYearlyStatistics(progress: GameProgressDto[], gamesInChallengeCount: number): YearlyStatistic[] {
   const started = new Map<number, number>();
   const completed = new Map<number, number>();
+  const deaths = new Map<number, number>();
   for (const game of progress) {
     const startedYear = Number.parseInt(game.dateStarted.slice(0, 4), 10);
     if (!Number.isNaN(startedYear)) {
@@ -437,6 +510,7 @@ function calculateYearlyStatistics(progress: GameProgressDto[], gamesInChallenge
       const finishedYear = Number.parseInt(game.dateFinished.slice(0, 4), 10);
       if (!Number.isNaN(finishedYear)) {
         completed.set(finishedYear, (completed.get(finishedYear) ?? 0) + 1);
+        deaths.set(finishedYear, (deaths.get(finishedYear) ?? 0) + game.deaths);
       }
     }
   }
@@ -446,7 +520,8 @@ function calculateYearlyStatistics(progress: GameProgressDto[], gamesInChallenge
     year,
     gamesStarted: started.get(year) ?? 0,
     gamesCompleted: completed.get(year) ?? 0,
-    completionPercentage: gamesInChallengeCount > 0 ? ((completed.get(year) ?? 0) / gamesInChallengeCount) * 100 : 0
+    completionPercentage: gamesInChallengeCount > 0 ? ((completed.get(year) ?? 0) / gamesInChallengeCount) * 100 : 0,
+    deaths: deaths.get(year) ?? 0
   }));
 }
 

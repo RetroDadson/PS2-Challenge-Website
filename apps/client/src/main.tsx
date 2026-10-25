@@ -8,7 +8,7 @@ import { Games } from "./pages/Games.js";
 import { Home } from "./pages/Home.js";
 import { Login } from "./pages/Login.js";
 import { NotFound } from "./pages/NotFound.js";
-import { BlankOverlay, ProgressOverlay, VoteCoversOverlay, VotesOverlay } from "./pages/Overlays.js";
+import { BlankOverlay, DeathCounterOverlay, ProgressOverlay, VoteCoversOverlay, VotesOverlay } from "./pages/Overlays.js";
 import { Progress } from "./pages/Progress.js";
 import { Statistics } from "./pages/Statistics.js";
 import { UserPage } from "./pages/User.js";
@@ -33,6 +33,7 @@ const router = createBrowserRouter([
     ]
   },
   { path: "/blank-overlay", element: <BlankOverlay /> },
+  { path: "/deaths-overlay", element: <DeathCounterOverlay /> },
   { path: "/progress-overlay", element: <ProgressOverlay /> },
   { path: "/vote-covers-overlay", element: <VoteCoversOverlay /> },
   { path: "/votes-overlay", element: <VotesOverlay /> }

@@ -592,14 +592,16 @@ th { color: var(--heading-accent); font-size: .82rem; text-transform: uppercase;
 .progress-table .col-progress-number { width: 7%; }
 .progress-table .col-progress-status { width: 9%; }
 .progress-table .col-progress-cover { width: 7%; }
-.progress-table .col-progress-title { width: 13%; }
+.progress-table .col-progress-title { width: 12%; }
 .progress-table .col-progress-started,
 .progress-table .col-progress-finished { width: 8%; }
 .progress-table .col-progress-time { width: 7%; }
+.progress-table .col-progress-deaths { width: 8%; }
 .progress-table .col-progress-platform { width: 8%; }
-.progress-table .col-progress-criteria { width: 12%; }
-.progress-table .col-progress-review { width: 17%; }
-.progress-table .col-progress-actions { width: 4%; }
+.progress-table .col-progress-criteria { width: 8%; }
+.progress-table .col-progress-review { width: 11%; }
+.progress-table .death-label { display: block; color: var(--muted); font-size: .8em; }
+.progress-table .col-progress-actions { width: 7%; }
 .games-table .col-games-actions { width: 4%; }
 .games-table .col-games-cover { width: 7%; }
 .games-table .col-games-title { width: 17%; }
@@ -892,6 +894,33 @@ th { color: var(--heading-accent); font-size: .82rem; text-transform: uppercase;
 .stat-remaining-time { --stat-accent: #00bcd4; }
 .stat-twitch-average { --stat-accent: var(--brand-twitch); }
 .stat-streaming-weeks { --stat-accent: #03c9a9; }
+.stat-deaths,
+.stat-deaths-most { --stat-accent: #e91e63; }
+.stat-deaths-average { --stat-accent: var(--accent-warm); }
+.deaths-chart-card {
+  margin: 1rem 0 0;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-3);
+}
+.deaths-chart-card figcaption { margin-bottom: .75rem; font-weight: 600; }
+.deaths-chart { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.deaths-chart li {
+  display: grid;
+  grid-template-columns: minmax(8rem, 16rem) minmax(0, 1fr) auto;
+  gap: .75rem;
+  align-items: center;
+  padding: .3rem 0;
+}
+.deaths-chart-title { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.deaths-chart-track { display: block; height: 12px; }
+.deaths-chart-bar { display: block; min-width: 4px; height: 100%; border-radius: 0 4px 4px 0; background: #e91e63; }
+.deaths-chart-value { font-variant-numeric: tabular-nums; white-space: nowrap; }
+@media (max-width: 640px) {
+  .deaths-chart li { grid-template-columns: minmax(0, 1fr) auto; }
+  .deaths-chart-track { grid-column: 1 / -1; grid-row: 2; }
+}
 .progress-bar-container {
   width: 100%;
   height: .45rem;
@@ -1509,6 +1538,43 @@ th { color: var(--heading-accent); font-size: .82rem; text-transform: uppercase;
   text-shadow: 0 0 8px rgba(233, 30, 99, .6);
 }
 
+.death-overlay-frame {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 320px;
+  height: 140px;
+  padding: 0;
+  background: transparent;
+}
+
+.death-overlay-badge {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 14px 34px 14px 22px;
+  background: linear-gradient(135deg, rgba(26, 26, 46, .95) 0%, rgba(22, 33, 62, .95) 100%);
+  border: 3px solid #e91e63;
+  border-radius: 999px;
+  box-shadow: 0 0 20px rgba(233, 30, 99, .4);
+}
+
+.death-overlay-icon {
+  width: 64px;
+  height: 64px;
+  color: #fff;
+  filter: drop-shadow(0 0 10px rgba(233, 30, 99, .8));
+}
+
+.death-overlay-count {
+  color: #e91e63;
+  font-size: 4em;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  text-shadow: 0 0 15px rgba(233, 30, 99, .8);
+}
+
 .overlay-message {
   width: 100%;
   height: 100%;
@@ -1648,6 +1714,8 @@ th { color: var(--heading-accent); font-size: .82rem; text-transform: uppercase;
     overflow-wrap: anywhere;
     white-space: normal;
   }
+}
+@media (max-width: 1100px) {
   .table-scroll .data-table.progress-table {
     display: block;
     overflow: visible;
@@ -1661,6 +1729,11 @@ th { color: var(--heading-accent); font-size: .82rem; text-transform: uppercase;
   .data-table.progress-table tbody {
     display: grid;
     gap: .75rem;
+  }
+  .data-table.progress-table tr[role="none"] {
+    padding: 0;
+    border: 0;
+    background: transparent;
   }
   .data-table.progress-table tr {
     display: grid;

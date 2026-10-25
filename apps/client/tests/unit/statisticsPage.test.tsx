@@ -23,7 +23,8 @@ describe("Statistics page", () => {
           dateStarted: "2024-03-01",
           dateFinished: "2024-03-05",
           completionTime: "10:30:00",
-          platform: "Physical"
+          platform: "Physical",
+          deaths: 5
         },
         {
           progressId: 2,
@@ -32,7 +33,8 @@ describe("Statistics page", () => {
           dateStarted: "2025-01-01",
           dateFinished: "2025-01-03",
           completionTime: "05:30:00",
-          platform: "Emulated"
+          platform: "Emulated",
+          deaths: 0
         },
         {
           progressId: 3,
@@ -41,7 +43,9 @@ describe("Statistics page", () => {
           dateStarted: "2025-04-01",
           dateFinished: null,
           completionTime: null,
-          platform: "Physical"
+          platform: "Physical",
+          deaths: 9,
+          deathLabel: "Fails"
         }
       ],
       "GET /api/games/owned-types": {
@@ -107,6 +111,18 @@ describe("Statistics page", () => {
     expect(within(yearlySection).getByRole("row", { name: /2025 2 1 33.33%/i })).toBeInTheDocument();
     expect(within(yearlySection).getByRole("row", { name: /2024 1 1 33.33%/i })).toBeInTheDocument();
     expect(within(yearlySection).getByRole("row", { name: /Total 3 2 66.67%/i })).toBeInTheDocument();
+    expect(within(yearlySection).getByRole("columnheader", { name: "Deaths / Fails" })).toBeInTheDocument();
+    expect(within(yearlySection).getByRole("row", { name: "2025 2 1 33.33% 0" })).toBeInTheDocument();
+    expect(within(yearlySection).getByRole("row", { name: "2024 1 1 33.33% 5" })).toBeInTheDocument();
+    expect(within(yearlySection).getByRole("row", { name: "Total 3 2 66.67% 5" })).toBeInTheDocument();
+
+    expect(statValue("Total Deaths / Fails")).toBe("14");
+    expect(statValue("Average per Completed Game")).toBe("2.5");
+    expect(statValue("Most Deaths / Fails")).toBe("Game Four (9)");
+    const deathsChart = screen.getByRole("figure", { name: "Top 2 Games by Deaths / Fails" });
+    const deathRows = within(deathsChart).getAllByRole("listitem");
+    expect(deathRows.map((row) => row.textContent)).toEqual(["Game Four9 Fails", "Game One5 Deaths"]);
+    expect(deathRows[0]).toHaveAttribute("title", "Game Four: 9 Fails");
 
     const ownershipSection = screen.getByRole("heading", { name: "Ownership Type Distribution" }).closest(".ownership-breakdown") as HTMLElement;
     expect(ownershipSection).toBeInTheDocument();
@@ -115,6 +131,26 @@ describe("Statistics page", () => {
     expect(within(ownershipSection).getByText("Loose")).toBeInTheDocument();
     expect(within(ownershipSection).getByText("1 (33.3%)")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "More Statistics Coming Soon" })).toBeInTheDocument();
+  });
+
+  it("shows empty death statistics when nothing has been recorded", async () => {
+    mockFetch({
+      "GET /api/games": [{ id: 1, title: "Clean Game", isExcluded: false, isOwned: false }],
+      "GET /api/games/progress": [
+        { progressId: 1, gameId: 1, gameTitle: "Clean Game", dateStarted: "2025-01-01", dateFinished: null, platform: "Physical", deaths: 0 }
+      ],
+      "GET /api/games/owned-types": {},
+      "GET /api/twitch/stream-stats": null
+    });
+
+    render(<Statistics />);
+
+    expect(await screen.findByRole("heading", { name: "Death Counter" })).toBeInTheDocument();
+    expect(statValue("Total Deaths / Fails")).toBe("0");
+    expect(statValue("Average per Completed Game")).toBe("-");
+    expect(statValue("Most Deaths / Fails")).toBe("-");
+    expect(screen.getByText("No deaths or fails recorded yet.")).toBeInTheDocument();
+    expect(screen.queryByRole("figure")).not.toBeInTheDocument();
   });
 
   it("formats long streaming time estimates as years and weeks", async () => {
@@ -131,7 +167,8 @@ describe("Statistics page", () => {
           dateStarted: "2025-01-01",
           dateFinished: "2025-01-10",
           completionTime: "105:00:00",
-          platform: "Physical"
+          platform: "Physical",
+          deaths: 0
         }
       ],
       "GET /api/games/owned-types": {

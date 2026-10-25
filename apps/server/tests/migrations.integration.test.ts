@@ -14,7 +14,8 @@ const expectedMigrationRecords = [
   "004_add_howlongtobeat_games",
   "005_add_howlongtobeat_sync_state",
   "006_add_user_game_table_preferences",
-  "007_add_challenge_runners"
+  "007_add_challenge_runners",
+  "008_add_progress_death_counter"
 ];
 
 describe("database migrations", () => {
@@ -49,6 +50,28 @@ describe("database migrations", () => {
       expect(tables.rows.map((row) => row.table_name)).toContain("game_howlongtobeat");
       expect(tables.rows.map((row) => row.table_name)).toContain("game_howlongtobeat_sync_state");
       expect(tables.rows.map((row) => row.table_name)).toContain("challenge_runners");
+      expect(tables.rows.map((row) => row.table_name)).toContain("progress_death_counters");
+
+      const progressColumns = await pool.query<{ column_name: string }>(
+        "SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'progress' ORDER BY ordinal_position"
+      );
+      expect(progressColumns.rows.map((row) => row.column_name)).toEqual([
+        "progress_id",
+        "game_id",
+        "date_started",
+        "date_finished",
+        "completion_time",
+        "beaten_criteria",
+        "review",
+        "platform"
+      ]);
+
+      await pool.query("INSERT INTO games (game_id, title) VALUES (1, 'Counted Game')");
+      await pool.query("INSERT INTO progress (game_id, date_started, platform) VALUES (1, '2024-01-01', 'Physical')");
+      await pool.query("INSERT INTO progress_death_counters (progress_id, deaths) SELECT progress_id, 3 FROM progress");
+      await expect(pool.query("UPDATE progress_death_counters SET deaths = -1")).rejects.toThrow(/chk_progress_death_counters_deaths/);
+      await pool.query("DELETE FROM games WHERE game_id = 1");
+      expect((await pool.query("SELECT 1 FROM progress_death_counters")).rowCount).toBe(0);
 
       const challengeRunnerLogoColumn = await pool.query<{ data_type: string; is_nullable: string; character_maximum_length: number }>(
         `

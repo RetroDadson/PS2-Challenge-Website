@@ -172,22 +172,15 @@ export function registerGameOwnershipRoutes(
       return reply.status(400).send({ errors: validationMessages(parsed.error) });
     }
     try {
-      const progress = await gameService.upsertProgress(
-        parsed.data.title,
-        parsed.data.dateStarted,
-        parsed.data.dateFinished,
-        parsed.data.completionTime,
-        parsed.data.beatenCriteria,
-        parsed.data.review,
-        parsed.data.platform
-      );
+      const progress = await gameService.upsertProgress(parsed.data);
       realtimeHub.broadcastGamesUpdated();
       auditInfo(request.log, user, `AUDIT: Admin ${user.username} updated progress for game ID ${progress.gameId}: ${parsed.data.title}`, {
         gameId: progress.gameId,
         gameTitle: parsed.data.title,
         progressId: progress.progressId,
         completionTime: progress.completionTime,
-        platform: progress.platform
+        platform: progress.platform,
+        deaths: progress.deaths
       });
       return {
         progressId: progress.progressId,
@@ -198,6 +191,8 @@ export function registerGameOwnershipRoutes(
         beatenCriteria: progress.beatenCriteria,
         review: progress.review,
         platform: progress.platform,
+        deaths: progress.deaths,
+        deathLabel: progress.deathLabel,
         message: `Progress for '${parsed.data.title}' has been updated`
       };
     } catch (error) {

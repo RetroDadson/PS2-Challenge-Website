@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 export function sortMarker<TColumn extends string>(current: TColumn, column: TColumn, ascending: boolean): string {
   if (current !== column) {
     return "";
@@ -16,7 +18,7 @@ export function SortButton<TColumn extends string>({
   current: TColumn;
   ascending: boolean;
   onSort: (column: TColumn) => void;
-  children: string;
+  children: ReactNode;
 }>) {
   const marker = sortMarker(current, column, ascending);
   return <button className="table-sort-button" onClick={() => onSort(column)}>{children}{marker}</button>;

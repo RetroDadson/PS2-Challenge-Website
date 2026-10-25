@@ -1,6 +1,6 @@
 import { Edit3, Plus } from "lucide-react";
 import { memo, useCallback, useMemo, useRef, useState } from "react";
-import type { AlternateTitle, GameProgressDto } from "@ps2-challenge/shared";
+import { DEFAULT_DEATH_LABEL, type AlternateTitle, type GameProgressDto } from "@ps2-challenge/shared";
 import { api } from "../api.js";
 import { AlternateTitleHint, EMPTY_ALTERNATE_TITLES } from "../components/AlternateTitleHint.js";
 import { CoverImage } from "../components/CoverImage.js";
@@ -12,7 +12,7 @@ import { useAsync, useCurrentUser, useRealtime, useWindowRowVirtualizer } from "
 import { buildSearchIndex, matchesSearchIndex } from "../searchIndex.js";
 import { compareNullable } from "../sortHelpers.js";
 
-type SortColumn = "ProgressId" | "Status" | "GameTitle" | "DateStarted" | "DateFinished" | "CompletionTime" | "Platform";
+type SortColumn = "ProgressId" | "Status" | "GameTitle" | "DateStarted" | "DateFinished" | "CompletionTime" | "Deaths" | "Platform";
 
 const ESTIMATED_ROW_HEIGHT_PX = 56;
 
@@ -40,7 +40,7 @@ export function Progress() {
   const inProgressCount = allProgress.length - completedCount;
 
   const searchIndex = useMemo(
-    () => buildSearchIndex(allProgress, (entry) => entry.progressId, (entry) => [entry.gameTitle, entry.beatenCriteria, entry.review]),
+    () => buildSearchIndex(allProgress, (entry) => entry.progressId, (entry) => [entry.gameTitle, entry.beatenCriteria, entry.review, entry.deathLabel]),
     [allProgress]
   );
 
@@ -60,7 +60,7 @@ export function Progress() {
     [allProgress, searchIndex, searchQuery, showCompletedOnly, showInProgressOnly, sortAscending, sortColumn]
   );
 
-  const totalColumnCount = 10 + (isAdmin ? 1 : 0);
+  const totalColumnCount = 11 + (isAdmin ? 1 : 0);
   const { virtualRows, paddingTop, paddingBottom, measureElement } = useWindowRowVirtualizer<HTMLTableRowElement>({
     count: filtered.length,
     estimateRowHeight: ESTIMATED_ROW_HEIGHT_PX,
@@ -132,6 +132,7 @@ export function Progress() {
               <col className="col-progress-started" />
               <col className="col-progress-finished" />
               <col className="col-progress-time" />
+              <col className="col-progress-deaths" />
               <col className="col-progress-platform" />
               <col className="col-progress-criteria" />
               <col className="col-progress-review" />
@@ -146,6 +147,7 @@ export function Progress() {
                 <th className="col-progress-started"><SortButton column="DateStarted" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Started</SortButton></th>
                 <th className="col-progress-finished"><SortButton column="DateFinished" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Finished</SortButton></th>
                 <th className="col-progress-time"><SortButton column="CompletionTime" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Time</SortButton></th>
+                <th className="col-progress-deaths"><SortButton column="Deaths" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Deaths/<wbr />Failures</SortButton></th>
                 <th className="col-progress-platform"><SortButton column="Platform" current={sortColumn} ascending={sortAscending} onSort={sortBy}>Platform</SortButton></th>
                 <th className="col-progress-criteria">Criteria</th>
                 <th className="col-progress-review">Review</th>
@@ -218,6 +220,12 @@ const ProgressRow = memo(function ProgressRow({
       <td className="col-progress-started" data-label="Started">{formatDateOnly(game.dateStarted)}</td>
       <td className="col-progress-finished" data-label="Finished">{game.dateFinished ? formatDateOnly(game.dateFinished) : "-"}</td>
       <td className="col-progress-time" data-label="Time">{formatCompletionTime(game.completionTime)}</td>
+      <td className="col-progress-deaths" data-label="Deaths/Failures">
+        <span>
+          {game.deaths}
+          {game.deathLabel && game.deathLabel !== DEFAULT_DEATH_LABEL ? <span className="death-label"> {game.deathLabel}</span> : null}
+        </span>
+      </td>
       <td className="col-progress-platform" data-label="Platform"><span className={`platform-badge platform-${game.platform.toLocaleLowerCase("en-GB")}`}>{game.platform}</span></td>
       <td className="col-progress-criteria" data-label="Criteria">{game.beatenCriteria ?? "-"}</td>
       <td className="col-progress-review" data-label="Review">{game.review ?? "-"}</td>
@@ -249,6 +257,8 @@ function compareProgress(left: GameProgressDto, right: GameProgressDto, column: 
       return compareNullableLast(left.dateFinished, right.dateFinished, ascending);
     case "CompletionTime":
       return compareNullableNumberLast(durationSeconds(left.completionTime), durationSeconds(right.completionTime), ascending);
+    case "Deaths":
+      return (left.deaths - right.deaths || left.gameTitle.localeCompare(right.gameTitle, "en-GB")) * direction;
     case "Platform":
       return left.platform.localeCompare(right.platform, "en-GB") * direction;
   }

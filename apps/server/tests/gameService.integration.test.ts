@@ -62,15 +62,14 @@ describe("GameService parity", () => {
   it("creates progress and returns the full updated progress payload", async () => {
     await seedGame(db.pool, 1, "Test Game");
 
-    const progress = await gameService.upsertProgress(
-      "Test Game",
-      "2024-01-01",
-      null,
-      "05:30:00",
-      "Beat the main story",
-      "Great game!",
-      "Physical"
-    );
+    const progress = await gameService.upsertProgress({
+      title: "Test Game",
+      dateStarted: "2024-01-01",
+      completionTime: "05:30:00",
+      beatenCriteria: "Beat the main story",
+      review: "Great game!",
+      platform: "Physical"
+    });
 
     expect(progress).toEqual(
       expect.objectContaining({
@@ -89,17 +88,17 @@ describe("GameService parity", () => {
 
   it("updates existing progress instead of inserting duplicates", async () => {
     await seedGame(db.pool, 1, "Test Game");
-    const created = await gameService.upsertProgress("Test Game", "2024-01-01", null, "05:30:00", null, null, "Physical");
+    const created = await gameService.upsertProgress({ title: "Test Game", dateStarted: "2024-01-01", completionTime: "05:30:00", platform: "Physical" });
 
-    const updated = await gameService.upsertProgress(
-      "Test Game",
-      "2024-01-01",
-      "2024-01-15",
-      "10:45:30",
-      "100% completion",
-      "Updated review",
-      "Physical"
-    );
+    const updated = await gameService.upsertProgress({
+      title: "Test Game",
+      dateStarted: "2024-01-01",
+      dateFinished: "2024-01-15",
+      completionTime: "10:45:30",
+      beatenCriteria: "100% completion",
+      review: "Updated review",
+      platform: "Physical"
+    });
 
     expect(updated.progressId).toBe(created.progressId);
     expect(updated).toEqual(
@@ -118,8 +117,8 @@ describe("GameService parity", () => {
   it("can return only completed progress records", async () => {
     await seedGame(db.pool, 1, "Completed Game");
     await seedGame(db.pool, 2, "In Progress Game");
-    await gameService.upsertProgress("Completed Game", "2024-01-01", "2024-01-15", null, null, null, "Physical");
-    await gameService.upsertProgress("In Progress Game", "2024-01-01", null, null, null, null, "Physical");
+    await gameService.upsertProgress({ title: "Completed Game", dateStarted: "2024-01-01", dateFinished: "2024-01-15", platform: "Physical" });
+    await gameService.upsertProgress({ title: "In Progress Game", dateStarted: "2024-01-01", platform: "Physical" });
 
     const completed = await gameService.allProgress(true);
 
@@ -153,8 +152,8 @@ describe("GameService parity", () => {
     await seedGame(db.pool, 3, "Beta");
     await db.pool.query("INSERT INTO game_owned (game_id, own_physical_copy, type_owned) VALUES (1, true, 'Base')");
     await db.pool.query("INSERT INTO excluded_games (game_id, reason) VALUES (3, 'Filtered')");
-    await gameService.upsertProgress("Alpha", "2024-01-01", "2024-01-02", null, null, null, "Physical");
-    await gameService.upsertProgress(".hack//G.U.", "2024-02-01", null, null, null, null, "Physical");
+    await gameService.upsertProgress({ title: "Alpha", dateStarted: "2024-01-01", dateFinished: "2024-01-02", platform: "Physical" });
+    await gameService.upsertProgress({ title: ".hack//G.U.", dateStarted: "2024-02-01", platform: "Physical" });
     await gameService.addAlternateTitle(2, "hack GU", "Alt");
 
     const result = await gameService.getGamesPageData();
