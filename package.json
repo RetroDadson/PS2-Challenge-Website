@@ -15,7 +15,7 @@
     "dev:server": "npm run dev -w @ps2-challenge/server",
     "dev:client": "npm run dev -w @ps2-challenge/client",
     "build": "npm run build -w @ps2-challenge/shared && npm run build -w @ps2-challenge/client && npm run build -w @ps2-challenge/server",
-    "lint": "npm run lint --workspaces && eslint tests --ext .ts",
+    "lint": "npm run lint --workspaces && oxlint tests",
     "typecheck": "npm run build -w @ps2-challenge/shared && npm run typecheck -w @ps2-challenge/client && npm run typecheck -w @ps2-challenge/server && npm run typecheck -w @ps2-challenge/shared && tsc -p tsconfig.scripts.json --noEmit && tsc -p tests/e2e/tsconfig.json --noEmit",
     "test": "npm run build -w @ps2-challenge/shared && npm run test --workspaces --if-present",
     "coverage": "npm run build -w @ps2-challenge/shared && npm run coverage --workspaces --if-present",
@@ -28,7 +28,6 @@
     "import:wiki-serials": "tsx scripts-ts/import-wiki-serials.ts"
   },
   "devDependencies": {
-    "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.61.1",
     "@testcontainers/postgresql": "^12.0.4",
     "@testing-library/jest-dom": "^7.0.0",
@@ -39,12 +38,10 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
     "@vitest/coverage-v8": "^5.0.0",
-    "eslint": "^10.6.0",
-    "globals": "^17.7.0",
     "jsdom": "^30.0.0",
+    "oxlint": "^1.89.0",
     "tsx": "^4.23.0",
     "typescript": "^7.0.0",
-    "typescript-eslint": "^8.62.1",
     "vite": "^8.2.1",
     "vitest": "^5.0.0"
   },
