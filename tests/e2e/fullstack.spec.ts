@@ -254,7 +254,7 @@ test("death counter API drives the live overlay for the current game", async ({ 
   const streamDeck = await playwright.request.newContext({ baseURL, extraHTTPHeaders: { "x-api-key": apiKey } });
   const anonymous = await playwright.request.newContext({ baseURL });
   try {
-    const before = await (await anonymous.get("/api/games/progress/current/deaths")).json() as { gameTitle: string; deaths: number; deathLabel: string };
+    const before = await (await anonymous.get("/api/games/progress/current/deaths")).json() as { progressId: number; gameTitle: string; deaths: number; deathLabel: string };
     expect((await anonymous.post("/api/games/progress/current/deaths/increment")).status()).toBe(401);
 
     await page.goto("/deaths-overlay");
@@ -268,6 +268,11 @@ test("death counter API drives the live overlay for the current game", async ({ 
 
     await streamDeck.post("/api/games/progress/current/deaths/decrement");
     await expect(count).toHaveText(String(before.deaths + 1), { timeout: 5_000 });
+
+    const byId = await anonymous.get(`/api/games/progress/${before.progressId}/deaths`);
+    expect(await byId.json()).toEqual(expect.objectContaining({ gameTitle: before.gameTitle, deaths: before.deaths + 1 }));
+    const all = await (await anonymous.get("/api/games/progress/deaths")).json() as Array<{ progressId: number; deaths: number }>;
+    expect(all.find((entry) => entry.progressId === before.progressId)?.deaths).toBe(before.deaths + 1);
 
     const reset = await streamDeck.put("/api/games/progress/current/deaths", { data: { deaths: before.deaths } });
     expect(reset.ok()).toBe(true);

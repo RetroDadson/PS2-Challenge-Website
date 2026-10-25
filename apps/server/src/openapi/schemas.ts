@@ -803,6 +803,20 @@ export const gameRouteSchemas = {
     operationId: "getCurrentDeaths",
     response: { 200: ref("DeathCounter"), ...notFound }
   }),
+  listDeaths: route({
+    tags: ["Death Counter"],
+    summary: "List death counters for every progress entry",
+    description: "Ordered by progress ID (the game number on the progress page). Entries without a recorded count return 0.",
+    operationId: "listDeaths",
+    response: { 200: arrayOf("DeathCounter") }
+  }),
+  progressDeaths: route({
+    tags: ["Death Counter"],
+    summary: "Get the death counter for a progress entry",
+    operationId: "getProgressDeaths",
+    params: ref("IdParams"),
+    response: { 200: ref("DeathCounter"), ...notFound }
+  }),
   incrementCurrentDeaths: route({
     tags: ["Death Counter"],
     summary: "Add one to the current game's death counter",
