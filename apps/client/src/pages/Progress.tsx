@@ -2,13 +2,13 @@ import { Edit3, Plus } from "lucide-react";
 import { memo, useCallback, useMemo, useRef, useState } from "react";
 import type { AlternateTitle, GameProgressDto } from "@ps2-challenge/shared";
 import { api } from "../api.js";
+import { AlternateTitleHint, EMPTY_ALTERNATE_TITLES } from "../components/AlternateTitleHint.js";
 import { CoverImage } from "../components/CoverImage.js";
 import { ProgressModal } from "../components/ProgressModal.js";
 import { SortButton } from "../components/SortButton.js";
 import { Empty, ErrorMessage, Loading } from "../components/Status.js";
 import { formatDateOnly } from "../dateUtils.js";
 import { useAsync, useCurrentUser, useRealtime, useWindowRowVirtualizer } from "../hooks.js";
-import { EMPTY_ALTERNATE_TITLES } from "./Games.js";
 import { buildSearchIndex, matchesSearchIndex } from "../searchIndex.js";
 import { compareNullable } from "../sortHelpers.js";
 
@@ -214,7 +214,7 @@ const ProgressRow = memo(function ProgressRow({
       <td className="col-progress-number" data-label="Game Number">{game.progressId}</td>
       <td className="col-progress-status" data-label="Status"><span className={`status-badge ${game.dateFinished ? "status-completed" : "status-inprogress"}`}>{game.dateFinished ? "Completed" : "In Progress"}</span></td>
       <td className="cover-cell col-progress-cover" data-label="Cover"><CoverImage src={game.imageUrl} alt={`${game.gameTitle} cover`} /></td>
-      <td className="col-progress-title" data-label="Title"><ProgressTitle game={game} alternateTitles={alternateTitles} /></td>
+      <td className="col-progress-title" data-label="Title"><AlternateTitleHint title={game.gameTitle} alternateTitles={alternateTitles} /></td>
       <td className="col-progress-started" data-label="Started">{formatDateOnly(game.dateStarted)}</td>
       <td className="col-progress-finished" data-label="Finished">{game.dateFinished ? formatDateOnly(game.dateFinished) : "-"}</td>
       <td className="col-progress-time" data-label="Time">{formatCompletionTime(game.completionTime)}</td>
@@ -229,19 +229,6 @@ const ProgressRow = memo(function ProgressRow({
     </tr>
   );
 });
-
-function ProgressTitle({ game, alternateTitles }: Readonly<{ game: GameProgressDto; alternateTitles: AlternateTitle[] }>) {
-  if (!alternateTitles.length) {
-    return <>{game.gameTitle}</>;
-  }
-
-  const titles = alternateTitles.map((alternateTitle) => alternateTitle.title).join("\n");
-  return (
-    <span className="alternate-title-hint" title={titles} aria-label={`${game.gameTitle}. Alternate titles: ${titles.replaceAll("\n", ", ")}`}>
-      {game.gameTitle}
-    </span>
-  );
-}
 
 function sortProgress(progress: GameProgressDto[], column: SortColumn, ascending: boolean) {
   return [...progress].sort((left, right) => compareProgress(left, right, column, ascending));

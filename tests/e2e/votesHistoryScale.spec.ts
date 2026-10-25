@@ -9,8 +9,8 @@ test("Vote history table header stays fixed while scrolling", async ({ page }) =
   await page.route("**/api/votes/current", async (route) => {
     await route.fulfill({ json: [] });
   });
-  await page.route("**/api/games", async (route) => {
-    await route.fulfill({ json: [] });
+  await page.route("**/api/games/page-data", async (route) => {
+    await route.fulfill({ json: { games: [], ownedTypes: {}, exclusionReasons: {}, completionStatus: {}, alternateTitles: {} } });
   });
 
   await page.setViewportSize({ width: 1280, height: 900 });

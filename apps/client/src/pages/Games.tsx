@@ -2,6 +2,7 @@ import { Edit3, Plus, Search } from "lucide-react";
 import { memo, useMemo, useRef, useState } from "react";
 import type { AlternateTitle, GameDto } from "@ps2-challenge/shared";
 import { api } from "../api.js";
+import { AlternateTitleHint, EMPTY_ALTERNATE_TITLES } from "../components/AlternateTitleHint.js";
 import { CoverImage } from "../components/CoverImage.js";
 import { GameModal } from "../components/GameModal.js";
 import { GameTableColumnSettings } from "../components/GameTableColumnSettings.js";
@@ -17,7 +18,6 @@ import { buildSearchIndex, matchesSearchIndex } from "../searchIndex.js";
 import { compareNullable } from "../sortHelpers.js";
 import { useGameTablePreferences } from "../useGameTablePreferences.js";
 
-export const EMPTY_ALTERNATE_TITLES: AlternateTitle[] = [];
 const ESTIMATED_ROW_HEIGHT_PX = 56;
 
 type SortColumn =
@@ -338,7 +338,7 @@ function GameColumnCell({
     case "cover":
       return <td className={`cover-cell ${column.className}`} data-label="Cover"><CoverImage src={game.imageUrl} alt={`${game.title} cover`} /></td>;
     case "title":
-      return <td className={column.className} data-label="Title"><GameTitle game={game} alternateTitles={alternateTitles} /></td>;
+      return <td className={column.className} data-label="Title"><AlternateTitleHint title={game.title} alternateTitles={alternateTitles} /></td>;
     case "howLongToBeat":
       return <td className={column.className} data-label="How Long To Beat Time"><HowLongToBeatTime game={game} /></td>;
     case "developer":
@@ -408,19 +408,6 @@ function gameRowClass(game: GameDto) {
     return "owned-row";
   }
   return undefined;
-}
-
-function GameTitle({ game, alternateTitles }: Readonly<{ game: GameDto; alternateTitles: AlternateTitle[] }>) {
-  if (!alternateTitles.length) {
-    return <>{game.title}</>;
-  }
-
-  const titles = alternateTitles.map((alternateTitle) => alternateTitle.title).join("\n");
-  return (
-    <span className="alternate-title-hint" title={titles} aria-label={`${game.title}. Alternate titles: ${titles.replaceAll("\n", ", ")}`}>
-      {game.title}
-    </span>
-  );
 }
 
 function HowLongToBeatTime({ game }: Readonly<{ game: GameDto }>) {

@@ -1,7 +1,8 @@
 import { Archive, Dice5, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
-import type { CurrentVoteDto, GameDto, VoteRoundDto } from "@ps2-challenge/shared";
+import type { AlternateTitle, CurrentVoteDto, GameDto, VoteRoundDto } from "@ps2-challenge/shared";
 import { api } from "../api.js";
+import { AlternateTitleHint, EMPTY_ALTERNATE_TITLES } from "../components/AlternateTitleHint.js";
 import { CoverImage } from "../components/CoverImage.js";
 import { ModalDialog } from "../components/ModalDialog.js";
 import { SortButton, sortMarker } from "../components/SortButton.js";
@@ -10,13 +11,16 @@ import { useAsync, useCurrentUser, useRealtime } from "../hooks.js";
 import { fullCirclePath, PIE_CHART_COLORS, sectorPath, formatPathNumber } from "../pieChart.js";
 import { buildSearchIndex, matchesSearchIndex, type SearchIndex } from "../searchIndex.js";
 
+const EMPTY_GAMES: GameDto[] = [];
+const EMPTY_ALTERNATE_TITLES_BY_GAME: Record<string, AlternateTitle[]> = {};
+
 type SortColumn = "VoteRound" | "TopGameTitle" | "TopVotes" | "SecondGameTitle" | "SecondVotes" | "LastGameTitle" | "LastVotes";
 
 export function Votes() {
   const user = useCurrentUser();
   const history = useAsync(() => api.votesHistory(), []);
   const current = useAsync(() => api.currentVotes(), []);
-  const games = useAsync(() => api.games(), []);
+  const pageData = useAsync(() => api.gamesPageData(), []);
   const [newCurrentTitle, setNewCurrentTitle] = useState("");
   const [newCurrentCount, setNewCurrentCount] = useState(0);
   const [filter, setFilter] = useState("");
@@ -25,27 +29,29 @@ export function Votes() {
   const [sortAscending, setSortAscending] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
   useRealtime("/votesHub", () => { void history.reload(); void current.reload(); });
-  useRealtime("/gamesHub", () => void games.reload());
+  useRealtime("/gamesHub", () => void pageData.reload());
   const isAdmin = user.data?.role === "Admin";
+  const games = pageData.data?.games ?? EMPTY_GAMES;
+  const alternateTitles = pageData.data?.alternateTitles ?? EMPTY_ALTERNATE_TITLES_BY_GAME;
 
   const orderedCurrentVotes = useMemo(
     () => [...(current.data ?? [])].sort((left, right) => left.gameNumber - right.gameNumber || right.voteCount - left.voteCount || left.gameTitle.localeCompare(right.gameTitle, "en-GB")),
     [current.data]
   );
-  const gamesById = useMemo(() => new Map((games.data ?? []).map((game) => [game.id, game])), [games.data]);
+  const gamesById = useMemo(() => new Map(games.map((game) => [game.id, game])), [games]);
   const gameTitleSearchIndex = useMemo(
-    () => buildSearchIndex(games.data ?? [], (game) => game.id, (game) => [game.title]),
-    [games.data]
+    () => buildSearchIndex(games, (game) => game.id, (game) => [game.title, ...alternateTitleNames(alternateTitles, game.id)]),
+    [alternateTitles, games]
   );
   const titleSuggestions = useMemo(() => {
     const search = newCurrentTitle.trim().toLocaleLowerCase("en-GB");
     if (!search) return [];
-    return (games.data ?? [])
+    return games
       .filter((game) => matchesSearchIndex(gameTitleSearchIndex, game.id, search))
       .map((game) => game.title)
       .sort((left, right) => left.localeCompare(right, "en-GB"))
       .slice(0, 8);
-  }, [gameTitleSearchIndex, games.data, newCurrentTitle]);
+  }, [gameTitleSearchIndex, games, newCurrentTitle]);
   const pieSlices = useMemo(() => buildPieSlices(orderedCurrentVotes), [orderedCurrentVotes]);
   const voteHistorySearchIndex = useMemo(
     () =>
@@ -54,9 +60,12 @@ export function Votes() {
         round.topGameTitle,
         round.secondGameTitle,
         round.lastGameTitle,
-        round.notes
+        round.notes,
+        ...alternateTitleNames(alternateTitles, round.topGameId),
+        ...alternateTitleNames(alternateTitles, round.secondGameId),
+        ...alternateTitleNames(alternateTitles, round.lastGameId)
       ]),
-    [history.data]
+    [alternateTitles, history.data]
   );
   const filteredHistory = useMemo(
     () => sortVoteHistory(filterVoteHistory(history.data ?? [], voteHistorySearchIndex, filter, showOnlyRoundsWithVotes), sortColumn, sortAscending),
@@ -81,7 +90,7 @@ export function Votes() {
   };
 
   const refresh = async () => {
-    await Promise.all([history.reload(), current.reload(), games.reload()]);
+    await Promise.all([history.reload(), current.reload(), pageData.reload()]);
   };
 
   const sortBy = (column: SortColumn) => {
@@ -111,14 +120,15 @@ export function Votes() {
     await current.reload();
   };
 
-  if (user.loading || history.loading || current.loading || games.loading) return <Loading />;
-  if (user.error || history.error || current.error || games.error) return <ErrorMessage message={user.error ?? history.error ?? current.error ?? games.error ?? ""} />;
+  if (user.loading || history.loading || current.loading || pageData.loading) return <Loading />;
+  if (user.error || history.error || current.error || pageData.error) return <ErrorMessage message={user.error ?? history.error ?? current.error ?? pageData.error ?? ""} />;
 
   return (
     <section className="page">
       <header className="page-header"><div><p>Community</p><h1>Votes</h1></div><button type="button" onClick={() => void refresh()}><RefreshCw />Refresh</button></header>
       <CurrentVotesPanel
-        games={games.data ?? []}
+        alternateTitles={alternateTitles}
+        games={games}
         gamesById={gamesById}
         isAdmin={isAdmin}
         newCurrentCount={newCurrentCount}
@@ -137,6 +147,7 @@ export function Votes() {
       />
       <VoteHistoryPanel
         allRounds={history.data ?? []}
+        alternateTitles={alternateTitles}
         ascending={sortAscending}
         filter={filter}
         filteredRounds={filteredHistory}
@@ -152,6 +163,7 @@ export function Votes() {
 }
 
 function CurrentVotesPanel({
+  alternateTitles,
   games,
   gamesById,
   isAdmin,
@@ -169,6 +181,7 @@ function CurrentVotesPanel({
   titleSuggestions,
   votes
 }: Readonly<{
+  alternateTitles: Record<string, AlternateTitle[]>;
   games: GameDto[];
   gamesById: Map<number, GameDto>;
   isAdmin: boolean;
@@ -191,6 +204,7 @@ function CurrentVotesPanel({
       <h2>Current Votes</h2>
       {votes.length ? (
         <CurrentVotesDashboard
+          alternateTitles={alternateTitles}
           games={games}
           gamesById={gamesById}
           isAdmin={isAdmin}
@@ -219,6 +233,7 @@ function CurrentVotesPanel({
 }
 
 function CurrentVotesDashboard({
+  alternateTitles,
   games,
   gamesById,
   isAdmin,
@@ -228,6 +243,7 @@ function CurrentVotesDashboard({
   pieSlices,
   votes
 }: Readonly<{
+  alternateTitles: Record<string, AlternateTitle[]>;
   games: GameDto[];
   gamesById: Map<number, GameDto>;
   isAdmin: boolean;
@@ -241,6 +257,7 @@ function CurrentVotesDashboard({
     <div className="current-votes-dashboard">
       <div className="current-votes-left">
         <CurrentVotesTable
+          alternateTitles={alternateTitles}
           games={games}
           gamesById={gamesById}
           isAdmin={isAdmin}
@@ -256,6 +273,7 @@ function CurrentVotesDashboard({
 }
 
 function CurrentVotesTable({
+  alternateTitles,
   games,
   gamesById,
   isAdmin,
@@ -263,6 +281,7 @@ function CurrentVotesTable({
   onUpdateVoteCount,
   votes
 }: Readonly<{
+  alternateTitles: Record<string, AlternateTitle[]>;
   games: GameDto[];
   gamesById: Map<number, GameDto>;
   isAdmin: boolean;
@@ -282,28 +301,34 @@ function CurrentVotesTable({
         </tr>
       </thead>
       <tbody>
-        {votes.map((vote) => (
-          <CurrentVoteRow
-            game={findGameForVote(vote, gamesById, games)}
-            isAdmin={isAdmin}
-            key={`${vote.gameNumber}-${vote.gameId}-${vote.gameTitle}`}
-            onRemove={onRemove}
-            onUpdateVoteCount={onUpdateVoteCount}
-            vote={vote}
-          />
-        ))}
+        {votes.map((vote) => {
+          const game = findGameForVote(vote, gamesById, games);
+          return (
+            <CurrentVoteRow
+              alternateTitles={alternateTitlesFor(alternateTitles, game?.id)}
+              game={game}
+              isAdmin={isAdmin}
+              key={`${vote.gameNumber}-${vote.gameId}-${vote.gameTitle}`}
+              onRemove={onRemove}
+              onUpdateVoteCount={onUpdateVoteCount}
+              vote={vote}
+            />
+          );
+        })}
       </tbody>
     </table>
   );
 }
 
 function CurrentVoteRow({
+  alternateTitles,
   game,
   isAdmin,
   onRemove,
   onUpdateVoteCount,
   vote
 }: Readonly<{
+  alternateTitles: AlternateTitle[];
   game: GameDto | undefined;
   isAdmin: boolean;
   onRemove: (vote: CurrentVoteDto) => void;
@@ -313,7 +338,7 @@ function CurrentVoteRow({
   return (
     <tr>
       <td className="cover-cell"><CoverImage src={game?.imageUrl} alt={`${vote.gameTitle} cover`} /></td>
-      <td className="game-title">{vote.gameTitle}</td>
+      <td className="game-title"><AlternateTitleHint title={vote.gameTitle} alternateTitles={alternateTitles} /></td>
       <td>{vote.gameNumber}</td>
       <td>
         {isAdmin ? <VoteCountInput vote={vote} onUpdateVoteCount={onUpdateVoteCount} /> : vote.voteCount}
@@ -426,6 +451,7 @@ function TitleSuggestions({ suggestions, onSelect }: Readonly<{ suggestions: str
 
 function VoteHistoryPanel({
   allRounds,
+  alternateTitles,
   ascending,
   filter,
   filteredRounds,
@@ -436,6 +462,7 @@ function VoteHistoryPanel({
   sortColumn
 }: Readonly<{
   allRounds: VoteRoundDto[];
+  alternateTitles: Record<string, AlternateTitle[]>;
   ascending: boolean;
   filter: string;
   filteredRounds: VoteRoundDto[];
@@ -457,7 +484,7 @@ function VoteHistoryPanel({
         totalCount={allRounds.length}
       />
       {filteredRounds.length ? (
-        <VoteHistoryTable ascending={ascending} rounds={filteredRounds} onSort={onSort} sortColumn={sortColumn} />
+        <VoteHistoryTable alternateTitles={alternateTitles} ascending={ascending} rounds={filteredRounds} onSort={onSort} sortColumn={sortColumn} />
       ) : <Empty>No vote history yet.</Empty>}
     </section>
   );
@@ -494,11 +521,13 @@ function VoteHistoryToolbar({
 }
 
 function VoteHistoryTable({
+  alternateTitles,
   ascending,
   onSort,
   rounds,
   sortColumn
 }: Readonly<{
+  alternateTitles: Record<string, AlternateTitle[]>;
   ascending: boolean;
   onSort: (column: SortColumn) => void;
   rounds: VoteRoundDto[];
@@ -519,21 +548,21 @@ function VoteHistoryTable({
         </tr>
       </thead>
       <tbody>
-        {rounds.map((round) => <VoteHistoryRow key={round.voteRound} round={round} />)}
+        {rounds.map((round) => <VoteHistoryRow alternateTitles={alternateTitles} key={round.voteRound} round={round} />)}
       </tbody>
     </table>
   );
 }
 
-function VoteHistoryRow({ round }: Readonly<{ round: VoteRoundDto }>) {
+function VoteHistoryRow({ alternateTitles, round }: Readonly<{ alternateTitles: Record<string, AlternateTitle[]>; round: VoteRoundDto }>) {
   return (
     <tr>
       <td>{round.voteRound}</td>
-      <td className="game-title">{round.topGameTitle}{isTopTied(round) ? <span className="muted"> (Tied)</span> : null}</td>
+      <td className="game-title"><AlternateTitleHint title={round.topGameTitle} alternateTitles={alternateTitlesFor(alternateTitles, round.topGameId)} />{isTopTied(round) ? <span className="muted"> (Tied)</span> : null}</td>
       <td>{round.topVotes}</td>
-      <td className="game-title">{round.secondGameTitle}{isSecondTied(round) ? <span className="muted"> (Tied)</span> : null}</td>
+      <td className="game-title"><AlternateTitleHint title={round.secondGameTitle} alternateTitles={alternateTitlesFor(alternateTitles, round.secondGameId)} />{isSecondTied(round) ? <span className="muted"> (Tied)</span> : null}</td>
       <td>{round.secondVotes}</td>
-      <td className="game-title">{round.lastGameTitle}{isLastTied(round) ? <span className="muted"> (Tied)</span> : null}</td>
+      <td className="game-title"><AlternateTitleHint title={round.lastGameTitle} alternateTitles={alternateTitlesFor(alternateTitles, round.lastGameId)} />{isLastTied(round) ? <span className="muted"> (Tied)</span> : null}</td>
       <td>{round.lastVotes}</td>
       <td>{round.notes?.trim() ? round.notes : "-"}</td>
     </tr>
@@ -590,6 +619,14 @@ function isLastTied(round: VoteRoundDto) {
 function nextAvailableGameNumber(votes: CurrentVoteDto[]) {
   const usedNumbers = new Set(votes.map((vote) => vote.gameNumber));
   return [1, 2, 3].find((number) => !usedNumbers.has(number)) ?? 1;
+}
+
+function alternateTitlesFor(alternateTitles: Record<string, AlternateTitle[]>, gameId: number | null | undefined) {
+  return gameId ? alternateTitles[String(gameId)] ?? EMPTY_ALTERNATE_TITLES : EMPTY_ALTERNATE_TITLES;
+}
+
+function alternateTitleNames(alternateTitles: Record<string, AlternateTitle[]>, gameId: number | null | undefined) {
+  return alternateTitlesFor(alternateTitles, gameId).map((alternateTitle) => alternateTitle.title);
 }
 
 function findGameForVote(vote: CurrentVoteDto, gamesById: Map<number, GameDto>, games: GameDto[]) {

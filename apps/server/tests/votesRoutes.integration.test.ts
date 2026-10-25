@@ -88,6 +88,12 @@ describe("votes API contract parity", () => {
 
     expect(uploaded.statusCode).toBe(200);
     expect(uploaded.json()).toEqual({ inserted: 3, updated: 0 });
+
+    const history = await app.inject({ method: "GET", url: "/api/votes/history" });
+    expect(history.statusCode).toBe(200);
+    expect(history.json()).toEqual([
+      expect.objectContaining({ voteRound: 1, topGameId: 1, topGameTitle: "Game 1", secondGameId: 2, lastGameId: 3 })
+    ]);
   });
 
   it("validates vote upload payload details before writing history", async () => {

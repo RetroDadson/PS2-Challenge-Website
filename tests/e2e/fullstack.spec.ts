@@ -72,7 +72,7 @@ test("public pages load seeded data through Fastify and Postgres", async ({ page
 
   await page.goto("/votes");
   await expect(page.getByRole("heading", { name: "Votes", exact: true })).toBeVisible();
-  await expect(page.getByRole("cell", { name: "Amplitude", exact: true }).first()).toBeVisible();
+  await expect(page.getByLabel("Amplitude. Alternate titles: Amplitude: Special Edition").first()).toBeVisible();
   await expect(page.getByText("Amplitude: 4 (80.0%)")).toBeVisible();
   await expect(page).toHaveScreenshot("votes-seeded.png", { animations: "disabled", fullPage: false, maxDiffPixelRatio: 0.08 });
   await page.setViewportSize({ width: 390, height: 844 });

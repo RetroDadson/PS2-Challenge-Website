@@ -45,11 +45,11 @@ describe("Votes page", () => {
         { gameId: 1, gameTitle: "Game One", voteCount: 10, gameNumber: 1 },
         { gameId: 3, gameTitle: "Game Three", voteCount: 5, gameNumber: 3 }
       ],
-      "GET /api/games": [
+      "GET /api/games/page-data": pageData([
         { id: 1, title: "Game One", imageUrl: "/covers/game-one.jpg", isExcluded: false, isOwned: true },
         { id: 2, title: "Game Two", imageUrl: "/covers/game-two.jpg", isExcluded: false, isOwned: true },
         { id: 3, title: "Game Three", imageUrl: null, isExcluded: false, isOwned: true }
-      ],
+      ]),
       "POST /api/votes/current": { inserted: 1, updated: 0 },
       "POST /api/votes/current/fill-random": { message: "Successfully added 1 random game(s) to current votes", addedGames: [] }
     });
@@ -105,6 +105,76 @@ describe("Votes page", () => {
     );
   });
 
+  it("shows and searches alternate titles in current votes, vote history, and the title autocomplete", async () => {
+    mockFetch({
+      "GET /api/auth/user": { isAuthenticated: true, username: "AdminUser", role: "Admin" },
+      "GET /api/votes/history": [
+        {
+          voteRound: 2,
+          topGameId: 2,
+          topGameTitle: "Game Two",
+          topVotes: 8,
+          topPosition: 1,
+          secondGameId: 3,
+          secondGameTitle: "Game Three",
+          secondVotes: 4,
+          secondPosition: 2,
+          lastGameId: null,
+          lastGameTitle: "",
+          lastVotes: 0,
+          notes: ""
+        },
+        {
+          voteRound: 1,
+          topGameId: 3,
+          topGameTitle: "Game Three",
+          topVotes: 6,
+          topPosition: 1,
+          secondGameId: 1,
+          secondGameTitle: "Game One",
+          secondVotes: 2,
+          secondPosition: 2,
+          lastGameTitle: "",
+          lastVotes: 0,
+          notes: ""
+        }
+      ],
+      "GET /api/votes/current": [{ gameId: 1, gameTitle: "Game One", voteCount: 3, gameNumber: 1 }],
+      "GET /api/games/page-data": pageData(
+        [
+          { id: 1, title: "Game One", imageUrl: null, isExcluded: false, isOwned: true },
+          { id: 2, title: "Game Two", imageUrl: null, isExcluded: false, isOwned: true },
+          { id: 3, title: "Game Three", imageUrl: null, isExcluded: false, isOwned: true }
+        ],
+        {
+          1: [{ alternateTitleId: 11, gameId: 1, title: "Primero", notes: null }],
+          2: [
+            { alternateTitleId: 21, gameId: 2, title: "Segundo", notes: null },
+            { alternateTitleId: 22, gameId: 2, title: "Game 2: Remix", notes: "PAL" }
+          ]
+        }
+      )
+    });
+
+    render(<Votes />);
+
+    expect(await screen.findAllByLabelText("Game One. Alternate titles: Primero")).toHaveLength(2);
+    const historyHint = screen.getByLabelText("Game Two. Alternate titles: Segundo, Game 2: Remix");
+    expect(historyHint).toHaveClass("alternate-title-hint");
+    expect(historyHint).toHaveAttribute("title", "Segundo\nGame 2: Remix");
+    expect(screen.getAllByText("Game Three", { selector: ".game-title" }).length).toBe(2);
+
+    fireEvent.change(screen.getByPlaceholderText("Search by round or game title..."), { target: { value: "segundo" } });
+    expect(screen.getByText("Showing 1 of 2 rounds")).toBeInTheDocument();
+    fireEvent.change(screen.getByPlaceholderText("Search by round or game title..."), { target: { value: "primero" } });
+    expect(screen.getByText("Showing 1 of 2 rounds")).toBeInTheDocument();
+    expect(screen.queryByText("Game Two")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText("Game title"), { target: { value: "remix" } });
+    fireEvent.click(await screen.findByRole("button", { name: "Game Two" }));
+    expect(screen.getByPlaceholderText("Game title")).toHaveValue("Game Two");
+  });
+
   it("archives tied current votes through the modal with notes and manual positions", async () => {
     const calls = mockFetch({
       "GET /api/auth/user": { isAuthenticated: true, username: "AdminUser", role: "Admin" },
@@ -114,7 +184,7 @@ describe("Votes page", () => {
         { gameId: 2, gameTitle: "Game Two", voteCount: 10, gameNumber: 2 },
         { gameId: 3, gameTitle: "Game Three", voteCount: 1, gameNumber: 3 }
       ],
-      "GET /api/games": [],
+      "GET /api/games/page-data": pageData([]),
       "POST /api/votes/archive": { message: "Current votes archived successfully", round: 1, archivedCount: 3 }
     });
 
@@ -175,11 +245,11 @@ describe("Votes page", () => {
         if (method === "GET" && path === "/api/votes/current") {
           return jsonResponse(currentVotes);
         }
-        if (method === "GET" && path === "/api/games") {
-          return jsonResponse([
+        if (method === "GET" && path === "/api/games/page-data") {
+          return jsonResponse(pageData([
             { id: 1, title: "Game One", imageUrl: "/covers/game-one.jpg", isExcluded: false, isOwned: true },
             { id: 3, title: "Game Three", imageUrl: null, isExcluded: false, isOwned: true }
-          ]);
+          ]));
         }
         if (method === "PUT" && path === "/api/votes/current/by-game-number") {
           const update = body as { gameNumber: number; voteCount: number };
@@ -245,6 +315,10 @@ function mockFetch(routes: Record<string, unknown>) {
     })
   );
   return calls;
+}
+
+function pageData(games: unknown[], alternateTitles: Record<string, unknown[]> = {}) {
+  return { games, ownedTypes: {}, exclusionReasons: {}, completionStatus: {}, alternateTitles };
 }
 
 function jsonResponse(body: unknown, status = 200) {

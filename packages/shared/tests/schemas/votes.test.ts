@@ -44,17 +44,20 @@ describe("vote schemas", () => {
     expect(
       voteRoundSchema.parse({
         voteRound: 3,
+        topGameId: 4,
         topGameTitle: "Winner",
         topVotes: 10,
         topPosition: 1,
+        secondGameId: 5,
         secondGameTitle: "Runner Up",
         secondVotes: 7,
         secondPosition: 2,
+        lastGameId: null,
         lastGameTitle: "Last",
         lastVotes: 1,
         lastPosition: null,
         notes: null
       })
-    ).toMatchObject({ voteRound: 3, topGameTitle: "Winner", lastPosition: null });
+    ).toMatchObject({ voteRound: 3, topGameId: 4, secondGameId: 5, lastGameId: null, topGameTitle: "Winner", lastPosition: null });
   });
 });
