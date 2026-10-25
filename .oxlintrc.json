@@ -1,0 +1,36 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript"],
+  "categories": {
+    "correctness": "error"
+  },
+  "env": {
+    "browser": true,
+    "node": true
+  },
+  "ignorePatterns": [
+    "**/dist/**",
+    "**/coverage/**",
+    "**/node_modules/**",
+    "src/**/bin/**",
+    "src/**/obj/**"
+  ],
+  "rules": {
+    "no-array-constructor": "error",
+    "no-case-declarations": "error",
+    "no-empty": "error",
+    "no-fallthrough": "error",
+    "no-prototype-builtins": "error",
+    "no-regex-spaces": "error",
+    "no-unexpected-multiline": "error",
+    "no-unused-vars": ["error", { "argsIgnorePattern": "^_" }],
+    "preserve-caught-error": "error",
+    "typescript/ban-ts-comment": "error",
+    "typescript/no-empty-object-type": "error",
+    "typescript/no-explicit-any": "off",
+    "typescript/no-namespace": "error",
+    "typescript/no-require-imports": "error",
+    "typescript/no-unnecessary-type-constraint": "error",
+    "typescript/no-unsafe-function-type": "error"
+  }
+}
