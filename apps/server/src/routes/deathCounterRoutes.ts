@@ -1,4 +1,4 @@
-import { setDeathsRequestSchema, type DeathCounterDto } from "@ps2-challenge/shared";
+import { idParamSchema, setDeathsRequestSchema, type DeathCounterDto } from "@ps2-challenge/shared";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { RequireAdmin } from "../auth/guards.js";
 import { gameRouteSchemas } from "../openapi/schemas.js";
@@ -16,9 +16,17 @@ export function registerDeathCounterRoutes(
   requireAdminOrStop: RequireAdmin,
   realtimeHub: RealtimeHub
 ) {
+  app.get("/api/games/progress/deaths", { schema: gameRouteSchemas.listDeaths }, () => gameService.allDeathCounters());
+
   app.get(currentDeathsUrl, { schema: gameRouteSchemas.currentDeaths }, async (_request, reply) => {
     const counter = await gameService.currentDeathCounter();
     return counter ?? reply.status(404).send(noCurrentGame);
+  });
+
+  app.get("/api/games/progress/:id/deaths", { schema: gameRouteSchemas.progressDeaths }, async (request, reply) => {
+    const { id } = idParamSchema.parse(request.params);
+    const counter = await gameService.deathCounter(id);
+    return counter ?? reply.status(404).send({ message: `Progress with ID ${id} not found` });
   });
 
   app.post(`${currentDeathsUrl}/increment`, { schema: gameRouteSchemas.incrementCurrentDeaths }, async (request, reply) => {

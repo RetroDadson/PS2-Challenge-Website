@@ -155,6 +155,16 @@ export class GameService {
     return row ? mapDeathCounter(row) : null;
   }
 
+  async allDeathCounters(): Promise<DeathCounterDto[]> {
+    const rows = await this.progressQuery().orderBy("p.progress_id").execute();
+    return rows.map(mapDeathCounter);
+  }
+
+  async deathCounter(progressId: number): Promise<DeathCounterDto | null> {
+    const row = await this.progressQuery().where("p.progress_id", "=", progressId).executeTakeFirst();
+    return row ? mapDeathCounter(row) : null;
+  }
+
   adjustCurrentDeaths(delta: number): Promise<DeathCounterDto | null> {
     return this.updateCurrentDeaths(Math.max(delta, 0), sql<number>`GREATEST(progress_death_counters.deaths + ${delta}, 0)`);
   }

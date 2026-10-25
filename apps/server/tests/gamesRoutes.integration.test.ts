@@ -466,6 +466,42 @@ describe("games API contract parity", () => {
     ]);
   });
 
+  it("reads death counters for every progress entry and for a single existing game", async () => {
+    const empty = await app.inject({ method: "GET", url: "/api/games/progress/deaths" });
+    expect(empty.statusCode).toBe(200);
+    expect(empty.json()).toEqual([]);
+
+    await seedGame(db.pool, 1, "Finished Game");
+    await seedGame(db.pool, 2, "Uncounted Game");
+    for (const payload of [
+      { title: "Finished Game", dateStarted: "2024-01-01", dateFinished: "2024-01-09", platform: "Physical", deaths: 23, deathLabel: "Fails" },
+      { title: "Uncounted Game", dateStarted: "2024-02-01", platform: "Physical" }
+    ]) {
+      expect((await app.inject({ method: "POST", url: "/api/games/progress", headers: adminHeaders(), payload })).statusCode).toBe(200);
+    }
+
+    const all = await app.inject({ method: "GET", url: "/api/games/progress/deaths" });
+    expect(all.statusCode).toBe(200);
+    expect(all.json()).toEqual([
+      { progressId: 1, gameId: 1, gameTitle: "Finished Game", imageUrl: null, deaths: 23, deathLabel: "Fails" },
+      { progressId: 2, gameId: 2, gameTitle: "Uncounted Game", imageUrl: null, deaths: 0, deathLabel: "Deaths" }
+    ]);
+
+    const single = await app.inject({ method: "GET", url: "/api/games/progress/1/deaths" });
+    expect(single.statusCode).toBe(200);
+    expect(single.json()).toEqual({ progressId: 1, gameId: 1, gameTitle: "Finished Game", imageUrl: null, deaths: 23, deathLabel: "Fails" });
+
+    const current = await app.inject({ method: "GET", url: "/api/games/progress/current/deaths" });
+    expect(current.json()).toEqual(expect.objectContaining({ progressId: 2, deaths: 0 }));
+
+    const missing = await app.inject({ method: "GET", url: "/api/games/progress/999/deaths" });
+    expect(missing.statusCode).toBe(404);
+    expect(missing.json()).toEqual({ message: "Progress with ID 999 not found" });
+
+    const invalid = await app.inject({ method: "GET", url: "/api/games/progress/abc/deaths" });
+    expect(invalid.statusCode).toBe(400);
+  });
+
   it("returns C# public read shapes for missing games and ownership types", async () => {
     const missing = await app.inject({ method: "GET", url: "/api/games/999" });
     expect(missing.statusCode).toBe(404);
