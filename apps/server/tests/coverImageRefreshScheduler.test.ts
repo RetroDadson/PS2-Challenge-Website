@@ -113,9 +113,11 @@ describe("cover image refresh scheduler", () => {
       syncRecentStreams: vi.fn(async () => ({ channelLogin: "retrodadson", checked: 3, upserted: 2, skipped: 1 }))
     };
     const logger = { info: vi.fn(), error: vi.fn() };
+    const realtimeHub = { broadcastGamesUpdated: vi.fn() };
 
     const scheduler = scheduleTwitchStreamStatsSync({
       twitchStats,
+      realtimeHub,
       logger,
       initialDelayMs: 1_000,
       intervalMs: 5_000
@@ -132,12 +134,31 @@ describe("cover image refresh scheduler", () => {
       { channelLogin: "retrodadson", checked: 3, upserted: 2, skipped: 1 },
       "Twitch stream stats sync completed"
     );
+    expect(realtimeHub.broadcastGamesUpdated).toHaveBeenCalledTimes(1);
+    expect(logger.info).toHaveBeenCalledWith({ upserted: 2 }, "Sent GamesUpdated notification to connected clients");
 
     await vi.advanceTimersByTimeAsync(5_000);
     expect(twitchStats.syncRecentStreams).toHaveBeenCalledTimes(2);
+    expect(realtimeHub.broadcastGamesUpdated).toHaveBeenCalledTimes(2);
 
     scheduler.stop();
     expect(logger.info).toHaveBeenCalledWith("Twitch stream stats sync service is stopping");
+  });
+
+  it("does not notify clients when a Twitch stream stats sync stores nothing new", async () => {
+    vi.useFakeTimers();
+    const twitchStats = {
+      syncRecentStreams: vi.fn(async () => ({ channelLogin: "retrodadson", checked: 3, upserted: 0, skipped: 3 }))
+    };
+    const realtimeHub = { broadcastGamesUpdated: vi.fn() };
+
+    const scheduler = scheduleTwitchStreamStatsSync({ twitchStats, realtimeHub, initialDelayMs: 1_000, intervalMs: 5_000 });
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(twitchStats.syncRecentStreams).toHaveBeenCalledTimes(1);
+    expect(realtimeHub.broadcastGamesUpdated).not.toHaveBeenCalled();
+
+    scheduler.stop();
   });
 
   it("refreshes challenge runner profile pictures on a repeating schedule after a staggered startup delay", async () => {
