@@ -25,7 +25,7 @@ import { DEFAULT_DEATH_LABEL, type GameDto, type GameProgressDto } from "@ps2-ch
 import type { TwitchStreamStatsDto } from "../api.js";
 import { api } from "../api.js";
 import { Empty, ErrorMessage, Loading } from "../components/Status.js";
-import { useAsync } from "../hooks.js";
+import { useAsync, useRealtime } from "../hooks.js";
 import { angleToPoint, PIE_CHART_COLORS, sectorPath } from "../pieChart.js";
 
 type YearlyStatistic = {
@@ -72,6 +72,11 @@ export function Statistics() {
   const games = useAsync(() => api.games(), []);
   const ownedTypes = useAsync(() => api.ownedTypes(), []);
   const twitchStreamStats = useAsync(() => api.twitchStreamStats(), []);
+  useRealtime("/gamesHub", () => {
+    void progress.reload();
+    void games.reload();
+    void ownedTypes.reload();
+  });
 
   const stats = useMemo(
     () => calculateStatistics(games.data ?? [], progress.data ?? [], ownedTypes.data ?? {}, twitchStreamStats.data),

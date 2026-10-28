@@ -1,9 +1,37 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Statistics } from "../../src/pages/Statistics.js";
+
+class MockWebSocket {
+  static readonly OPEN = 1;
+  static readonly instances: MockWebSocket[] = [];
+  readonly listeners = new Map<string, Array<(event: { data?: string }) => void>>();
+  readyState = MockWebSocket.OPEN;
+
+  constructor(readonly url: string) {
+    MockWebSocket.instances.push(this);
+  }
+
+  addEventListener(eventName: string, listener: (event: { data?: string }) => void) {
+    this.listeners.set(eventName, [...(this.listeners.get(eventName) ?? []), listener]);
+  }
+
+  send = vi.fn();
+  close = vi.fn();
+
+  emitMessage(data: string) {
+    this.listeners.get("message")?.forEach((listener) => listener({ data }));
+  }
+}
+
+beforeEach(() => {
+  MockWebSocket.instances.length = 0;
+  vi.stubGlobal("WebSocket", MockWebSocket);
+});
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe("Statistics page", () => {
@@ -189,6 +217,34 @@ describe("Statistics page", () => {
 
     expect(await screen.findByRole("heading", { name: "Challenge Status" })).toBeInTheDocument();
     await waitFor(() => expect(statValue("Estimated Streaming Time Remaining")).toBe("2 years 1 week"));
+  });
+
+  it("refreshes death statistics live when the games hub reports an update", async () => {
+    const progressEntry = { progressId: 1, gameId: 1, gameTitle: "Live Game", dateStarted: "2025-01-01", dateFinished: null, platform: "Physical", deaths: 5, deathLabel: "Crashes" };
+    const routes: Record<string, unknown> = {
+      "GET /api/games": [{ id: 1, title: "Live Game", isExcluded: false, isOwned: true }],
+      "GET /api/games/progress": [progressEntry],
+      "GET /api/games/owned-types": { 1: "CIB" },
+      "GET /api/twitch/stream-stats": null
+    };
+    mockFetch(routes);
+
+    render(<Statistics />);
+
+    expect(await screen.findByRole("heading", { name: "Death Counter" })).toBeInTheDocument();
+    expect(statValue("Total Deaths / Fails")).toBe("5");
+    expect(screen.getByRole("figure", { name: "Top 1 Game by Deaths / Fails" })).toHaveTextContent("5 Crashes");
+    const gamesHub = MockWebSocket.instances.find((socket) => socket.url.endsWith("/gamesHub"));
+    expect(gamesHub).toBeDefined();
+
+    routes["GET /api/games/progress"] = [{ ...progressEntry, deaths: 6 }];
+    await act(async () => {
+      gamesHub!.emitMessage(JSON.stringify({ type: "GamesUpdated" }));
+    });
+
+    await waitFor(() => expect(statValue("Total Deaths / Fails")).toBe("6"));
+    expect(screen.getByRole("figure", { name: "Top 1 Game by Deaths / Fails" })).toHaveTextContent("6 Crashes");
+    expect(screen.getByRole("heading", { name: "Challenge Status" })).toBeInTheDocument();
   });
 });
 

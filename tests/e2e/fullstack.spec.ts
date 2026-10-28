@@ -261,10 +261,22 @@ test("death counter API drives the live overlay for the current game", async ({ 
     const count = page.getByTestId("death-overlay-count");
     await expect(count).toHaveText(String(before.deaths));
 
+    const totalBefore = (await (await anonymous.get("/api/games/progress/deaths")).json() as Array<{ deaths: number }>).reduce((sum, entry) => sum + entry.deaths, 0);
+    const statistics = await page.context().newPage();
+    const statisticsFailures = watchForUnexpectedBrowserErrors(statistics);
+    await statistics.goto("/statistics");
+    const deathSection = statistics.locator("section[aria-labelledby='death-statistics-heading']");
+    const totalDeaths = deathSection.locator("article.stat").filter({ hasText: "Total Deaths / Fails" }).getByTestId("stat-value");
+    await expect(totalDeaths).toHaveText(String(totalBefore));
+
     expect((await streamDeck.post("/api/games/progress/current/deaths/increment")).ok()).toBe(true);
     const incremented = await streamDeck.post("/api/games/progress/current/deaths/increment");
     expect(await incremented.json()).toEqual(expect.objectContaining({ gameTitle: before.gameTitle, deaths: before.deaths + 2 }));
     await expect(count).toHaveText(String(before.deaths + 2), { timeout: 5_000 });
+    await expect(totalDeaths).toHaveText(String(totalBefore + 2), { timeout: 5_000 });
+    await expect(deathSection.getByRole("listitem").filter({ hasText: before.gameTitle })).toContainText(`${before.deaths + 2} ${before.deathLabel}`);
+    expectNoUnexpectedBrowserErrors(statisticsFailures);
+    await statistics.close();
 
     await streamDeck.post("/api/games/progress/current/deaths/decrement");
     await expect(count).toHaveText(String(before.deaths + 1), { timeout: 5_000 });
