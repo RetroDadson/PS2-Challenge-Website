@@ -76,6 +76,7 @@ export function Statistics() {
     void progress.reload();
     void games.reload();
     void ownedTypes.reload();
+    void twitchStreamStats.reload();
   });
 
   const stats = useMemo(

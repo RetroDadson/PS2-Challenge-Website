@@ -76,6 +76,7 @@ type HowLongToBeatRefreshSchedulerOptions = {
 
 type TwitchStreamStatsSchedulerOptions = {
   twitchStats: TwitchStreamStatsJob;
+  realtimeHub: Pick<RealtimeHub, "broadcastGamesUpdated">;
   logger?: SchedulerLogger;
   initialDelayMs?: number;
   intervalMs?: number;
@@ -204,7 +205,7 @@ export async function buildApp(config: AppConfig, dependencies: AppDependencies 
   await registerHealthRoutes(app, () => dbClient.db.selectFrom("platform_types").select("platform").limit(1).executeTakeFirst());
   await registerAuthRoutes(app, userRepository, config);
   await registerUserRoutes(app, userRepository, config);
-  await registerAdminRoutes(app, userRepository, config, twitchStatsService);
+  await registerAdminRoutes(app, userRepository, config, twitchStatsService, realtimeHub);
   await registerChallengeRunnerRoutes(
     app,
     challengeRunnerRepository,
@@ -268,7 +269,7 @@ export async function startApp(config: AppConfig): Promise<FastifyInstance> {
   );
   const coverRefreshScheduler = scheduleCoverImageRefresh({ coverRefresh, realtimeHub, logger: app.log });
   const howLongToBeatRefreshScheduler = scheduleHowLongToBeatRefresh({ howLongToBeatRefresh, realtimeHub, logger: app.log });
-  const twitchStatsScheduler = scheduleTwitchStreamStatsSync({ twitchStats, logger: app.log });
+  const twitchStatsScheduler = scheduleTwitchStreamStatsSync({ twitchStats, realtimeHub, logger: app.log });
   const challengeRunnerLogoRefreshScheduler = scheduleChallengeRunnerLogoRefresh({ challengeRunnerLogoRefresh, logger: app.log });
   app.addHook("onClose", async () => {
     coverRefreshScheduler.stop();
@@ -362,6 +363,7 @@ export function scheduleCoverImageRefresh({
 
 export function scheduleTwitchStreamStatsSync({
   twitchStats,
+  realtimeHub,
   logger,
   initialDelayMs = 2 * 60 * 1000,
   intervalMs = 6 * 60 * 60 * 1000
@@ -384,6 +386,10 @@ export function scheduleTwitchStreamStatsSync({
         },
         "Twitch stream stats sync completed"
       );
+      if (result.upserted > 0) {
+        realtimeHub.broadcastGamesUpdated();
+        logger?.info({ upserted: result.upserted }, "Sent GamesUpdated notification to connected clients");
+      }
     },
     onError: (error) => {
       logger?.error(error, "Failed to sync Twitch stream stats");

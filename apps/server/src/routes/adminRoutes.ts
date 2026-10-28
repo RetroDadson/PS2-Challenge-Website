@@ -3,6 +3,7 @@ import type { FastifyInstance } from "fastify";
 import type { AppConfig } from "../config.js";
 import { createRequireAdmin } from "../auth/guards.js";
 import { adminRouteSchemas, registerOpenApiSchemas } from "../openapi/schemas.js";
+import type { RealtimeHub } from "../realtime/hub.js";
 import type { UserRepository } from "../repositories/userRepository.js";
 import type { TwitchStreamSyncResult } from "../services/twitchStreamStatsService.js";
 import { auditError, auditInfo, auditWarn } from "../utils/audit.js";
@@ -15,7 +16,8 @@ export async function registerAdminRoutes(
   app: FastifyInstance,
   userRepository: UserRepository,
   config: AppConfig,
-  twitchStats?: TwitchStreamSyncProvider
+  twitchStats?: TwitchStreamSyncProvider,
+  realtimeHub?: Pick<RealtimeHub, "broadcastGamesUpdated">
 ) {
   registerOpenApiSchemas(app);
   const requireAdminOrStop = createRequireAdmin(userRepository, config);
@@ -55,6 +57,9 @@ export async function registerAdminRoutes(
         if (!user) return;
         auditInfo(request.log, user, `AUDIT: Admin ${user.username} started Twitch stream statistics sync`);
         const result = await twitchStats.syncRecentStreams();
+        if (result.upserted > 0) {
+          realtimeHub?.broadcastGamesUpdated();
+        }
         auditInfo(request.log, user, `AUDIT: Admin ${user.username} completed Twitch stream statistics sync`, result);
         return { message: "Twitch stream statistics update completed", ...result };
       } catch (error) {

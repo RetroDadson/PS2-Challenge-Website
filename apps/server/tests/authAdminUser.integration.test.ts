@@ -1,9 +1,10 @@
 import { Buffer } from "node:buffer";
 import type { FastifyInstance } from "fastify";
 import type pg from "pg";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { authCookieName, createSessionCookie } from "../src/auth/session.js";
 import { createDbClient } from "../src/db/client.js";
+import { RealtimeHub } from "../src/realtime/hub.js";
 import { hashApiKey } from "../src/repositories/userRepository.js";
 import { buildApp } from "../src/server.js";
 import { ChallengeRunnerLogoLookupError } from "../src/services/challengeRunnerLogoService.js";
@@ -18,6 +19,7 @@ describe("auth, admin, and user API contract parity", () => {
   let app: FastifyInstance;
   let adminUserId: number;
   let normalUserId: number;
+  const realtimeHub = new RealtimeHub();
 
   beforeAll(async () => {
     db = await startIntegrationDatabase();
@@ -33,6 +35,7 @@ describe("auth, admin, and user API contract parity", () => {
       },
       {
         dbClient: createDbClient({ databaseConnectionString: db.connectionString }),
+        realtimeHub,
         challengeRunnerLogoService: {
           resolveLogo: async (input) => {
             if (input.name === "Logo Failure") {
@@ -419,6 +422,7 @@ describe("auth, admin, and user API contract parity", () => {
   });
 
   it("restricts manual Twitch stream statistics updates to admins", async () => {
+    const broadcast = vi.spyOn(realtimeHub, "broadcastGamesUpdated");
     const anonymous = await app.inject({ method: "POST", url: "/api/admin/update-twitch-stream-stats", payload: {} });
     expect(anonymous.statusCode).toBe(401);
 
@@ -429,6 +433,7 @@ describe("auth, admin, and user API contract parity", () => {
       payload: {}
     });
     expect(forbidden.statusCode).toBe(403);
+    expect(broadcast).not.toHaveBeenCalled();
 
     const updated = await app.inject({
       method: "POST",
@@ -444,6 +449,8 @@ describe("auth, admin, and user API contract parity", () => {
       upserted: 2,
       skipped: 1
     });
+    expect(broadcast).toHaveBeenCalledTimes(1);
+    broadcast.mockRestore();
   });
 });
 

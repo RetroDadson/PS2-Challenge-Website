@@ -238,11 +238,21 @@ describe("Statistics page", () => {
     expect(gamesHub).toBeDefined();
 
     routes["GET /api/games/progress"] = [{ ...progressEntry, deaths: 6 }];
+    routes["GET /api/twitch/stream-stats"] = {
+      channelLogin: "retrodadson",
+      rangeStart: "2026-04-08T00:00:00.000Z",
+      rangeEnd: "2026-06-03T00:00:00.000Z",
+      rangeWeeks: 8,
+      totalStreamSeconds: 28_800,
+      averageWeeklyStreamSeconds: 3_600,
+      vodCount: 8
+    };
     await act(async () => {
       gamesHub!.emitMessage(JSON.stringify({ type: "GamesUpdated" }));
     });
 
     await waitFor(() => expect(statValue("Total Deaths / Fails")).toBe("6"));
+    await waitFor(() => expect(statValue("Average Weekly Stream Time")).toBe("1h"));
     expect(screen.getByRole("figure", { name: "Top 1 Game by Deaths / Fails" })).toHaveTextContent("6 Crashes");
     expect(screen.getByRole("heading", { name: "Challenge Status" })).toBeInTheDocument();
   });
