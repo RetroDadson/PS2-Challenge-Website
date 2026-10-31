@@ -104,3 +104,35 @@ test("renders the statistics duration chart", async ({ page }) => {
   const viewportWidth = page.viewportSize()?.width ?? 0;
   expect(pieBox?.width ?? 0).toBeGreaterThan(Math.min(300, viewportWidth * 0.7));
 });
+
+test("scales statistics death bars by count regardless of label length", async ({ page }) => {
+  await page.route("**/api/games", async (route) => {
+    await route.fulfill({
+      json: [
+        { id: 1, title: "Game One", isExcluded: false, isOwned: true },
+        { id: 2, title: "Game Two", isExcluded: false, isOwned: true },
+        { id: 3, title: "Game Three", isExcluded: false, isOwned: true }
+      ]
+    });
+  });
+  await page.route("**/api/games/progress", async (route) => {
+    await route.fulfill({
+      json: [
+        { progressId: 1, gameId: 1, gameTitle: "Game One", dateStarted: "2024-03-01", dateFinished: null, completionTime: null, platform: "Physical", deaths: 100, deathLabel: "Deaths" },
+        { progressId: 2, gameId: 2, gameTitle: "Game Two", dateStarted: "2024-03-01", dateFinished: null, completionTime: null, platform: "Physical", deaths: 50, deathLabel: "failures before first completion" },
+        { progressId: 3, gameId: 3, gameTitle: "Game Three", dateStarted: "2024-03-01", dateFinished: null, completionTime: null, platform: "Physical", deaths: 25, deathLabel: "Deaths" }
+      ]
+    });
+  });
+  await page.route("**/api/games/owned-types", async (route) => {
+    await route.fulfill({ json: { 1: "CIB", 2: "CIB", 3: "CIB" } });
+  });
+
+  await page.goto("/statistics");
+
+  const bars = page.getByRole("figure", { name: "Top 3 Games by Deaths / Fails" }).locator(".deaths-chart-bar");
+  await expect(bars).toHaveCount(3);
+  const [most, middle, least] = await bars.evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().width));
+  expect(middle! / most!).toBeCloseTo(0.5, 1);
+  expect(least! / most!).toBeCloseTo(0.25, 1);
+});

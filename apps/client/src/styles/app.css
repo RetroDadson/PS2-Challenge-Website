@@ -905,10 +905,18 @@ th { color: var(--heading-accent); font-size: .82rem; text-transform: uppercase;
   background: var(--surface-3);
 }
 .deaths-chart-card figcaption { margin-bottom: .75rem; font-weight: 600; }
-.deaths-chart { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
-.deaths-chart li {
+.deaths-chart {
   display: grid;
   grid-template-columns: minmax(8rem, 16rem) minmax(0, 1fr) auto;
+  gap: 2px .75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.deaths-chart li {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
   gap: .75rem;
   align-items: center;
   padding: .3rem 0;
@@ -918,7 +926,7 @@ th { color: var(--heading-accent); font-size: .82rem; text-transform: uppercase;
 .deaths-chart-bar { display: block; min-width: 4px; height: 100%; border-radius: 0 4px 4px 0; background: #e91e63; }
 .deaths-chart-value { font-variant-numeric: tabular-nums; white-space: nowrap; }
 @media (max-width: 640px) {
-  .deaths-chart li { grid-template-columns: minmax(0, 1fr) auto; }
+  .deaths-chart { grid-template-columns: minmax(0, 1fr) auto; }
   .deaths-chart-track { grid-column: 1 / -1; grid-row: 2; }
 }
 .progress-bar-container {
