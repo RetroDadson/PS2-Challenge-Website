@@ -1,6 +1,6 @@
 import type { FastifyBaseLogger } from "fastify";
 
-type HubName = "votes" | "games" | "subPicks";
+type HubName = "votes" | "games" | "subPicks" | "wheel";
 type WebSocketLike = {
   OPEN: number;
   readyState: number;
@@ -15,7 +15,8 @@ export class RealtimeHub {
   private readonly sockets = new Map<HubName, Set<WebSocketLike>>([
     ["votes", new Set()],
     ["games", new Set()],
-    ["subPicks", new Set()]
+    ["subPicks", new Set()],
+    ["wheel", new Set()]
   ]);
   private connectionSequence = 0;
   private logger: RealtimeLogger | undefined;
@@ -57,6 +58,10 @@ export class RealtimeHub {
     this.broadcast("subPicks", "SubPicksUpdated");
   }
 
+  broadcastWheelUpdated(): void {
+    this.broadcast("wheel", "WheelUpdated");
+  }
+
   private broadcast(hub: HubName, eventName: string): void {
     const payload = JSON.stringify({ type: eventName });
     const sockets = this.sockets.get(hub);
@@ -71,7 +76,7 @@ export class RealtimeHub {
   }
 }
 
-const hubNames: Record<HubName, string> = { votes: "VotesHub", games: "GamesHub", subPicks: "SubPicksHub" };
+const hubNames: Record<HubName, string> = { votes: "VotesHub", games: "GamesHub", subPicks: "SubPicksHub", wheel: "WheelHub" };
 
 function hubName(hub: HubName): string {
   return hubNames[hub];

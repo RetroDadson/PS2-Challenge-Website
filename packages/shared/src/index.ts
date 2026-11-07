@@ -4,6 +4,7 @@ export * from "./schemas/games.js";
 export * from "./schemas/eventSub.js";
 export * from "./schemas/eventSubReview.js";
 export * from "./schemas/health.js";
+export * from "./schemas/subDraws.js";
 export * from "./schemas/subPicks.js";
 export * from "./schemas/users.js";
 export * from "./schemas/votes.js";

@@ -318,6 +318,138 @@ const openApiSchemas = [
     }
   },
   {
+    $id: "SubWheelSlice",
+    type: "object",
+    required: ["entryId", "gameId", "gameTitle", "twitchDisplayName"],
+    properties: {
+      entryId: positiveId,
+      gameId: { ...positiveId, nullable: true },
+      gameTitle: { type: "string" },
+      twitchDisplayName: stringNullable
+    }
+  },
+  {
+    $id: "SubDrawOdds",
+    type: "object",
+    required: ["gameId", "gameTitle", "entries", "odds"],
+    properties: {
+      gameId: { ...positiveId, nullable: true },
+      gameTitle: { type: "string" },
+      entries: positiveId,
+      odds: { type: "number", minimum: 0, maximum: 1 }
+    }
+  },
+  {
+    $id: "SubSpinResult",
+    type: "object",
+    required: ["entryId", "gameId", "gameTitle", "twitchDisplayName", "entries", "odds"],
+    properties: {
+      entryId: positiveId,
+      gameId: { ...positiveId, nullable: true },
+      gameTitle: { type: "string" },
+      twitchDisplayName: stringNullable,
+      entries: positiveId,
+      odds: { type: "number", minimum: 0, maximum: 1 }
+    }
+  },
+  {
+    $id: "SubDraw",
+    type: "object",
+    required: ["id", "kind", "gameNumber", "state", "locked", "slices", "odds", "shuffleCount", "spinCount", "spin", "winner", "createdAt", "finishedAt"],
+    properties: {
+      id: positiveId,
+      kind: { type: "string", enum: ["10s", "100s"] },
+      gameNumber: positiveId,
+      state: { type: "string", enum: ["ready", "spinning", "awaiting_decision", "accepted", "cancelled"] },
+      locked: { type: "boolean", description: "True once the wheel has been spun; the entries on it are then fixed until the draw finishes." },
+      slices: arrayOf("SubWheelSlice"),
+      odds: arrayOf("SubDrawOdds"),
+      shuffleCount: count,
+      spinCount: count,
+      spin: {
+        type: "object",
+        nullable: true,
+        description: "The latest spin. The result stays null until the wheel has stopped.",
+        required: ["spinNumber", "startedAt", "durationMs", "revealAt", "sliceCount", "winningSliceIndex", "stopOffset", "decision", "result"],
+        properties: {
+          spinNumber: positiveId,
+          startedAt: dateTime,
+          durationMs: positiveId,
+          revealAt: dateTime,
+          sliceCount: positiveId,
+          winningSliceIndex: count,
+          stopOffset: { type: "number", minimum: 0, maximum: 1 },
+          decision: { type: "string", enum: ["pending", "accepted", "respun", "cancelled"] },
+          result: { ...ref("SubSpinResult"), nullable: true }
+        }
+      },
+      winner: { ...ref("SubSpinResult"), nullable: true },
+      createdAt: dateTime,
+      finishedAt: dateTimeNullable
+    }
+  },
+  {
+    $id: "SubDrawHistory",
+    type: "object",
+    required: ["id", "kind", "gameNumber", "status", "createdAt", "finishedAt", "winner", "odds", "entries", "spins"],
+    properties: {
+      id: positiveId,
+      kind: { type: "string", enum: ["10s", "100s"] },
+      gameNumber: positiveId,
+      status: { type: "string", enum: ["accepted", "cancelled"] },
+      createdAt: dateTime,
+      finishedAt: dateTimeNullable,
+      winner: { ...ref("SubSpinResult"), nullable: true },
+      odds: arrayOf("SubDrawOdds"),
+      entries: {
+        type: "array",
+        items: {
+          type: "object",
+          required: ["entryId", "gameId", "gameTitle", "twitchDisplayName", "outcome", "playedGameNumber", "currentStatus", "currentPlayedGameNumber"],
+          properties: {
+            entryId: positiveId,
+            gameId: { ...positiveId, nullable: true },
+            gameTitle: { type: "string" },
+            twitchDisplayName: stringNullable,
+            outcome: { type: "string", enum: ["won", "moved_to_100s", "lost", "removed_played"], nullable: true },
+            playedGameNumber: { ...positiveId, nullable: true },
+            currentStatus: { type: "string", enum: ["undrawn", "in_100s_pool", "won", "lost", "removed_played", "voided"] },
+            currentPlayedGameNumber: { ...positiveId, nullable: true }
+          }
+        }
+      },
+      spins: {
+        type: "array",
+        items: {
+          type: "object",
+          required: ["spinNumber", "startedAt", "decision", "result"],
+          properties: {
+            spinNumber: positiveId,
+            startedAt: dateTime,
+            decision: { type: "string", enum: ["pending", "accepted", "respun", "cancelled"] },
+            result: ref("SubSpinResult")
+          }
+        }
+      }
+    }
+  },
+  {
+    $id: "SubWheel",
+    type: "object",
+    required: ["draw", "due", "spinDurationSeconds", "serverNow"],
+    properties: {
+      draw: { ...ref("SubDraw"), nullable: true },
+      due: {
+        type: "object",
+        nullable: true,
+        required: ["gameNumber", "kind", "entryCount"],
+        properties: { gameNumber: positiveId, kind: { type: "string", enum: ["10s", "100s"] }, entryCount: positiveId }
+      },
+      spinDurationSeconds: positiveId,
+      serverNow: dateTime
+    }
+  },
+  {
     $id: "MySubPicks",
     type: "object",
     required: ["entries", "stats"],
@@ -470,7 +602,8 @@ const openApiSchemas = [
       review: stringNullable,
       platform: { type: "string", minLength: 1 },
       deaths: { ...count, description: "Omit to keep the existing count" },
-      deathLabel: { type: "string", maxLength: 50, nullable: true, description: "What the counter tracks, e.g. Crashes; defaults to Deaths" }
+      deathLabel: { type: "string", maxLength: 50, nullable: true, description: "What the counter tracks, e.g. Crashes; defaults to Deaths" },
+      overrideSubDraw: { type: "boolean", description: "Start the game even though a sub pick draw is due for this game number. The override is audit-logged." }
     }
   },
   {
@@ -685,7 +818,26 @@ const openApiSchemas = [
     type: "object",
     properties: {
       notes: stringNullable,
-      manualPositions: recordOf({ type: "integer", minimum: 1, maximum: 3 })
+      manualPositions: recordOf({ type: "integer", minimum: 1, maximum: 3 }),
+      overrideSubDraw: { type: "boolean", description: "Start the game even though a sub pick draw is due for this game number. The override is audit-logged." }
+    }
+  },
+  {
+    $id: "SubDrawDueResponse",
+    type: "object",
+    required: ["message", "code", "subDraw"],
+    properties: {
+      message: { type: "string" },
+      code: { type: "string", enum: ["sub_draw_due"] },
+      subDraw: {
+        type: "object",
+        required: ["gameNumber", "kind", "entryCount"],
+        properties: {
+          gameNumber: { type: "integer" },
+          kind: { type: "string", enum: ["10s", "100s"] },
+          entryCount: { type: "integer" }
+        }
+      }
     }
   },
   {
@@ -1162,6 +1314,47 @@ export const subPickRouteSchemas = {
   })
 } as const;
 
+export const subDrawRouteSchemas = {
+  wheel: route({
+    tags: ["Sub Picks"],
+    summary: "Get the sub pick wheel",
+    description: "The open draw (or the last finished one), whether a draw is due, and the server time for syncing the spin animation.",
+    operationId: "getSubPickWheel",
+    response: { 200: ref("SubWheel"), ...serverError }
+  }),
+  history: route({
+    tags: ["Sub Picks"],
+    summary: "List finished sub pick draws",
+    description: "Accepted and cancelled draws, newest first, with every spin and what happened to each entry. Open draws are left out so no result shows early.",
+    operationId: "listSubDrawHistory",
+    response: { 200: arrayOf("SubDrawHistory"), ...serverError }
+  }),
+  open: route({
+    tags: ["Sub Picks Admin"],
+    summary: "Open the sub pick draw that's due",
+    operationId: "openSubDraw",
+    security: adminSecurity,
+    response: { 200: ref("SubDraw"), ...unauthorizedForbidden, ...conflict, ...serverError }
+  }),
+  shuffle: drawAction("Shuffle the wheel", "shuffleSubDraw"),
+  spin: drawAction("Spin the wheel", "spinSubDraw", "Picks the winner on the server. The result is hidden from every endpoint until the wheel stops."),
+  respin: drawAction("Reject the result and get the wheel ready to spin again", "respinSubDraw"),
+  accept: drawAction("Accept the result and start the winning game", "acceptSubDraw"),
+  cancel: drawAction("Cancel the draw without a result", "cancelSubDraw")
+};
+
+function drawAction(summary: string, operationId: string, description?: string) {
+  return route({
+    tags: ["Sub Picks Admin"],
+    summary,
+    ...(description ? { description } : {}),
+    operationId,
+    security: adminSecurity,
+    params: ref("IdParams"),
+    response: { 200: ref("SubDraw"), ...unauthorizedForbidden, ...notFound, ...conflict, ...serverError }
+  });
+}
+
 export const subPickAdminRouteSchemas = {
   settings: route({
     tags: ["Sub Picks Admin"],
@@ -1393,7 +1586,7 @@ export const gameRouteSchemas = {
     operationId: "updateGameProgress",
     security: adminSecurity,
     body: ref("UpdateProgressRequest"),
-    response: { 200: ref("GameProgress"), ...validationBadRequest, ...unauthorizedForbidden, ...notFound }
+    response: { 200: ref("GameProgress"), ...validationBadRequest, ...unauthorizedForbidden, ...notFound, 409: ref("SubDrawDueResponse") }
   }),
   addSerialNumber: route({
     tags: ["Games"],
@@ -1520,7 +1713,7 @@ export const voteRouteSchemas = {
     operationId: "archiveCurrentVotes",
     security: adminSecurity,
     body: ref("ArchiveVotesRequest"),
-    response: { 200: ref("ArchiveVotesResponse"), ...badRequest, ...unauthorizedForbidden }
+    response: { 200: ref("ArchiveVotesResponse"), ...badRequest, ...unauthorizedForbidden, 409: ref("SubDrawDueResponse") }
   }),
   updateByGameNumber: route({
     tags: ["Votes"],

@@ -18,7 +18,8 @@ const expectedMigrationRecords = [
   "007_add_challenge_runners",
   "008_add_progress_death_counter",
   "009_add_sub_pick_entries",
-  "010_add_eventsub_messages"
+  "010_add_eventsub_messages",
+  "011_add_sub_draws"
 ];
 
 describe("database migrations", () => {
@@ -54,7 +55,7 @@ describe("database migrations", () => {
       expect(tables.rows.map((row) => row.table_name)).toContain("game_howlongtobeat_sync_state");
       expect(tables.rows.map((row) => row.table_name)).toContain("challenge_runners");
       expect(tables.rows.map((row) => row.table_name)).toContain("progress_death_counters");
-      expect(tables.rows.map((row) => row.table_name)).toEqual(expect.arrayContaining(["sub_pick_settings", "sub_entry_grants", "sub_entries", "sub_pick_audit", "eventsub_messages", "eventsub_state"]));
+      expect(tables.rows.map((row) => row.table_name)).toEqual(expect.arrayContaining(["sub_pick_settings", "sub_entry_grants", "sub_entries", "sub_pick_audit", "eventsub_messages", "eventsub_state", "sub_draws", "sub_draw_entries", "sub_draw_spins"]));
 
       const subPickSettings = await pool.query("SELECT tier1_entries, tier2_entries, tier3_entries, spin_duration_seconds FROM sub_pick_settings");
       expect(subPickSettings.rows).toEqual([{ tier1_entries: 1, tier2_entries: 2, tier3_entries: 5, spin_duration_seconds: 10 }]);

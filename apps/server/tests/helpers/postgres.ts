@@ -38,6 +38,9 @@ export async function startIntegrationDatabase(): Promise<IntegrationDatabase> {
 async function resetDatabase(pool: pg.Pool): Promise<void> {
   await pool.query(`
     TRUNCATE
+      sub_draw_spins,
+      sub_draw_entries,
+      sub_draws,
       eventsub_messages,
       sub_pick_audit,
       sub_entries,

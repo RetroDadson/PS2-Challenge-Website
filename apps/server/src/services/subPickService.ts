@@ -19,6 +19,8 @@ import {
 import { sql, type Kysely, type Selectable, type Transaction } from "kysely";
 import type { Database } from "../db/kysely.js";
 import { eligibleChallengeGamesQuery } from "./eligibleGames.js";
+import { nextGameNumber } from "./progressNumbers.js";
+import { drawnEntryIds, openDrawEntryIds } from "./subDrawPool.js";
 
 export type SubPickActor = { id: number; username: string };
 
@@ -56,6 +58,7 @@ type EntryRow = {
   created_at: Date;
   game_eligible: boolean;
   game_progress_id: number | null;
+  in_open_draw: boolean;
 };
 
 type PoolEntry = Pick<EntryRow, "game_id" | "game_title" | "image_url">;
@@ -215,11 +218,13 @@ export class SubPickService {
       if (!grant) {
         throw new SubPickError("Grant not found", 404);
       }
+      const entryIds = (await transaction.selectFrom("sub_entries").select("entry_id").where("grant_id", "=", grantId).execute()).map((row) => row.entry_id);
+      await assertNotInOpenDraw(transaction, entryIds, "Some of these entries are in the draw that's running now, so they can't be removed until the draw finishes");
       const drawn = await transaction
         .selectFrom("sub_entries")
         .select((eb) => eb.fn.countAll<string>().as("count"))
         .where("grant_id", "=", grantId)
-        .where("status", "!=", "undrawn")
+        .where((eb) => eb.or([eb("status", "!=", "undrawn"), eb("entry_id", "in", drawnEntryIds(transaction))]))
         .executeTakeFirstOrThrow();
       if (Number(drawn.count) === 0) {
         await transaction.deleteFrom("sub_entry_grants").where("grant_id", "=", grantId).execute();
@@ -252,6 +257,7 @@ export class SubPickService {
       if (entry.status !== "undrawn") {
         throw new SubPickError("This entry has already been in a draw, so its pick is locked", 409);
       }
+      await assertNotInOpenDraw(transaction, [entryId], "This entry is in the draw that's running now, so its pick is locked until the draw finishes");
       if (gameId !== null) {
         const eligible = await eligibleChallengeGamesQuery(transaction).select("g.game_id").where("g.game_id", "=", gameId).executeTakeFirst();
         if (!eligible) {
@@ -283,6 +289,9 @@ export class SubPickService {
         throw new SubPickError("Entry not found", 404);
       }
       if (entry.status === "undrawn") {
+        await assertNotInOpenDraw(transaction, [entryId], "This entry is in the draw that's running now, so it can't be removed until the draw finishes");
+      }
+      if (entry.status === "undrawn" && !(await everDrawn(transaction, [entryId]))) {
         await transaction.deleteFrom("sub_entries").where("entry_id", "=", entryId).execute();
         await transaction
           .updateTable("sub_entry_grants")
@@ -292,7 +301,7 @@ export class SubPickService {
         await writeAudit(transaction, actor, "entry.delete", "entry", entryId, { grantId: entry.grant_id, gameId: entry.game_id, twitchUserId: entry.twitch_user_id });
         return { deleted: true };
       }
-      if (entry.status === "in_100s_pool") {
+      if (entry.status === "undrawn" || entry.status === "in_100s_pool") {
         await transaction.updateTable("sub_entries").set({ status: "voided", updated_at: new Date() }).where("entry_id", "=", entryId).execute();
         await writeAudit(transaction, actor, "entry.void", "entry", entryId, { grantId: entry.grant_id, gameId: entry.game_id, twitchUserId: entry.twitch_user_id });
         return { deleted: false };
@@ -328,12 +337,12 @@ export class SubPickService {
   }
 
   async summary(): Promise<SubPicksSummaryDto> {
-    const [settings, maxProgress, activeEntries] = await Promise.all([
+    const [settings, gameNumber, activeEntries] = await Promise.all([
       this.getSettings(),
-      this.db.selectFrom("progress").select((eb) => eb.fn.max<number | null>("progress_id").as("max_id")).executeTakeFirst(),
+      nextGameNumber(this.db),
       this.entryQuery(this.db).where("e.status", "in", ["undrawn", "in_100s_pool"]).execute()
     ]);
-    const schedule = subDrawSchedule((maxProgress?.max_id ?? 0) + 1);
+    const schedule = subDrawSchedule(gameNumber);
     const tensEntries = activeEntries.filter((entry) => entryPool(entry) === "next_draw");
     const hundredsEntries = activeEntries.filter((entry) => entryPool(entry) === "100s_pool");
     return {
@@ -407,7 +416,12 @@ export class SubPickService {
           AND EXISTS (SELECT 1 FROM game_owned o WHERE o.game_id = e.game_id)
           AND NOT EXISTS (SELECT 1 FROM excluded_games x WHERE x.game_id = e.game_id)
           AND NOT EXISTS (SELECT 1 FROM progress pr WHERE pr.game_id = e.game_id)
-        )`.as("game_eligible")
+        )`.as("game_eligible"),
+        sql<boolean>`EXISTS (
+          SELECT 1 FROM sub_draw_entries de
+          INNER JOIN sub_draws d ON d.draw_id = de.draw_id
+          WHERE de.entry_id = e.entry_id AND d.status IN ('ready', 'spun')
+        )`.as("in_open_draw")
       ]);
   }
 }
@@ -428,6 +442,7 @@ async function removeUndrawnEntries(transaction: Transaction<Database>, grantId:
     .select("entry_id")
     .where("grant_id", "=", grantId)
     .where("status", "=", "undrawn")
+    .where("entry_id", "not in", drawnEntryIds(transaction))
     .orderBy(sql`game_id IS NULL`, "desc")
     .orderBy("entry_id", "desc")
     .limit(count)
@@ -436,6 +451,19 @@ async function removeUndrawnEntries(transaction: Transaction<Database>, grantId:
     throw new SubPickError("Some of these entries have already been in a draw, so the entry count can't go that low", 409);
   }
   await transaction.deleteFrom("sub_entries").where("entry_id", "in", removable.map((row) => row.entry_id)).execute();
+}
+
+async function assertNotInOpenDraw(transaction: Transaction<Database>, entryIds: number[], message: string): Promise<void> {
+  if (entryIds.length === 0) return;
+  const locked = await openDrawEntryIds(transaction).where("de.entry_id", "in", entryIds).executeTakeFirst();
+  if (locked) {
+    throw new SubPickError(message, 409);
+  }
+}
+
+async function everDrawn(transaction: Transaction<Database>, entryIds: number[]): Promise<boolean> {
+  const drawn = await drawnEntryIds(transaction).where("sub_draw_entries.entry_id", "in", entryIds).executeTakeFirst();
+  return drawn !== undefined;
 }
 
 async function writeAudit(
@@ -484,7 +512,7 @@ function toEntryDto(row: EntryRow): SubEntryDto {
     gameTitle: row.game_title,
     status: row.status,
     pool,
-    canChangePick: row.status === "undrawn",
+    canChangePick: row.status === "undrawn" && !row.in_open_draw,
     playedGameNumber: row.played_game_number ?? (row.status === "in_100s_pool" ? row.game_progress_id : null),
     createdAt: row.created_at.toISOString()
   };

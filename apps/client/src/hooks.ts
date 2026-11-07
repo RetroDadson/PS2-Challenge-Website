@@ -92,7 +92,7 @@ export function useWindowRowVirtualizer<TItemElement extends Element>({
   return { virtualRows, paddingTop, paddingBottom, measureElement: virtualizer.measureElement };
 }
 
-export function useRealtime(path: "/gamesHub" | "/votesHub" | "/subPicksHub", onMessage: () => void) {
+export function useRealtime(path: "/gamesHub" | "/votesHub" | "/subPicksHub" | "/wheelHub", onMessage: () => void) {
   const onMessageRef = useRef(onMessage);
   const socketRef = useRef<WebSocket | null>(null);
   const pingIntervalRef = useRef<NodeJS.Timeout | null>(null);

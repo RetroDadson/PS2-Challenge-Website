@@ -5,6 +5,7 @@ import { requireAuthenticated } from "../auth/guards.js";
 import { registerOpenApiSchemas, subPickRouteSchemas } from "../openapi/schemas.js";
 import type { RealtimeHub } from "../realtime/hub.js";
 import type { UserRepository } from "../repositories/userRepository.js";
+import { SubDrawError } from "../services/subDrawService.js";
 import { SubPickError, type SubPickService } from "../services/subPickService.js";
 
 type SubPickReader = Pick<SubPickService, "summary" | "eligibleGames" | "myEntries" | "setPick">;
@@ -52,7 +53,7 @@ export async function handle<T>(request: FastifyRequest, reply: FastifyReply, fa
   try {
     return await action();
   } catch (error) {
-    if (error instanceof SubPickError) {
+    if (error instanceof SubPickError || error instanceof SubDrawError) {
       return reply.status(error.statusCode).send({ message: error.message });
     }
     request.log.error({ err: error }, failureMessage);

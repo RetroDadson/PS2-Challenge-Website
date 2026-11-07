@@ -1,10 +1,11 @@
-import crypto from "node:crypto";
-import type { CurrentVoteDto, UploadRoundDto, VoteRoundDto } from "@ps2-challenge/shared";
+import type { CurrentVoteDto, SubDrawDueDto, UploadRoundDto, VoteRoundDto } from "@ps2-challenge/shared";
 import { parseDateOnly } from "@ps2-challenge/shared";
-import { sql, type Kysely } from "kysely";
+import { sql, type Kysely, type Transaction } from "kysely";
 import type pg from "pg";
 import { createKyselyFromPool, type Database } from "../db/kysely.js";
 import { eligibleChallengeGamesQuery } from "./eligibleGames.js";
+import { shuffle } from "../utils/shuffle.js";
+import { insertProgress, type ProgressInsertOptions } from "./progressNumbers.js";
 
 type CurrentVoteRow = {
   game_id: number;
@@ -130,8 +131,9 @@ export class VoteService {
 
   async archiveCurrentVotes(
     notes?: string | null,
-    manualPositions?: Record<number, number>
-  ): Promise<{ roundNumber: number; archivedCount: number; progressStartedGameTitle: string | null }> {
+    manualPositions?: Record<number, number>,
+    options: ProgressInsertOptions = {}
+  ): Promise<{ roundNumber: number; archivedCount: number; progressStartedGameTitle: string | null; overriddenSubDraw: SubDrawDueDto | null }> {
     return this.db
       .transaction()
       .setIsolationLevel("serializable")
@@ -166,24 +168,30 @@ export class VoteService {
             .execute();
         }
         await transaction.deleteFrom("current_vote").execute();
-        const progressStartedGameTitle = winnerGameId === null ? null : await this.startProgressForWinner(transaction, winnerGameId);
-        return { roundNumber, archivedCount: sorted.length, progressStartedGameTitle };
+        const started = winnerGameId === null ? null : await this.startProgressForWinner(transaction, winnerGameId, options);
+        return {
+          roundNumber,
+          archivedCount: sorted.length,
+          progressStartedGameTitle: started?.title ?? null,
+          overriddenSubDraw: started?.overriddenSubDraw ?? null
+        };
       });
   }
 
-  private async startProgressForWinner(transaction: Kysely<Database>, gameId: number): Promise<string | null> {
+  private async startProgressForWinner(
+    transaction: Transaction<Database>,
+    gameId: number,
+    options: ProgressInsertOptions
+  ): Promise<{ title: string | null; overriddenSubDraw: SubDrawDueDto | null } | null> {
     const existing = await transaction.selectFrom("progress").select("progress_id").where("game_id", "=", gameId).executeTakeFirst();
     if (existing) {
       return null;
     }
     const owned = await transaction.selectFrom("game_owned").select("own_physical_copy").where("game_id", "=", gameId).executeTakeFirst();
     const platform = owned?.own_physical_copy === false ? "Emulated" : "Physical";
-    await transaction
-      .insertInto("progress")
-      .values({ game_id: gameId, date_started: parseDateOnly(new Date()), platform })
-      .execute();
+    const inserted = await insertProgress(transaction, { game_id: gameId, date_started: parseDateOnly(new Date()), platform }, options);
     const game = await transaction.selectFrom("games").select("title").where("game_id", "=", gameId).executeTakeFirst();
-    return game?.title ?? null;
+    return { title: game?.title ?? null, overriddenSubDraw: inserted.overriddenSubDraw };
   }
 
   async getVoteHistory(): Promise<VoteRoundDto[]> {
@@ -362,13 +370,4 @@ function determinePosition(
     return 3;
   }
   return null;
-}
-
-function shuffle<T>(items: T[]): T[] {
-  const shuffled = [...items];
-  for (let index = shuffled.length - 1; index > 0; index--) {
-    const swap = crypto.randomInt(index + 1);
-    [shuffled[index], shuffled[swap]] = [shuffled[swap]!, shuffled[index]!];
-  }
-  return shuffled;
 }
