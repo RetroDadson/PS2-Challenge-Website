@@ -959,6 +959,177 @@ export const challengeRunnerRouteSchemas = {
   })
 } as const;
 
+export const eventSubRouteSchemas = {
+  webhook: route({
+    tags: ["Twitch EventSub"],
+    summary: "Receive Twitch EventSub webhook messages",
+    description:
+      "Called by Twitch. Messages must carry a valid Twitch-Eventsub-Message-Signature for the configured secret and a timestamp within 10 minutes. Verification challenges are echoed back as text/plain.",
+    operationId: "receiveEventSubWebhook",
+    response: {
+      200: { type: "string", description: "The verification challenge" },
+      204: { type: "null", description: "Notification or revocation accepted" },
+      ...badRequest,
+      403: ref("ErrorResponse"),
+      503: ref("ErrorResponse")
+    }
+  })
+} as const;
+
+const eventSubSubscription = {
+  type: "object",
+  required: ["id", "type", "status", "callback", "createdAt", "healthy"],
+  properties: {
+    id: { type: "string" },
+    type: { type: "string" },
+    status: { type: "string" },
+    callback: stringNullable,
+    createdAt: dateTimeNullable,
+    healthy: { type: "boolean", description: "Enabled (or pending verification) and pointing at this site's webhook" }
+  }
+} as const;
+
+const eventSubStatus = {
+  type: "object",
+  required: [
+    "secretConfigured",
+    "secretChanged",
+    "channelLogin",
+    "broadcasterUserId",
+    "callbackUrl",
+    "authorizedAt",
+    "authorizedBy",
+    "revokedAt",
+    "revokedReason",
+    "subscriptions",
+    "missingTypes",
+    "subscriptionsError"
+  ],
+  properties: {
+    secretConfigured: { type: "boolean" },
+    secretChanged: { type: "boolean", description: "True when the Twitch client secret has changed since the subscriptions were created, so they need replacing." },
+    channelLogin: { type: "string" },
+    broadcasterUserId: stringNullable,
+    callbackUrl: { type: "string" },
+    authorizedAt: dateTimeNullable,
+    authorizedBy: stringNullable,
+    revokedAt: dateTimeNullable,
+    revokedReason: stringNullable,
+    subscriptions: { type: "array", items: eventSubSubscription },
+    missingTypes: { type: "array", items: { type: "string" } },
+    subscriptionsError: stringNullable
+  }
+} as const;
+
+const eventSubReviewResult = {
+  type: "object",
+  required: ["messageId", "status", "grantId", "error"],
+  properties: {
+    messageId: { type: "string" },
+    status: { type: "string", enum: ["processed", "ignored", "failed", "needs_review", "resolved", "dismissed"] },
+    grantId: { type: "integer", nullable: true },
+    error: stringNullable
+  }
+} as const;
+
+export const eventSubAdminRouteSchemas = {
+  status: route({
+    tags: ["Twitch EventSub"],
+    summary: "Get the Twitch EventSub connection status",
+    operationId: "getEventSubStatus",
+    security: adminSecurity,
+    response: { 200: eventSubStatus, ...unauthorizedForbidden, ...serverError }
+  }),
+  sync: route({
+    tags: ["Twitch EventSub"],
+    summary: "Create or repair the Twitch EventSub subscriptions",
+    description: "Removes subscriptions that have failed or point at another callback, then creates any that are missing.",
+    operationId: "syncEventSubSubscriptions",
+    security: adminSecurity,
+    response: {
+      200: {
+        type: "object",
+        required: ["created", "removed", "errors", "status"],
+        properties: { created: { type: "array", items: { type: "string" } }, removed: count, errors: { type: "array", items: { type: "string" } }, status: eventSubStatus }
+      },
+      ...badRequest,
+      ...unauthorizedForbidden,
+      502: ref("ErrorResponse"),
+      ...serverError
+    }
+  }),
+  reviewQueue: route({
+    tags: ["Twitch EventSub"],
+    summary: "List EventSub events waiting for review",
+    description: "Anonymous gifts and events that failed to process.",
+    operationId: "listEventSubReviewQueue",
+    security: adminSecurity,
+    response: {
+      200: {
+        type: "array",
+        items: {
+          type: "object",
+          required: ["messageId", "subscriptionType", "status", "reason", "receivedAt", "tier", "total", "twitchDisplayName"],
+          properties: {
+            messageId: { type: "string" },
+            subscriptionType: { type: "string" },
+            status: { type: "string", enum: ["needs_review", "failed"] },
+            reason: stringNullable,
+            receivedAt: dateTime,
+            tier: stringNullable,
+            total: { type: "integer", nullable: true },
+            twitchDisplayName: stringNullable
+          }
+        }
+      },
+      ...unauthorizedForbidden,
+      ...serverError
+    }
+  }),
+  assignReview: route({
+    tags: ["Twitch EventSub"],
+    summary: "Give an anonymous gift's entries to a viewer",
+    operationId: "assignEventSubReview",
+    security: adminSecurity,
+    params: { type: "object", required: ["messageId"], properties: { messageId: { type: "string" } } },
+    body: {
+      type: "object",
+      additionalProperties: false,
+      required: ["twitchUserId", "twitchLogin", "twitchDisplayName"],
+      properties: {
+        twitchUserId: { type: "string", pattern: String.raw`^\d{1,20}$` },
+        twitchLogin: { type: "string", pattern: String.raw`^\w{1,25}$` },
+        twitchDisplayName: { type: "string", minLength: 1, maxLength: 255 }
+      }
+    },
+    response: { 200: eventSubReviewResult, ...badRequest, ...unauthorizedForbidden, ...notFound, ...conflict, ...serverError }
+  }),
+  dismissReview: route({
+    tags: ["Twitch EventSub"],
+    summary: "Dismiss an EventSub event without creating entries",
+    operationId: "dismissEventSubReview",
+    security: adminSecurity,
+    params: { type: "object", required: ["messageId"], properties: { messageId: { type: "string" } } },
+    response: { 200: eventSubReviewResult, ...unauthorizedForbidden, ...notFound, ...conflict, ...serverError }
+  }),
+  retryReview: route({
+    tags: ["Twitch EventSub"],
+    summary: "Process a failed EventSub event again",
+    operationId: "retryEventSubReview",
+    security: adminSecurity,
+    params: { type: "object", required: ["messageId"], properties: { messageId: { type: "string" } } },
+    response: { 200: eventSubReviewResult, ...unauthorizedForbidden, ...notFound, ...conflict, ...serverError }
+  }),
+  authorize: route({
+    tags: ["Twitch EventSub"],
+    summary: "Start authorising subscription access for the channel",
+    description: "Redirects an admin to Twitch to grant channel:read:subscriptions. Complete it while signed in to Twitch as the channel account.",
+    operationId: "authorizeEventSub",
+    security: adminSecurity,
+    response: { 302: { type: "null", description: "Redirect to Twitch" }, ...unauthorizedForbidden, ...notFound }
+  })
+} as const;
+
 export const subPickRouteSchemas = {
   summary: route({
     tags: ["Sub Picks"],

@@ -2062,3 +2062,13 @@ body:has(.sub-picks-overlay-frame) { background: transparent; }
 .sub-overlay-builder-url { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
 .sub-overlay-builder-url input { flex: 1 1 22rem; min-width: 0; }
 .sub-overlay-field { display: grid; gap: .35rem; }
+.sub-twitch-alert { display: flex; gap: .5rem; align-items: center; }
+.sub-twitch-details { display: grid; gap: .5rem; margin: 1rem 0; }
+.sub-twitch-details div { display: grid; grid-template-columns: minmax(6rem, 9rem) minmax(0, 1fr); gap: .75rem; }
+.sub-twitch-details dt { color: var(--muted); font-weight: 700; }
+.sub-twitch-details dd { margin: 0; overflow-wrap: anywhere; }
+.sub-twitch-steps { display: grid; gap: .75rem; margin: 0 0 1rem; padding-left: 1.4rem; }
+.sub-twitch-steps li { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; }
+.sub-review-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-left: auto; }
+.sub-review-assign { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+.sub-review-assign input { flex: 1 1 14rem; max-width: 20rem; }

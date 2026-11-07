@@ -24,6 +24,8 @@ import { registerAuthRoutes } from "./routes/authRoutes.js";
 import { registerChallengeRunnerRoutes } from "./routes/challengeRunnerRoutes.js";
 import { registerGamesRoutes } from "./routes/gamesRoutes.js";
 import { registerHealthRoutes } from "./routes/healthRoutes.js";
+import { registerEventSubAdminRoutes } from "./routes/eventSubAdminRoutes.js";
+import { registerEventSubRoutes } from "./routes/eventSubRoutes.js";
 import { registerPublicSiteRoutes } from "./routes/publicSiteRoutes.js";
 import { registerSubPickAdminRoutes } from "./routes/subPickAdminRoutes.js";
 import { registerSubPickRoutes } from "./routes/subPickRoutes.js";
@@ -33,6 +35,8 @@ import { registerVotesRoutes } from "./routes/votesRoutes.js";
 import { CoverImageRefreshService, type CoverImageRefreshResult } from "./services/coverImageService.js";
 import { GameService } from "./services/gameService.js";
 import { HowLongToBeatRefreshService, type HowLongToBeatDueRefreshResult } from "./services/howLongToBeatService.js";
+import { EventSubAdminService } from "./services/eventSubAdminService.js";
+import { EventSubService } from "./services/eventSubService.js";
 import { SubPickService } from "./services/subPickService.js";
 import { TwitchApiClient, type TwitchUserLookup } from "./services/twitchApiClient.js";
 import { TwitchStreamStatsService } from "./services/twitchStreamStatsService.js";
@@ -50,6 +54,7 @@ export type AppDependencies = {
   challengeRunnerLogoRefreshService?: Pick<ChallengeRunnerLogoRefreshService, "refreshLogos">;
   twitchStreamStatsService?: Pick<TwitchStreamStatsService, "getRecentStreamStats" | "syncRecentStreams">;
   twitchUserLookup?: TwitchUserLookup;
+  twitchApi?: Pick<TwitchApiClient, "get" | "post" | "delete" | "getUserByLogin">;
 };
 
 type SchedulerLogger = Pick<FastifyBaseLogger, "error" | "info">;
@@ -205,14 +210,17 @@ export async function buildApp(config: AppConfig, dependencies: AppDependencies 
   const twitchStatsService = dependencies.twitchStreamStatsService ?? new TwitchStreamStatsService(config, twitchStatsRepository);
   const voteService = new VoteService(pool, dbClient.db);
   const subPickService = new SubPickService(dbClient.db);
-  const twitchUserLookup = dependencies.twitchUserLookup ?? new TwitchApiClient(config);
+  const eventSubService = new EventSubService(dbClient.db, subPickService);
+  const twitchApi = dependencies.twitchApi ?? new TwitchApiClient(config);
+  const twitchUserLookup = dependencies.twitchUserLookup ?? twitchApi;
+  const eventSubAdminService = new EventSubAdminService(dbClient.db, twitchApi, config);
 
   app.get("/votesHub", { websocket: true }, (socket) => realtimeHub.register("votes", socket));
   app.get("/gamesHub", { websocket: true }, (socket) => realtimeHub.register("games", socket));
   app.get("/subPicksHub", { websocket: true }, (socket) => realtimeHub.register("subPicks", socket));
 
   await registerHealthRoutes(app, () => dbClient.db.selectFrom("platform_types").select("platform").limit(1).executeTakeFirst());
-  await registerAuthRoutes(app, userRepository, config);
+  await registerAuthRoutes(app, userRepository, config, eventSubAdminService);
   await registerUserRoutes(app, userRepository, config);
   await registerAdminRoutes(app, userRepository, config, twitchStatsService, realtimeHub);
   await registerChallengeRunnerRoutes(
@@ -228,6 +236,8 @@ export async function buildApp(config: AppConfig, dependencies: AppDependencies 
   await registerVotesRoutes(app, voteService, userRepository, config, realtimeHub);
   registerSubPickRoutes(app, subPickService, userRepository, config, realtimeHub);
   registerSubPickAdminRoutes(app, subPickService, twitchUserLookup, userRepository, config, realtimeHub);
+  await registerEventSubRoutes(app, eventSubService, config, realtimeHub);
+  registerEventSubAdminRoutes(app, eventSubAdminService, eventSubService, userRepository, config, realtimeHub);
   await registerPublicSiteRoutes(app, config);
 
   const clientDist = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../client/dist");

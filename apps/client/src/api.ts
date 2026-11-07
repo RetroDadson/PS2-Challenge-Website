@@ -6,6 +6,11 @@ import type {
   CurrentVoteDto,
   DeathCounterDto,
   EligibleGameDto,
+  AssignEventSubReviewRequest,
+  EventSubReviewItemDto,
+  EventSubReviewResultDto,
+  EventSubStatusDto,
+  EventSubSyncResultDto,
   GameDto,
   GameTablePreferencesDto,
   GameTablePreferencesResponseDto,
@@ -204,6 +209,15 @@ export const api = {
     request<SubEntryDto>(`/api/admin/sub-picks/entries/${entryId}/pick`, { method: "PUT", body: JSON.stringify({ gameId }) }),
   deleteSubEntry: (entryId: number) => request<{ deleted: boolean }>(`/api/admin/sub-picks/entries/${entryId}`, { method: "DELETE" }),
   subPickAudit: () => request<SubPickAuditDto[]>("/api/admin/sub-picks/audit"),
+  eventSubStatus: () => request<EventSubStatusDto>("/api/admin/eventsub/status"),
+  eventSubReview: () => request<EventSubReviewItemDto[]>("/api/admin/eventsub/review"),
+  assignEventSubReview: (messageId: string, viewer: AssignEventSubReviewRequest) =>
+    request<EventSubReviewResultDto>(`/api/admin/eventsub/review/${encodeURIComponent(messageId)}/assign`, { method: "POST", body: JSON.stringify(viewer) }),
+  dismissEventSubReview: (messageId: string) =>
+    request<EventSubReviewResultDto>(`/api/admin/eventsub/review/${encodeURIComponent(messageId)}/dismiss`, { method: "POST", body: "{}" }),
+  retryEventSubReview: (messageId: string) =>
+    request<EventSubReviewResultDto>(`/api/admin/eventsub/review/${encodeURIComponent(messageId)}/retry`, { method: "POST", body: "{}" }),
+  syncEventSubSubscriptions: () => request<EventSubSyncResultDto>("/api/admin/eventsub/subscriptions", { method: "POST", body: "{}" }),
   challengeRunners: () => request<ChallengeRunnerDto[]>("/api/challenge-runners"),
   createChallengeRunner: (runner: ChallengeRunnerInput) =>
     request<ChallengeRunnerDto>("/api/admin/challenge-runners", { method: "POST", body: JSON.stringify(runner) }),

@@ -6,6 +6,8 @@ import { registerAdminRoutes } from "../src/routes/adminRoutes.js";
 import { registerAuthRoutes } from "../src/routes/authRoutes.js";
 import { registerChallengeRunnerRoutes } from "../src/routes/challengeRunnerRoutes.js";
 import { registerGamesRoutes } from "../src/routes/gamesRoutes.js";
+import { registerEventSubAdminRoutes } from "../src/routes/eventSubAdminRoutes.js";
+import { registerEventSubRoutes } from "../src/routes/eventSubRoutes.js";
 import { registerHealthRoutes } from "../src/routes/healthRoutes.js";
 import { registerSubPickAdminRoutes } from "../src/routes/subPickAdminRoutes.js";
 import { registerSubPickRoutes } from "../src/routes/subPickRoutes.js";
@@ -59,6 +61,8 @@ describe("swagger docs", () => {
     await registerHealthRoutes(app, async () => undefined);
     registerSubPickRoutes(app, {} as never, userRepository, config, fakeRealtimeHub());
     registerSubPickAdminRoutes(app, {} as never, {} as never, userRepository, config, fakeRealtimeHub());
+    await registerEventSubRoutes(app, {} as never, {}, fakeRealtimeHub());
+    registerEventSubAdminRoutes(app, {} as never, {} as never, userRepository, config, fakeRealtimeHub());
     await app.ready();
 
     const document = app.swagger() as any;
@@ -93,6 +97,11 @@ describe("swagger docs", () => {
     expect(document.paths["/api/sub-picks/me/entries/{id}/pick"].put.security).toEqual([{ ApiKey: [] }, { Cookie: [] }]);
     expect(document.paths["/api/admin/sub-picks/grants"].post.requestBody).toBeDefined();
     expect(document.paths["/api/admin/sub-picks/grants/{id}"].delete.responses["200"]).toBeDefined();
+    expect(document.paths["/api/eventsub/webhook"].post).toMatchObject({ tags: ["Twitch EventSub"], operationId: "receiveEventSubWebhook" });
+    expect(document.paths["/api/admin/eventsub/status"].get.security).toEqual([{ ApiKey: [] }, { Cookie: [] }]);
+    expect(document.paths["/api/admin/eventsub/subscriptions"].post.operationId).toBe("syncEventSubSubscriptions");
+    expect(document.paths["/api/admin/eventsub/authorize"].get.operationId).toBe("authorizeEventSub");
+    expect(document.paths["/api/admin/eventsub/review/{messageId}/assign"].post.requestBody).toBeDefined();
 
     for (const [path, item] of Object.entries<Record<string, any>>(document.paths)) {
       if (!path.startsWith("/api/") && path !== "/health") {

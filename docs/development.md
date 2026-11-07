@@ -35,6 +35,7 @@ Database connection strings are resolved in this order:
 4. `ConnectionStrings:DefaultConnection` from appsettings files
 
 Twitch credentials are loaded from `TWITCH_CLIENT_ID`/`TWITCH_CLIENT_SECRET`, `Twitch__ClientId`/`Twitch__ClientSecret`, or appsettings.
+The EventSub webhook secret isn't a setting: the app works it out from the Twitch client secret. Print it with `npm run eventsub:secret` when you need it for the Twitch CLI.
 The optional YouTube Data API key used for challenge-runner logos is loaded from `YOUTUBE_API_KEY`, `YouTube__ApiKey`, or appsettings.
 
 Useful environment variables:
@@ -120,6 +121,30 @@ Realtime updates use WebSocket endpoints:
 These are WebSocket connection endpoints, not browsable pages.
 
 User-visible event names are preserved as `VotesUpdated` and `GamesUpdated`. Overlay pages send heartbeat `Ping` messages, ignore `Pong` responses, reconnect automatically, and poll while reconnecting so displayed data keeps moving even if a socket drops.
+
+## Testing Twitch EventSub Locally
+
+Twitch can't reach `localhost`, so use the [Twitch CLI](https://github.com/twitchdev/twitch-cli) to send signed test events to the local webhook. Install it with `winget install Twitch.TwitchCLI`, run `npm run dev`, then pass the webhook secret from `npm run eventsub:secret` with `-s`:
+
+```powershell
+$secret = "your_eventsub_secret"
+$webhook = "http://localhost:5001/api/eventsub/webhook"
+
+twitch event verify-subscription channel.subscribe -F $webhook -s $secret
+twitch event trigger channel.subscribe --tier 2000 -F $webhook -s $secret
+twitch event trigger channel.subscription.message -F $webhook -s $secret
+twitch event trigger channel.subscription.gift -F $webhook -s $secret
+twitch event trigger channel.subscription.gift --anonymous -F $webhook -s $secret
+
+# Credit a real viewer by their Twitch user ID
+twitch event trigger channel.subscribe -f <twitch user id> --tier 3000 -F $webhook -s $secret
+
+# Send the same message twice; only the first creates entries
+twitch event trigger channel.subscribe -I repeat-test-1 -F $webhook -s $secret
+twitch event trigger channel.subscribe -I repeat-test-1 -F $webhook -s $secret
+```
+
+`verify-subscription` should report three ticks. Each trigger creates entries under Admin, Sub Picks, except gift recipients (ignored) and anonymous gifts (sent to the review queue). Without `-f` the CLI makes up user IDs, so those entries won't match real viewers. Use a different `-I` value each time you repeat the duplicate test.
 
 ## API Access
 

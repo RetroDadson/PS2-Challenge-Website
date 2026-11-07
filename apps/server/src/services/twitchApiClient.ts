@@ -25,6 +25,25 @@ type TwitchUsersResponse = {
 
 export type TwitchUserLookup = Pick<TwitchApiClient, "getUserByLogin">;
 
+export class TwitchApiError extends Error {
+  constructor(
+    readonly status: number,
+    readonly detail: string | null
+  ) {
+    super(`Twitch API request failed: ${status}${detail ? ` (${detail})` : ""}`);
+    this.name = "TwitchApiError";
+  }
+}
+
+async function errorDetail(response: Response): Promise<string | null> {
+  try {
+    const body = (await response.json()) as { message?: unknown };
+    return typeof body.message === "string" && body.message ? body.message : null;
+  } catch {
+    return null;
+  }
+}
+
 export class TwitchApiClient {
   private readonly fetchImpl: typeof fetch;
   private readonly now: () => Date;
@@ -58,16 +77,37 @@ export class TwitchApiClient {
     };
   }
 
-  async get<T>(url: URL): Promise<T> {
+  get<T>(url: URL): Promise<T> {
+    return this.request<T>("GET", url);
+  }
+
+  post<T>(url: URL, body: unknown): Promise<T> {
+    return this.request<T>("POST", url, body);
+  }
+
+  async delete(url: URL): Promise<void> {
+    await this.request<undefined>("DELETE", url);
+  }
+
+  private async request<T>(method: "GET" | "POST" | "DELETE", url: URL, body?: unknown): Promise<T> {
     const accessToken = await this.getAppAccessToken();
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${accessToken}`,
+      "Client-Id": this.config.twitchClientId
+    };
+    if (body !== undefined) {
+      headers["content-type"] = "application/json";
+    }
     const response = await this.fetchImpl(url, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Client-Id": this.config.twitchClientId
-      }
+      ...(method === "GET" ? {} : { method }),
+      headers,
+      ...(body === undefined ? {} : { body: JSON.stringify(body) })
     });
     if (!response.ok) {
-      throw new Error(`Twitch API request failed: ${response.status}`);
+      throw new TwitchApiError(response.status, await errorDetail(response));
+    }
+    if (response.status === 204) {
+      return undefined as T;
     }
     return (await response.json()) as T;
   }

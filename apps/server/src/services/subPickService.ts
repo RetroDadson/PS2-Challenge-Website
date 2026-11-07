@@ -10,7 +10,9 @@ import {
   type SubPickAuditDto,
   type SubPickSettingsDto,
   type SubPicksSummaryDto,
+  type SubGrantType,
   type SubPoolDto,
+  type SubTier,
   type UpdateSubGrantRequest,
   type UpdateSubPickSettingsRequest
 } from "@ps2-challenge/shared";
@@ -19,6 +21,17 @@ import type { Database } from "../db/kysely.js";
 import { eligibleChallengeGamesQuery } from "./eligibleGames.js";
 
 export type SubPickActor = { id: number; username: string };
+
+export type EventSubGrantInput = {
+  twitchUserId: string;
+  twitchLogin: string;
+  twitchDisplayName: string;
+  tier: SubTier;
+  grantType: SubGrantType;
+  giftCount?: number;
+  entryCount?: number;
+  notes?: string | null;
+};
 
 export class SubPickError extends Error {
   constructor(message: string, readonly statusCode: number) {
@@ -109,38 +122,49 @@ export class SubPickService {
   }
 
   async createGrant(actor: SubPickActor, input: CreateSubGrantRequest): Promise<SubGrantDto> {
-    const grantId = await this.db.transaction().execute(async (transaction) => {
-      const settings = toSettingsDto(await this.settingsRow(transaction));
-      const giftCount = input.grantType === "gift" ? input.giftCount ?? 1 : 1;
-      const entryCount = input.entryCount ?? subGrantEntryCount({ tier: input.tier, grantType: input.grantType, giftCount }, settings);
-      const grant = await transaction
-        .insertInto("sub_entry_grants")
-        .values({
-          twitch_user_id: input.twitchUserId,
-          twitch_login: input.twitchLogin.toLocaleLowerCase("en-GB"),
-          twitch_display_name: input.twitchDisplayName,
-          tier: input.tier,
-          grant_type: input.grantType,
-          gift_count: giftCount,
-          entry_count: entryCount,
-          source: "manual",
-          notes: input.notes?.trim() || null,
-          created_by_user_id: actor.id
-        })
-        .returning("grant_id")
-        .executeTakeFirstOrThrow();
-      await insertEntries(transaction, grant.grant_id, input.twitchUserId, entryCount);
-      await writeAudit(transaction, actor, "grant.create", "grant", grant.grant_id, {
-        twitchUserId: input.twitchUserId,
-        twitchLogin: input.twitchLogin,
-        tier: input.tier,
-        grantType: input.grantType,
-        giftCount,
-        entryCount
-      });
-      return grant.grant_id;
-    });
+    const grantId = await this.db.transaction().execute((transaction) => this.insertGrant(transaction, actor, input, "manual"));
     return this.getGrant(grantId);
+  }
+
+  createEventSubGrant(transaction: Transaction<Database>, input: EventSubGrantInput): Promise<number> {
+    return this.insertGrant(transaction, null, input, "eventsub");
+  }
+
+  private async insertGrant(
+    transaction: Transaction<Database>,
+    actor: SubPickActor | null,
+    input: CreateSubGrantRequest | EventSubGrantInput,
+    source: "manual" | "eventsub"
+  ): Promise<number> {
+    const settings = toSettingsDto(await this.settingsRow(transaction));
+    const giftCount = input.grantType === "gift" ? input.giftCount ?? 1 : 1;
+    const entryCount = input.entryCount ?? subGrantEntryCount({ tier: input.tier, grantType: input.grantType, giftCount }, settings);
+    const grant = await transaction
+      .insertInto("sub_entry_grants")
+      .values({
+        twitch_user_id: input.twitchUserId,
+        twitch_login: input.twitchLogin.toLocaleLowerCase("en-GB"),
+        twitch_display_name: input.twitchDisplayName,
+        tier: input.tier,
+        grant_type: input.grantType,
+        gift_count: giftCount,
+        entry_count: entryCount,
+        source,
+        notes: input.notes?.trim() || null,
+        created_by_user_id: actor?.id ?? null
+      })
+      .returning("grant_id")
+      .executeTakeFirstOrThrow();
+    await insertEntries(transaction, grant.grant_id, input.twitchUserId, entryCount);
+    await writeAudit(transaction, actor, source === "manual" ? "grant.create" : "grant.eventsub", "grant", grant.grant_id, {
+      twitchUserId: input.twitchUserId,
+      twitchLogin: input.twitchLogin,
+      tier: input.tier,
+      grantType: input.grantType,
+      giftCount,
+      entryCount
+    });
+    return grant.grant_id;
   }
 
   async updateGrant(actor: SubPickActor, grantId: number, input: UpdateSubGrantRequest): Promise<SubGrantDto> {
@@ -416,7 +440,7 @@ async function removeUndrawnEntries(transaction: Transaction<Database>, grantId:
 
 async function writeAudit(
   transaction: Transaction<Database>,
-  actor: SubPickActor,
+  actor: SubPickActor | null,
   action: string,
   targetType: string,
   targetId: number | null,
@@ -424,7 +448,7 @@ async function writeAudit(
 ): Promise<void> {
   await transaction
     .insertInto("sub_pick_audit")
-    .values({ actor_user_id: actor.id, actor_username: actor.username, action, target_type: targetType, target_id: targetId, details })
+    .values({ actor_user_id: actor?.id ?? null, actor_username: actor?.username ?? "Twitch", action, target_type: targetType, target_id: targetId, details })
     .execute();
 }
 

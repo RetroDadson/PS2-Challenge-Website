@@ -2,7 +2,7 @@ import cookie from "@fastify/cookie";
 import fastify from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createSessionCookie, oauthStateCookieName } from "../src/auth/session.js";
-import { registerAuthRoutes } from "../src/routes/authRoutes.js";
+import { registerAuthRoutes, type EventSubAuthorization } from "../src/routes/authRoutes.js";
 
 const config = {
   nodeEnv: "Testing",
@@ -119,10 +119,113 @@ describe("auth routes", () => {
   });
 });
 
-async function authApp(repository: object) {
+describe("EventSub authorisation", () => {
+  let app: ReturnType<typeof fastify> | undefined;
+  const adminUser = { id: 3, twitchId: "tw-admin", twitchUsername: "StreamAdmin", roleName: "Admin", profileImageUrl: null };
+  const adminCookie = { ".PS2Challenge.Auth": createSessionCookie({ id: 3, twitchId: "tw-admin", username: "StreamAdmin", role: "Admin" }, config.cookieSecret) };
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    await app?.close();
+    app = undefined;
+  });
+
+  function authorization() {
+    return { broadcasterUserId: vi.fn(async () => "500"), recordAuthorization: vi.fn(async () => undefined) };
+  }
+
+  async function start(target: ReturnType<typeof fastify>) {
+    const response = await target.inject({ method: "GET", url: "/api/admin/eventsub/authorize", cookies: adminCookie });
+    expect(response.statusCode).toBe(302);
+    const location = new URL(response.headers.location as string);
+    return { location, state: location.searchParams.get("state")!, nonce: response.cookies.find((entry) => entry.name === oauthStateCookieName)!.value };
+  }
+
+  async function complete(target: ReturnType<typeof fastify>, login: { state: string; nonce: string }) {
+    return target.inject({
+      method: "GET",
+      url: `/api/auth/callback?code=abc&state=${encodeURIComponent(login.state)}`,
+      cookies: { [oauthStateCookieName]: login.nonce }
+    });
+  }
+
+  it("is only available to admins when EventSub is wired up", async () => {
+    app = await authApp({ getByTwitchId: vi.fn(async () => ({ ...adminUser, roleName: "User" })) }, authorization());
+    expect((await app.inject({ method: "GET", url: "/api/admin/eventsub/authorize" })).statusCode).toBe(401);
+    expect((await app.inject({ method: "GET", url: "/api/admin/eventsub/authorize", cookies: adminCookie })).statusCode).toBe(403);
+    await app.close();
+
+    app = await authApp({ getByTwitchId: vi.fn(async () => adminUser) });
+    expect((await app.inject({ method: "GET", url: "/api/admin/eventsub/authorize", cookies: adminCookie })).statusCode).toBe(404);
+  });
+
+  it("asks Twitch for channel:read:subscriptions and records it without changing the site login", async () => {
+    const eventSub = authorization();
+    app = await authApp({ getByTwitchId: vi.fn(async () => adminUser) }, eventSub);
+    const login = await start(app);
+    expect(login.location.origin + login.location.pathname).toBe("https://id.twitch.tv/oauth2/authorize");
+    expect(login.location.searchParams.get("scope")).toBe("channel:read:subscriptions");
+    expect(login.location.searchParams.get("force_verify")).toBe("true");
+
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(jsonResponse({ access_token: "channel-token" }))
+        .mockResolvedValueOnce(jsonResponse({ user_id: "500", scopes: ["channel:read:subscriptions"] }))
+    );
+    const response = await complete(app, login);
+
+    expect(response.statusCode).toBe(302);
+    expect(response.headers.location).toBe("/admin/sub-picks?tab=twitch&eventsub=authorised");
+    expect(response.cookies.find((entry) => entry.name === ".PS2Challenge.Auth")).toBeUndefined();
+    expect(eventSub.recordAuthorization).toHaveBeenCalledWith("500", { id: 3, username: "StreamAdmin" });
+    expect(vi.mocked(fetch).mock.calls[1]?.[0]).toBe("https://id.twitch.tv/oauth2/validate");
+    expect(vi.mocked(fetch).mock.calls[1]?.[1]).toEqual({ headers: { Authorization: "OAuth channel-token" } });
+  });
+
+  it.each([
+    ["wrong-account", { user_id: "123", scopes: ["channel:read:subscriptions"] }],
+    ["missing-scope", { user_id: "500", scopes: ["user:read:email"] }],
+    ["missing-scope", { user_id: "500" }]
+  ])("reports %s without recording the authorisation", async (result, validation) => {
+    const eventSub = authorization();
+    app = await authApp({ getByTwitchId: vi.fn(async () => adminUser) }, eventSub);
+    const login = await start(app);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(jsonResponse({ access_token: "token" })).mockResolvedValueOnce(jsonResponse(validation)));
+
+    expect((await complete(app, login)).headers.location).toBe(`/admin/sub-picks?tab=twitch&eventsub=${result}`);
+    expect(eventSub.recordAuthorization).not.toHaveBeenCalled();
+  });
+
+  it("refuses admins who lost the role and reports Twitch failures", async () => {
+    const getByTwitchId = vi.fn(async () => adminUser);
+    const eventSub = authorization();
+    app = await authApp({ getByTwitchId }, eventSub);
+
+    const demoted = await start(app);
+    getByTwitchId.mockResolvedValueOnce({ ...adminUser, roleName: "User" });
+    vi.stubGlobal("fetch", vi.fn());
+    expect((await complete(app, demoted)).headers.location).toBe("/admin/sub-picks?tab=twitch&eventsub=forbidden");
+    expect(fetch).not.toHaveBeenCalled();
+
+    const failedValidation = await start(app);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(jsonResponse({ access_token: "token" })).mockResolvedValueOnce(jsonResponse({}, 401)));
+    expect((await complete(app, failedValidation)).headers.location).toBe("/admin/sub-picks?tab=twitch&eventsub=failed");
+
+    const noBroadcaster = await start(app);
+    eventSub.broadcasterUserId.mockResolvedValueOnce(null);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(jsonResponse({ access_token: "token" })).mockResolvedValueOnce(jsonResponse({ user_id: "500", scopes: [] })));
+    expect((await complete(app, noBroadcaster)).headers.location).toBe("/admin/sub-picks?tab=twitch&eventsub=wrong-account");
+    expect(eventSub.recordAuthorization).not.toHaveBeenCalled();
+  });
+});
+
+async function authApp(repository: object, eventSubAuthorization?: EventSubAuthorization) {
   const app = fastify({ logger: false });
   await app.register(cookie);
-  await registerAuthRoutes(app, repository as never, config);
+  await registerAuthRoutes(app, repository as never, config, eventSubAuthorization);
   return app;
 }
 
