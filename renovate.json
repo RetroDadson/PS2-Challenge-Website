@@ -18,6 +18,11 @@
       "automerge": true
     },
     {
+      "matchDatasources": ["docker"],
+      "matchPackageNames": ["postgres"],
+      "enabled": false
+    },
+    {
       "matchPackageNames": ["@opentelemetry/**"],
       "enabled": false
     },
