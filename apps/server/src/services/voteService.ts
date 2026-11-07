@@ -4,6 +4,7 @@ import { parseDateOnly } from "@ps2-challenge/shared";
 import { sql, type Kysely } from "kysely";
 import type pg from "pg";
 import { createKyselyFromPool, type Database } from "../db/kysely.js";
+import { eligibleChallengeGamesQuery } from "./eligibleGames.js";
 
 type CurrentVoteRow = {
   game_id: number;
@@ -302,15 +303,9 @@ export class VoteService {
       throw new Error("Current votes already has 3 games. Archive or remove existing votes first.");
     }
     const gamesToAdd = Math.min(count, slotsAvailable);
-    const eligible = await this.db
-      .selectFrom("games as g")
-      .innerJoin("game_owned as go", "go.game_id", "g.game_id")
-      .leftJoin("excluded_games as eg", "eg.game_id", "g.game_id")
-      .leftJoin("progress as p", "p.game_id", "g.game_id")
+    const eligible = await eligibleChallengeGamesQuery(this.db)
       .leftJoin("current_vote as cv", "cv.game_id", "g.game_id")
       .select(["g.game_id as game_id", "g.title as title"])
-      .where("eg.game_id", "is", null)
-      .where("p.game_id", "is", null)
       .where("cv.game_id", "is", null)
       .execute();
     if (!eligible.length) {

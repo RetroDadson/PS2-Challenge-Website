@@ -46,6 +46,21 @@ describe("realtime hub logging", () => {
     expect(logger.debug).toHaveBeenCalled();
   });
 
+  it("broadcasts sub pick updates only to sub pick listeners", () => {
+    const logger = { debug: vi.fn() };
+    const subPicks = fakeSocket();
+    const games = fakeSocket();
+    const hub = new RealtimeHub(logger as never);
+
+    hub.register("subPicks", subPicks);
+    hub.register("games", games);
+    hub.broadcastSubPicksUpdated();
+
+    expect(subPicks.sent).toEqual([JSON.stringify({ type: "SubPicksUpdated" })]);
+    expect(games.sent).toEqual([]);
+    expect(logger.debug).toHaveBeenCalledWith(expect.objectContaining({ hub: "subPicks" }), "SubPicksHub connection requested: subPicks-1");
+  });
+
   it("ignores unknown hub names", () => {
     const hub = new RealtimeHub();
     const socket = fakeSocket();

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { BookOpen, Gamepad2, Library, LineChart, LogIn, LogOut, Menu, PlaySquare, Shield, Trophy, User, UserRound, Users, Vote, X } from "lucide-react";
+import { BookOpen, Dices, Gamepad2, Library, LineChart, LogIn, LogOut, Menu, PlaySquare, Shield, Trophy, User, UserRound, Users, Vote, X } from "lucide-react";
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useCurrentUser } from "../hooks.js";
 
@@ -41,6 +41,7 @@ export function Layout() {
           <NavLink to="/progress" onClick={closeSidebar}><Trophy aria-hidden />Progress</NavLink>
           <NavLink to="/statistics" onClick={closeSidebar}><LineChart aria-hidden />Statistics</NavLink>
           <NavLink to="/votes" onClick={closeSidebar}><Vote aria-hidden />Votes</NavLink>
+          <NavLink to="/sub-picks" onClick={closeSidebar}><Dices aria-hidden />Sub Picks</NavLink>
           <NavLink to="/runners" onClick={closeSidebar}><Users aria-hidden />Challenge Runners</NavLink>
           {isAuthenticated ? <NavLink to="/user" onClick={closeSidebar}><User aria-hidden />Profile</NavLink> : <NavLink to="/login" onClick={closeSidebar}><LogIn aria-hidden />Login</NavLink>}
           {isAdmin ? <NavLink to="/admin" onClick={closeSidebar}><Shield aria-hidden />Admin</NavLink> : null}

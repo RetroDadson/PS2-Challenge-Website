@@ -1,8 +1,9 @@
 import type { AdminUserDto, RoleDto } from "@ps2-challenge/shared";
-import { Clock, ExternalLink, Gamepad2, Image, Radio, RefreshCw, Shield, UserRound, Users } from "lucide-react";
+import { Clock, Dices, ExternalLink, Gamepad2, Image, Radio, RefreshCw, Shield, UserRound, Users } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { api, type CoverRefreshProgress, type HowLongToBeatRefreshProgress } from "../api.js";
 import { ErrorMessage, Loading } from "../components/Status.js";
+import { SubPicksOverlayLink } from "../components/SubPicksOverlayLink.js";
 import { useAsync } from "../hooks.js";
 
 type StatusMessage = { kind: "success" | "error"; message: string };
@@ -128,6 +129,7 @@ export function Admin() {
       <nav className="admin-nav" aria-label="Admin sections">
         <a href="/games"><Gamepad2 />Games Management</a>
         <a href="/admin" aria-current="page"><Users />User Management</a>
+        <a href="/admin/sub-picks"><Dices />Sub Picks</a>
       </nav>
 
       <section className="panel">
@@ -139,6 +141,7 @@ export function Admin() {
           <a href="/deaths-overlay" target="_blank" rel="noreferrer">Death Counter Overlay <ExternalLink /></a>
           <a href="/blank-overlay" target="_blank" rel="noreferrer">Blank Overlay <ExternalLink /></a>
         </div>
+        <SubPicksOverlayLink />
       </section>
 
       <MaintenancePanel

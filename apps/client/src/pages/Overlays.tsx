@@ -1,4 +1,4 @@
-import { Skull } from "lucide-react";
+import { Dices, Skull } from "lucide-react";
 import { api } from "../api.js";
 import { useAsync, useRealtime } from "../hooks.js";
 import { useEffect, useMemo, useState } from "react";
@@ -113,6 +113,101 @@ export function DeathCounterOverlay() {
           <span className="death-overlay-count" data-testid="death-overlay-count">{counter.data.deaths}</span>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+export function SubPicksOverlay() {
+  const summary = useAsync(() => api.subPicksSummary(), []);
+  const reload = () => void summary.reload();
+  useRealtime("/subPicksHub", reload);
+  useRealtime("/gamesHub", reload);
+  const timer = useMemo(() => overlayTimer(globalThis.location.search), []);
+  const visible = useShowHideTimer(timer);
+  const data = summary.data;
+  const topPick = data?.nextDrawPool.games[0];
+
+  return (
+    <div className={`stream-overlay sub-picks-overlay-frame${visible ? "" : " is-hidden"}`} aria-hidden={!visible} data-testid="sub-picks-overlay">
+      {summary.loading ? <OverlayMessage>Loading...</OverlayMessage> : null}
+      {summary.error ? <OverlayMessage>Error loading sub picks</OverlayMessage> : null}
+      {data ? (
+        <div className="sub-picks-overlay-box">
+          <div className="sub-picks-overlay-heading"><Dices aria-hidden="true" />Sub Picks</div>
+          <p className="sub-picks-overlay-message">{data.overlayMessage}</p>
+          <div className="sub-picks-overlay-stats">
+            <OverlayStat
+              label={`Next ${data.schedule.nextDrawKind} draw`}
+              value={`Game ${data.schedule.nextDrawGameNumber}`}
+              detail={gamesToGo(data.schedule.gamesUntilNextDraw)}
+            />
+            <OverlayStat label="On the wheel" value={String(data.nextDrawPool.totalEntries)} detail={data.nextDrawPool.totalEntries === 1 ? "entry" : "entries"} />
+            <OverlayStat
+              label="Top pick"
+              value={topPick?.gameTitle ?? "No picks yet"}
+              detail={topPick ? entriesLabel(topPick.entries) : "Sub to add one"}
+            />
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+export type OverlayTimer = { showMs: number; everyMs: number; alwaysVisible: boolean };
+
+export function overlayTimer(search: string): OverlayTimer {
+  const params = new URLSearchParams(search);
+  const show = secondsParam(params, "show") || 20;
+  const every = secondsParam(params, "every") ?? 900;
+  const timed = params.has("show") || params.has("every");
+  return { showMs: show * 1000, everyMs: every * 1000, alwaysVisible: !timed || every === 0 || every <= show };
+}
+
+function secondsParam(params: URLSearchParams, name: string): number | null {
+  const raw = params.get(name);
+  const value = Number(raw);
+  return raw !== null && raw.trim() !== "" && Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+function useShowHideTimer({ showMs, everyMs, alwaysVisible }: OverlayTimer) {
+  const [visible, setVisible] = useState(true);
+
+  useEffect(() => {
+    setVisible(true);
+    if (alwaysVisible) {
+      return undefined;
+    }
+    let hideTimeout = globalThis.setTimeout(() => setVisible(false), showMs);
+    const cycle = globalThis.setInterval(() => {
+      setVisible(true);
+      globalThis.clearTimeout(hideTimeout);
+      hideTimeout = globalThis.setTimeout(() => setVisible(false), showMs);
+    }, everyMs);
+    return () => {
+      globalThis.clearInterval(cycle);
+      globalThis.clearTimeout(hideTimeout);
+    };
+  }, [alwaysVisible, everyMs, showMs]);
+
+  return visible;
+}
+
+function entriesLabel(count: number): string {
+  return count === 1 ? "1 entry" : `${count} entries`;
+}
+
+function gamesToGo(games: number): string {
+  if (games === 0) return "Next game!";
+  return games === 1 ? "1 game to go" : `${games} games to go`;
+}
+
+function OverlayStat({ label, value, detail }: Readonly<{ label: string; value: string; detail: string }>) {
+  return (
+    <div className="sub-picks-overlay-stat">
+      <span className="sub-picks-overlay-stat-label">{label}</span>
+      <strong className="sub-picks-overlay-stat-value">{value}</strong>
+      <span className="sub-picks-overlay-stat-detail">{detail}</span>
     </div>
   );
 }

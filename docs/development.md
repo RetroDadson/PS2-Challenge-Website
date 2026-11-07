@@ -115,6 +115,7 @@ Realtime updates use WebSocket endpoints:
 
 - `/votesHub`
 - `/gamesHub`
+- `/subPicksHub`
 
 These are WebSocket connection endpoints, not browsable pages.
 

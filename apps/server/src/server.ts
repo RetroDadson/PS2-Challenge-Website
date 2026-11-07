@@ -25,12 +25,16 @@ import { registerChallengeRunnerRoutes } from "./routes/challengeRunnerRoutes.js
 import { registerGamesRoutes } from "./routes/gamesRoutes.js";
 import { registerHealthRoutes } from "./routes/healthRoutes.js";
 import { registerPublicSiteRoutes } from "./routes/publicSiteRoutes.js";
+import { registerSubPickAdminRoutes } from "./routes/subPickAdminRoutes.js";
+import { registerSubPickRoutes } from "./routes/subPickRoutes.js";
 import { registerTwitchRoutes } from "./routes/twitchRoutes.js";
 import { registerUserRoutes } from "./routes/userRoutes.js";
 import { registerVotesRoutes } from "./routes/votesRoutes.js";
 import { CoverImageRefreshService, type CoverImageRefreshResult } from "./services/coverImageService.js";
 import { GameService } from "./services/gameService.js";
 import { HowLongToBeatRefreshService, type HowLongToBeatDueRefreshResult } from "./services/howLongToBeatService.js";
+import { SubPickService } from "./services/subPickService.js";
+import { TwitchApiClient, type TwitchUserLookup } from "./services/twitchApiClient.js";
 import { TwitchStreamStatsService } from "./services/twitchStreamStatsService.js";
 import { VoteService } from "./services/voteService.js";
 import { ChallengeRunnerLogoService } from "./services/challengeRunnerLogoService.js";
@@ -45,6 +49,7 @@ export type AppDependencies = {
   challengeRunnerLogoService?: Pick<ChallengeRunnerLogoService, "resolveLogo">;
   challengeRunnerLogoRefreshService?: Pick<ChallengeRunnerLogoRefreshService, "refreshLogos">;
   twitchStreamStatsService?: Pick<TwitchStreamStatsService, "getRecentStreamStats" | "syncRecentStreams">;
+  twitchUserLookup?: TwitchUserLookup;
 };
 
 type SchedulerLogger = Pick<FastifyBaseLogger, "error" | "info">;
@@ -199,9 +204,12 @@ export async function buildApp(config: AppConfig, dependencies: AppDependencies 
   const twitchStatsRepository = new TwitchStreamRepository(dbClient.db);
   const twitchStatsService = dependencies.twitchStreamStatsService ?? new TwitchStreamStatsService(config, twitchStatsRepository);
   const voteService = new VoteService(pool, dbClient.db);
+  const subPickService = new SubPickService(dbClient.db);
+  const twitchUserLookup = dependencies.twitchUserLookup ?? new TwitchApiClient(config);
 
   app.get("/votesHub", { websocket: true }, (socket) => realtimeHub.register("votes", socket));
   app.get("/gamesHub", { websocket: true }, (socket) => realtimeHub.register("games", socket));
+  app.get("/subPicksHub", { websocket: true }, (socket) => realtimeHub.register("subPicks", socket));
 
   await registerHealthRoutes(app, () => dbClient.db.selectFrom("platform_types").select("platform").limit(1).executeTakeFirst());
   await registerAuthRoutes(app, userRepository, config);
@@ -218,6 +226,8 @@ export async function buildApp(config: AppConfig, dependencies: AppDependencies 
   await registerGamesRoutes(app, gameService, userRepository, config, realtimeHub);
   await registerTwitchRoutes(app, twitchStatsService);
   await registerVotesRoutes(app, voteService, userRepository, config, realtimeHub);
+  registerSubPickRoutes(app, subPickService, userRepository, config, realtimeHub);
+  registerSubPickAdminRoutes(app, subPickService, twitchUserLookup, userRepository, config, realtimeHub);
   await registerPublicSiteRoutes(app, config);
 
   const clientDist = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../client/dist");

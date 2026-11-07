@@ -1,8 +1,7 @@
 import type { AppConfig } from "../config.js";
 import type { TwitchStreamRepository, TwitchVodRecord } from "../repositories/twitchStreamRepository.js";
+import { TwitchApiClient, twitchApiBaseUrl } from "./twitchApiClient.js";
 
-const twitchTokenUrl = "https://id.twitch.tv/oauth2/token";
-const twitchApiBaseUrl = "https://api.twitch.tv/helix";
 const weekMilliseconds = 7 * 24 * 60 * 60 * 1000;
 export const twitchStreamStatsRangeWeeks = 8;
 export const countedStreamMinimumDurationSeconds = 20 * 60;
@@ -27,20 +26,7 @@ export type TwitchStreamSyncResult = {
 type TwitchStreamStatsServiceOptions = {
   fetchImpl?: typeof fetch;
   now?: () => Date;
-};
-
-type TwitchToken = {
-  accessToken: string;
-  expiresAtMs: number;
-};
-
-type TwitchTokenResponse = {
-  access_token?: string;
-  expires_in?: number;
-};
-
-type TwitchUsersResponse = {
-  data?: Array<{ id?: string }>;
+  twitchApiClient?: TwitchApiClient;
 };
 
 type TwitchVideosResponse = {
@@ -60,9 +46,8 @@ type TwitchVideo = {
 
 export class TwitchStreamStatsService {
   private readonly config: Pick<AppConfig, "twitchChannelLogin" | "twitchClientId" | "twitchClientSecret">;
-  private readonly fetchImpl: typeof fetch;
   private readonly now: () => Date;
-  private token?: TwitchToken;
+  private readonly twitch: TwitchApiClient;
 
   constructor(
     config: Pick<AppConfig, "twitchChannelLogin" | "twitchClientId" | "twitchClientSecret">,
@@ -73,8 +58,8 @@ export class TwitchStreamStatsService {
       ...config,
       twitchChannelLogin: normalizeChannelLogin(config.twitchChannelLogin)
     };
-    this.fetchImpl = options.fetchImpl ?? fetch;
     this.now = options.now ?? (() => new Date());
+    this.twitch = options.twitchApiClient ?? new TwitchApiClient(config, { ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}), now: this.now });
   }
 
   async getRecentStreamStats(): Promise<TwitchStreamStats> {
@@ -105,8 +90,7 @@ export class TwitchStreamStatsService {
       };
     }
 
-    const token = await this.getAppAccessToken(now.getTime());
-    const userId = await this.getUserId(token);
+    const userId = await this.getUserId();
     if (!userId) {
       return {
         channelLogin: this.config.twitchChannelLogin,
@@ -116,7 +100,7 @@ export class TwitchStreamStatsService {
       };
     }
 
-    const videos = await this.getArchiveVideos(token, userId, rangeStart);
+    const videos = await this.getArchiveVideos(userId, rangeStart);
     const vods = videos
       .map((video) => this.mapVideoToRecord(video, rangeStart, now))
       .filter((record): record is TwitchVodRecord => record !== null);
@@ -146,45 +130,12 @@ export class TwitchStreamStatsService {
     };
   }
 
-  private async getAppAccessToken(nowMs: number): Promise<string> {
-    if (this.token && this.token.expiresAtMs > nowMs + 30_000) {
-      return this.token.accessToken;
-    }
-
-    const response = await this.fetchImpl(twitchTokenUrl, {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id: this.config.twitchClientId,
-        client_secret: this.config.twitchClientSecret,
-        grant_type: "client_credentials"
-      })
-    });
-    if (!response.ok) {
-      throw new Error(`Twitch app token request failed: ${response.status}`);
-    }
-
-    const body = (await response.json()) as TwitchTokenResponse;
-    if (!body.access_token) {
-      throw new Error("Twitch app token response did not include an access token");
-    }
-
-    const expiresInMs = Math.max(0, (body.expires_in ?? 0) - 60) * 1000;
-    this.token = {
-      accessToken: body.access_token,
-      expiresAtMs: nowMs + expiresInMs
-    };
-    return body.access_token;
+  private async getUserId(): Promise<string | null> {
+    const user = await this.twitch.getUserByLogin(this.config.twitchChannelLogin);
+    return user?.twitchUserId ?? null;
   }
 
-  private async getUserId(accessToken: string): Promise<string | null> {
-    const url = new URL(`${twitchApiBaseUrl}/users`);
-    url.searchParams.set("login", this.config.twitchChannelLogin);
-    const body = await this.twitchGet<TwitchUsersResponse>(url, accessToken);
-    return body.data?.[0]?.id ?? null;
-  }
-
-  private async getArchiveVideos(accessToken: string, userId: string, rangeStart: Date): Promise<TwitchVideo[]> {
+  private async getArchiveVideos(userId: string, rangeStart: Date): Promise<TwitchVideo[]> {
     const videos: TwitchVideo[] = [];
     let cursor: string | undefined;
 
@@ -197,7 +148,7 @@ export class TwitchStreamStatsService {
         url.searchParams.set("after", cursor);
       }
 
-      const body = await this.twitchGet<TwitchVideosResponse>(url, accessToken);
+      const body = await this.twitch.get<TwitchVideosResponse>(url);
       const pageVideos = body.data ?? [];
       videos.push(...pageVideos);
 
@@ -212,19 +163,6 @@ export class TwitchStreamStatsService {
     }
 
     return videos;
-  }
-
-  private async twitchGet<T>(url: URL, accessToken: string): Promise<T> {
-    const response = await this.fetchImpl(url, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Client-Id": this.config.twitchClientId
-      }
-    });
-    if (!response.ok) {
-      throw new Error(`Twitch API request failed: ${response.status}`);
-    }
-    return (await response.json()) as T;
   }
 }
 

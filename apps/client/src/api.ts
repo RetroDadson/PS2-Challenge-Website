@@ -2,14 +2,25 @@ import type {
   AdminUserDto,
   ChallengeRunnerDto,
   ChallengeRunnerInput,
+  CreateSubGrantRequest,
   CurrentVoteDto,
   DeathCounterDto,
+  EligibleGameDto,
   GameDto,
   GameTablePreferencesDto,
   GameTablePreferencesResponseDto,
   GamesPageDataDto,
   GameProgressDto,
+  MySubPicksDto,
   RoleDto,
+  SubEntryDto,
+  SubGrantDto,
+  SubPickAuditDto,
+  SubPickSettingsDto,
+  SubPicksSummaryDto,
+  TwitchUserLookupDto,
+  UpdateSubGrantRequest,
+  UpdateSubPickSettingsRequest,
   UserProfileDto,
   VoteRoundDto
 } from "@ps2-challenge/shared";
@@ -174,6 +185,25 @@ export const api = {
   adminUsers: () => request<AdminUserDto[]>("/api/admin/users"),
   roles: () => request<RoleDto[]>("/api/admin/roles"),
   updateRole: (userId: number, roleId: number) => request(`/api/admin/users/${userId}/role`, { method: "PUT", body: JSON.stringify({ roleId }) }),
+  subPicksSummary: () => request<SubPicksSummaryDto>("/api/sub-picks/summary"),
+  subPickEligibleGames: () => request<EligibleGameDto[]>("/api/sub-picks/eligible-games"),
+  mySubPicks: () => request<MySubPicksDto>("/api/sub-picks/me"),
+  setMySubPick: (entryId: number, gameId: number | null) =>
+    request<SubEntryDto>(`/api/sub-picks/me/entries/${entryId}/pick`, { method: "PUT", body: JSON.stringify({ gameId }) }),
+  subPickSettings: () => request<SubPickSettingsDto>("/api/admin/sub-picks/settings"),
+  updateSubPickSettings: (settings: UpdateSubPickSettingsRequest) =>
+    request<SubPickSettingsDto>("/api/admin/sub-picks/settings", { method: "PUT", body: JSON.stringify(settings) }),
+  lookupTwitchUser: (login: string) =>
+    request<TwitchUserLookupDto>("/api/admin/sub-picks/twitch-lookup", { method: "POST", body: JSON.stringify({ login }) }),
+  subGrants: () => request<SubGrantDto[]>("/api/admin/sub-picks/grants"),
+  createSubGrant: (grant: CreateSubGrantRequest) => request<SubGrantDto>("/api/admin/sub-picks/grants", { method: "POST", body: JSON.stringify(grant) }),
+  updateSubGrant: (grantId: number, grant: UpdateSubGrantRequest) =>
+    request<SubGrantDto>(`/api/admin/sub-picks/grants/${grantId}`, { method: "PUT", body: JSON.stringify(grant) }),
+  deleteSubGrant: (grantId: number) => request<{ deleted: boolean; voidedEntries: number }>(`/api/admin/sub-picks/grants/${grantId}`, { method: "DELETE" }),
+  setSubPickForViewer: (entryId: number, gameId: number | null) =>
+    request<SubEntryDto>(`/api/admin/sub-picks/entries/${entryId}/pick`, { method: "PUT", body: JSON.stringify({ gameId }) }),
+  deleteSubEntry: (entryId: number) => request<{ deleted: boolean }>(`/api/admin/sub-picks/entries/${entryId}`, { method: "DELETE" }),
+  subPickAudit: () => request<SubPickAuditDto[]>("/api/admin/sub-picks/audit"),
   challengeRunners: () => request<ChallengeRunnerDto[]>("/api/challenge-runners"),
   createChallengeRunner: (runner: ChallengeRunnerInput) =>
     request<ChallengeRunnerDto>("/api/admin/challenge-runners", { method: "POST", body: JSON.stringify(runner) }),
