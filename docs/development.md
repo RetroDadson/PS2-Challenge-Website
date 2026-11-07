@@ -121,7 +121,7 @@ Realtime updates use WebSocket endpoints:
 
 These are WebSocket connection endpoints, not browsable pages.
 
-User-visible event names are preserved as `VotesUpdated` and `GamesUpdated`. Overlay pages send heartbeat `Ping` messages, ignore `Pong` responses, reconnect automatically, and poll while reconnecting so displayed data keeps moving even if a socket drops.
+User-visible event names are preserved as `VotesUpdated` and `GamesUpdated`; the sub pick hubs send `SubPicksUpdated` and `WheelUpdated`, and the wheel hub also fires when a spin's result is revealed. Overlay pages send heartbeat `Ping` messages, ignore `Pong` responses, reconnect automatically, and poll while reconnecting so displayed data keeps moving even if a socket drops.
 
 ## Testing Twitch EventSub Locally
 
@@ -173,3 +173,8 @@ npm run migrate
 - Ensure PostgreSQL is reachable from the server.
 - Verify Twitch credentials are set outside test environments.
 - For Azure Database for PostgreSQL, prefer URL-style strings with `sslmode=verify-full`.
+
+## Trying the Sub Pick Wheel Locally
+
+A draw only opens when the next game number ends in 0 and at least one entry has a valid pick, so a local database usually needs games started (or dummy progress rows) to reach a game number ending in 9. Add entries under Admin, Sub Picks, Entries, give them picks, then open the draw from the Wheel tab. A spin length of 2 or 3 seconds keeps testing quick. Accepting a result starts that game for real; use Respin or Cancel Draw to try the wheel without changing progress.
+

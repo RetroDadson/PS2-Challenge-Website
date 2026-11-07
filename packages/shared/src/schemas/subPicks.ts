@@ -136,6 +136,7 @@ export const mySubPicksSchema = z.object({
     entriesEarned: z.number().int(),
     picksMade: z.number().int(),
     wins: z.number().int(),
+    drawsEntered: z.number().int(),
     nextDrawOdds: z.number()
   })
 });

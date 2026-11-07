@@ -23,6 +23,7 @@ import type {
   SubDrawDto,
   SubDrawDueDto,
   SubDrawHistoryDto,
+  SubPickStatsDto,
   SubPickAuditDto,
   SubPickSettingsDto,
   SubPicksSummaryDto,
@@ -201,6 +202,7 @@ export const api = {
   subPicksSummary: () => request<SubPicksSummaryDto>("/api/sub-picks/summary"),
   subPickWheel: () => request<SubWheelDto>("/api/sub-picks/wheel"),
   subDrawHistory: () => request<SubDrawHistoryDto[]>("/api/sub-picks/history"),
+  subPickStats: () => request<SubPickStatsDto>("/api/sub-picks/stats"),
   openSubDraw: () => request<SubDrawDto>("/api/admin/sub-picks/draws", { method: "POST", body: "{}" }),
   subDrawAction: (drawId: number, action: "shuffle" | "spin" | "respin" | "accept" | "cancel") =>
     request<SubDrawDto>(`/api/admin/sub-picks/draws/${drawId}/${action}`, { method: "POST", body: "{}" }),

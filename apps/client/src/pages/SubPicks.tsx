@@ -3,6 +3,7 @@ import { CalendarClock, Dices, Gamepad2, History, Ticket } from "lucide-react";
 import { Link } from "react-router-dom";
 import { api } from "../api.js";
 import { Stat } from "../components/Stat.js";
+import { SubPickStats } from "../components/SubPickStats.js";
 import { Empty, ErrorMessage, Loading } from "../components/Status.js";
 import { useAsync, useCurrentUser } from "../hooks.js";
 import { formatOdds } from "../subPickLabels.js";
@@ -78,6 +79,7 @@ export function SubPicks() {
         pool={hundredsPool}
         emptyMessage="Nothing in the 100s pool yet."
       />
+      <SubPickStats />
     </section>
   );
 }

@@ -527,7 +527,7 @@ h1, h2 { margin: 0; letter-spacing: 0; }
 .panel { min-width: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; margin-bottom: 1rem; }
 .panel.narrow { max-width: 34rem; margin: 4rem auto; }
 .section-header, .maintenance-panel header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
-.section-header h2, .maintenance-panel h2 { display: inline-flex; align-items: center; gap: .5rem; }
+.section-header h2, .maintenance-panel h2, .panel > h2:has(> svg) { display: inline-flex; align-items: center; gap: .5rem; }
 .toolbar, .status { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: .75rem; }
 .status.error { border-color: var(--danger); color: #ffdede; }
 .inline-status { color: var(--accent); font-weight: 700; }
@@ -2069,6 +2069,9 @@ body:has(.wheel-overlay-frame) { background: transparent; }
   padding: 40px;
   box-sizing: border-box;
 }
+.wheel-overlay-box.is-idle { grid-template-columns: 1000px minmax(0, 1fr); }
+.wheel-overlay-box.is-idle .wheel-overlay-side { grid-column: 2; }
+.wheel-overlay-next { display: grid; gap: 14px; font-size: 1.25em; }
 .wheel-overlay-wheel .sub-wheel-canvas { width: 1000px; max-width: none; height: 1000px; }
 .wheel-overlay-side {
   display: grid;
@@ -2137,6 +2140,13 @@ body:has(.wheel-overlay-frame) { background: transparent; }
 @media (prefers-reduced-motion: reduce) {
   .wheel-overlay-list li { transition: none; }
 }
+.sub-stats { display: grid; gap: 1rem; }
+.sub-stats h3 { margin: 0 0 .5rem; }
+.sub-stats-longshot { display: flex; gap: .55rem; align-items: center; margin: 0; padding: .75rem .9rem; border: 1px solid var(--border-strong); border-left: 3px solid var(--brand-primary); border-radius: 8px; background: var(--surface-3); }
+.sub-stats-longshot svg { flex: none; color: var(--brand-warm); }
+.sub-stats-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 1rem; }
+.sub-stats-list ol { display: grid; gap: .35rem; margin: 0; padding-left: 1.4rem; }
+.sub-stats-list li span:first-child { margin-right: .5rem; }
 .sub-history-list { display: grid; gap: 1rem; }
 .sub-history-draw { display: grid; gap: .6rem; }
 .sub-history-header { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; }

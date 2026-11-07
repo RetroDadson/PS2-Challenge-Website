@@ -5,6 +5,7 @@ import { registerOpenApiSchemas, subDrawRouteSchemas } from "../openapi/schemas.
 import type { RealtimeHub } from "../realtime/hub.js";
 import type { UserRepository } from "../repositories/userRepository.js";
 import type { SubDrawService } from "../services/subDrawService.js";
+import type { SubPickStatsService } from "../services/subPickStatsService.js";
 import { auditInfo } from "../utils/audit.js";
 import { handle, routeId } from "./subPickRoutes.js";
 
@@ -131,4 +132,11 @@ export function registerSubDrawRoutes(
       })
       .catch((error: unknown) => request.log.error({ err: error, drawId }, "Failed to schedule the sub pick reveal"));
   }
+}
+
+export function registerSubPickStatsRoute(app: FastifyInstance, stats: Pick<SubPickStatsService, "stats">) {
+  registerOpenApiSchemas(app);
+  app.get("/api/sub-picks/stats", { schema: subDrawRouteSchemas.stats }, (request, reply) =>
+    handle(request, reply, "Failed to load sub pick stats", () => stats.stats())
+  );
 }

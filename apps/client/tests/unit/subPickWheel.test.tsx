@@ -244,11 +244,42 @@ describe("wheel overlay", () => {
     expect(screen.getByText("Game 4", { selector: "li strong" }).nextSibling).toHaveTextContent("Anonymous");
   });
 
-  it("stays empty with no draw, an old result or an error", async () => {
-    mockFetch({ "GET /api/sub-picks/wheel": wheel(draw({ state: "accepted", winner: result, finishedAt: "2026-01-01T00:00:00.000Z" })) });
+  it("shows when the next draw is between draws, and that a draw is due", async () => {
+    const summary = {
+      schedule: { nextGameNumber: 61, nextDrawGameNumber: 70, nextDrawKind: "10s", gamesUntilNextDraw: 9, nextHundredDrawGameNumber: 100, gamesUntilNextHundredDraw: 39 },
+      nextDrawPool: { totalEntries: 7, games: [{ gameId: 50, gameTitle: "Alpha", imageUrl: null, entries: 4, odds: 4 / 7 }] },
+      tensPool: { totalEntries: 7, games: [] },
+      hundredsPool: { totalEntries: 0, games: [] },
+      overlayMessage: "Sub!",
+      tierEntries: { tier1: 1, tier2: 2, tier3: 5 }
+    };
+    mockFetch({
+      "GET /api/sub-picks/wheel": wheel(draw({ state: "accepted", winner: result, finishedAt: "2026-01-01T00:00:00.000Z" })),
+      "GET /api/sub-picks/summary": summary
+    });
     const { unmount } = render(<WheelOverlay />);
-    await waitFor(() => expect(screen.getByTestId("wheel-overlay")).toBeEmptyDOMElement());
+    const card = await screen.findByTestId("wheel-overlay-next-draw");
+    expect(card).toHaveTextContent("Next 10s drawGame 709 games to go");
+    expect(card).toHaveTextContent("On the wheel7entries");
+    expect(card).toHaveTextContent("Top pickAlpha4 entries");
+    expect(screen.queryByTestId("sub-wheel")).not.toBeInTheDocument();
     unmount();
+
+    mockFetch({
+      "GET /api/sub-picks/wheel": wheel(null, { gameNumber: 70, kind: "10s", entryCount: 7 }),
+      "GET /api/sub-picks/summary": { ...summary, nextDrawPool: { totalEntries: 1, games: [] } }
+    });
+    const second = render(<WheelOverlay />);
+    const dueCard = await screen.findByTestId("wheel-overlay-next-draw");
+    expect(dueCard).toHaveTextContent("Draw due nowGame 70The wheel is coming up");
+    expect(dueCard).toHaveTextContent("On the wheel1entry");
+    expect(dueCard).toHaveTextContent("Top pickNo picks yetSub to add one");
+    second.unmount();
+
+    mockFetch({ "GET /api/sub-picks/wheel": wheel(null), "GET /api/sub-picks/summary": [500, {}] });
+    const third = render(<WheelOverlay />);
+    await waitFor(() => expect(screen.getByTestId("wheel-overlay")).toBeEmptyDOMElement());
+    third.unmount();
 
     mockFetch({ "GET /api/sub-picks/wheel": [500, { message: "Nope" }] });
     render(<WheelOverlay />);

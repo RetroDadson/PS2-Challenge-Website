@@ -15,6 +15,10 @@ test("anonymous visitors see the pools but must log in to pick", async ({ page }
   await expect(page.getByRole("link", { name: "Sub Picks" })).toHaveAttribute("aria-current", "page");
   await expect(page.getByText(/Tier 1 and Prime: 1 entry/)).toBeVisible();
 
+  const stats = page.getByRole("region", { name: "Stats" });
+  await expect(stats.getByText("Games Picked by Subs")).toBeVisible();
+  await expect(stats.getByText("No games have been picked by subs yet.")).toBeVisible();
+
   await page.getByRole("link", { name: "Draw History" }).click();
   await expect(page).toHaveURL(/\/sub-picks\/history$/);
   await expect(page.getByRole("heading", { name: "Draw History" })).toBeVisible();
@@ -95,6 +99,17 @@ async function signIn(context: BrowserContext, baseURL: string | undefined, user
     { name: authCookieName, value: createSessionCookie(user, cookieSecret), url: baseURL, httpOnly: true, sameSite: "Lax", secure: false }
   ]);
 }
+
+test("the wheel overlay shows when the next draw is between draws", async ({ page }) => {
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await page.goto("/wheel-overlay");
+  const card = page.getByTestId("wheel-overlay-next-draw");
+  await expect(card.getByText("Sub Pick Draw")).toBeVisible();
+  await expect(card.getByText(/^Next 10s draw$/)).toBeVisible();
+  await expect(card.getByText("Game 10")).toBeVisible();
+  await expect(page.getByTestId("sub-wheel")).toHaveCount(0);
+  await page.screenshot({ path: test.info().outputPath("wheel-overlay-next-draw.png") });
+});
 
 test("the sub picks overlay renders on a transparent background with live numbers", async ({ page }) => {
   await page.setViewportSize({ width: 1100, height: 400 });

@@ -1,5 +1,5 @@
 import type { SubEntryDto } from "@ps2-challenge/shared";
-import { Dices, ListChecks, Ticket, Trophy } from "lucide-react";
+import { Dices, History, ListChecks, Ticket, Trophy } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api.js";
@@ -59,6 +59,7 @@ export function SubPicksMine() {
         <Stat tone="challenge" icon={Ticket} label="Entries Earned" value={stats.entriesEarned} />
         <Stat tone="progress" icon={ListChecks} label="Picks Made" value={stats.picksMade} />
         <Stat tone="completed" icon={Trophy} label="Wins" value={stats.wins} />
+        <Stat tone="deaths-most" icon={History} label="Draws Entered" value={stats.drawsEntered} />
         <Stat tone="remaining-games" icon={Dices} label="Chance in the Next Draw" value={formatOdds(stats.nextDrawOdds)} />
       </div>
 

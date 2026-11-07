@@ -27,7 +27,7 @@ import { registerHealthRoutes } from "./routes/healthRoutes.js";
 import { registerEventSubAdminRoutes } from "./routes/eventSubAdminRoutes.js";
 import { registerEventSubRoutes } from "./routes/eventSubRoutes.js";
 import { registerPublicSiteRoutes } from "./routes/publicSiteRoutes.js";
-import { registerSubDrawRoutes } from "./routes/subDrawRoutes.js";
+import { registerSubDrawRoutes, registerSubPickStatsRoute } from "./routes/subDrawRoutes.js";
 import { registerSubPickAdminRoutes } from "./routes/subPickAdminRoutes.js";
 import { registerSubPickRoutes } from "./routes/subPickRoutes.js";
 import { registerTwitchRoutes } from "./routes/twitchRoutes.js";
@@ -39,6 +39,7 @@ import { HowLongToBeatRefreshService, type HowLongToBeatDueRefreshResult } from 
 import { EventSubAdminService } from "./services/eventSubAdminService.js";
 import { EventSubService } from "./services/eventSubService.js";
 import { SubDrawService } from "./services/subDrawService.js";
+import { SubPickStatsService } from "./services/subPickStatsService.js";
 import { SubPickService } from "./services/subPickService.js";
 import { TwitchApiClient, type TwitchUserLookup } from "./services/twitchApiClient.js";
 import { TwitchStreamStatsService } from "./services/twitchStreamStatsService.js";
@@ -242,6 +243,7 @@ export async function buildApp(config: AppConfig, dependencies: AppDependencies 
   registerSubPickRoutes(app, subPickService, userRepository, config, realtimeHub);
   registerSubPickAdminRoutes(app, subPickService, twitchUserLookup, userRepository, config, realtimeHub);
   registerSubDrawRoutes(app, subDrawService, userRepository, config, realtimeHub);
+  registerSubPickStatsRoute(app, new SubPickStatsService(dbClient.db, subDrawService, gameService));
   await registerEventSubRoutes(app, eventSubService, config, realtimeHub);
   registerEventSubAdminRoutes(app, eventSubAdminService, eventSubService, userRepository, config, realtimeHub);
   await registerPublicSiteRoutes(app, config);
