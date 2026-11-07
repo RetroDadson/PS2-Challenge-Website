@@ -5,6 +5,7 @@ import pg from "pg";
 import { createKyselyFromPool } from "../src/db/kysely.js";
 import { migrateDatabase } from "../src/db/migrate.js";
 import { up as addHowLongToBeatSyncState } from "../src/db/migrations/005_add_howlongtobeat_sync_state.js";
+import { POSTGRES_TEST_IMAGE } from "./helpers/postgresImage.js";
 
 const { Pool } = pg;
 const expectedMigrationRecords = [
@@ -23,7 +24,7 @@ describe("database migrations", () => {
   let connectionString: string;
 
   beforeAll(async () => {
-    container = await new PostgreSqlContainer("postgres:16-alpine").start();
+    container = await new PostgreSqlContainer(POSTGRES_TEST_IMAGE).start();
     connectionString = container.getConnectionUri();
   }, 120_000);
 

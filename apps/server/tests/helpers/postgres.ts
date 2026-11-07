@@ -2,6 +2,7 @@ import { PostgreSqlContainer } from "@testcontainers/postgresql";
 import pg from "pg";
 import { migrateDatabase } from "../../src/db/migrate.js";
 import { hashApiKey } from "../../src/repositories/userRepository.js";
+import { POSTGRES_TEST_IMAGE } from "./postgresImage.js";
 
 const { Pool } = pg;
 
@@ -13,7 +14,7 @@ export type IntegrationDatabase = {
 };
 
 export async function startIntegrationDatabase(): Promise<IntegrationDatabase> {
-  const container = await new PostgreSqlContainer("postgres:16-alpine").start();
+  const container = await new PostgreSqlContainer(POSTGRES_TEST_IMAGE).start();
   const connectionString = container.getConnectionUri();
   await migrateDatabase(connectionString);
 

@@ -107,6 +107,8 @@ npm run test:e2e
 
 Integration tests use Testcontainers and need Docker access. Playwright tests need browser dependencies installed for the browsers being tested.
 
+Tests and Docker Compose run the same PostgreSQL version as production (Azure Database for PostgreSQL, currently 17.11). Renovate does not update this image because Azure controls the production version. When Azure moves to a new version, update `apps/server/tests/helpers/postgresImage.ts`, `docker/docker-compose.yml`, and `docker/docker-compose.dev.yml` together.
+
 ## Realtime Updates
 
 Realtime updates use WebSocket endpoints:

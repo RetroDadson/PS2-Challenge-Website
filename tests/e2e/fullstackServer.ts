@@ -5,6 +5,7 @@ import { migrateDatabase } from "../../apps/server/src/db/migrate.js";
 import type { Database } from "../../apps/server/src/db/kysely.js";
 import { hashApiKey } from "../../apps/server/src/repositories/userRepository.js";
 import { buildApp } from "../../apps/server/src/server.js";
+import { POSTGRES_TEST_IMAGE } from "../../apps/server/tests/helpers/postgresImage.js";
 
 const port = Number.parseInt(process.env.PLAYWRIGHT_FULLSTACK_PORT ?? "4173", 10);
 const cookieSecret = process.env.PLAYWRIGHT_COOKIE_SECRET ?? "playwright-cookie-secret";
@@ -14,7 +15,7 @@ let container: Awaited<ReturnType<PostgreSqlContainer["start"]>> | undefined;
 let app: Awaited<ReturnType<typeof buildApp>> | undefined;
 
 async function main() {
-  container = await new PostgreSqlContainer("postgres:16-alpine").start();
+  container = await new PostgreSqlContainer(POSTGRES_TEST_IMAGE).start();
   const connectionString = container.getConnectionUri();
 
   await migrateDatabase(connectionString);
