@@ -10,9 +10,26 @@ import { POSTGRES_TEST_IMAGE } from "../../apps/server/tests/helpers/postgresIma
 const port = Number.parseInt(process.env.PLAYWRIGHT_FULLSTACK_PORT ?? "4173", 10);
 const cookieSecret = process.env.PLAYWRIGHT_COOKIE_SECRET ?? "playwright-cookie-secret";
 
-const playwrightSub = { twitchUserId: "424242", login: "playwrightsub", displayName: "PlaywrightSub", profileImageUrl: null };
-const twitchUserLookup = {
-  getUserByLogin: async (login: string) => (login.toLocaleLowerCase("en-GB") === playwrightSub.login ? playwrightSub : null)
+const twitchUsers = [
+  { twitchUserId: "424242", login: "playwrightsub", displayName: "PlaywrightSub", profileImageUrl: null },
+  { twitchUserId: "500", login: "retrodadson", displayName: "RetroDadson", profileImageUrl: null }
+];
+const fakeSubscriptions: Array<Record<string, unknown>> = [];
+const twitchApi = {
+  getUserByLogin: async (login: string) => twitchUsers.find((user) => user.login === login.toLocaleLowerCase("en-GB")) ?? null,
+  get: async <T>() => ({ data: fakeSubscriptions }) as T,
+  post: async <T>(_url: URL, body: { type: string; condition: unknown; transport: { callback: string } }) => {
+    fakeSubscriptions.push({
+      id: `playwright-${fakeSubscriptions.length + 1}`,
+      type: body.type,
+      status: "enabled",
+      created_at: new Date().toISOString(),
+      condition: body.condition,
+      transport: { method: "webhook", callback: body.transport.callback }
+    });
+    return {} as T;
+  },
+  delete: async () => undefined
 };
 
 let dbClient: DbClient | undefined;
@@ -40,7 +57,7 @@ async function main() {
       logLevel: "silent",
       trustProxy: true
     },
-    { dbClient, twitchUserLookup }
+    { dbClient, twitchApi }
   );
 
   await app.listen({ port, host: "127.0.0.1" });
@@ -74,8 +91,8 @@ async function seedDatabase(client: DbClient) {
         api_key: hashApiKey("playwright-user-api-key")
       },
       {
-        twitch_id: playwrightSub.twitchUserId,
-        twitch_username: playwrightSub.displayName,
+        twitch_id: "424242",
+        twitch_username: "PlaywrightSub",
         profile_image_url: null,
         role_id: userRole.id,
         created_at: "2024-01-03T10:00:00",

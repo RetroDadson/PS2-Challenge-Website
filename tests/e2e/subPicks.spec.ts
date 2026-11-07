@@ -1,5 +1,6 @@
 import type { BrowserContext } from "@playwright/test";
 import { authCookieName, createSessionCookie, type SessionUser } from "../../apps/server/src/auth/session.js";
+import { eventSubSecret, eventSubSignature } from "../../apps/server/src/services/eventSubSignature.js";
 import { expect, test } from "./test.js";
 
 const cookieSecret = process.env.PLAYWRIGHT_COOKIE_SECRET ?? "playwright-cookie-secret";
@@ -101,4 +102,80 @@ test("the sub picks overlay renders on a transparent background with live number
   if (process.env.SUB_PICKS_OVERLAY_SCREENSHOT) {
     await page.screenshot({ path: process.env.SUB_PICKS_OVERLAY_SCREENSHOT, omitBackground: true });
   }
+});
+
+test("a signed Twitch EventSub gift creates entries for the gifter", async ({ page, baseURL }) => {
+  const body = JSON.stringify({
+    subscription: { id: "e2e-sub", type: "channel.subscription.gift", version: "1", status: "enabled" },
+    event: { user_id: "77001", user_login: "e2egifter", user_name: "E2EGifter", tier: "1000", total: 3, is_anonymous: false }
+  });
+  const messageId = "e2e-gift-message";
+  const timestamp = new Date().toISOString();
+  const headers = {
+    "content-type": "application/json",
+    "twitch-eventsub-message-id": messageId,
+    "twitch-eventsub-message-timestamp": timestamp,
+    "twitch-eventsub-message-type": "notification",
+    "twitch-eventsub-message-signature": eventSubSignature(messageId, timestamp, Buffer.from(body), eventSubSecret("playwright-secret")!)
+  };
+  expect((await page.request.post("/api/eventsub/webhook", { data: body, headers })).status()).toBe(204);
+  expect((await page.request.post("/api/eventsub/webhook", { data: body, headers })).status()).toBe(204);
+
+  await signIn(page.context(), baseURL, admin);
+  await page.goto("/admin/sub-picks");
+  await page.getByRole("button", { name: "E2EGifter" }).click();
+  await expect(page.getByRole("article", { name: /for E2EGifter/ })).toContainText("Tier 1 · Gifted subs ×3 · 3 entries");
+  await expect(page.getByRole("article", { name: /for E2EGifter/ })).toContainText("From Twitch");
+});
+
+test("an admin creates the Twitch subscriptions from the Twitch tab", async ({ page, baseURL }) => {
+  await signIn(page.context(), baseURL, admin);
+  await page.goto("/admin/sub-picks?tab=twitch");
+  await expect(page.getByRole("tab", { name: "Twitch", selected: true })).toBeVisible();
+  await expect(page.getByText("retrodadson (Twitch ID 500)")).toBeVisible();
+  await expect(page.getByText(`${baseURL}/api/eventsub/webhook`)).toBeVisible();
+  await expect(page.getByRole("link", { name: "Authorise Subscriptions" })).toHaveAttribute("href", "/api/admin/eventsub/authorize");
+  await expect(page.getByText("Missing", { exact: true })).toHaveCount(3);
+
+  await page.getByRole("button", { name: "Create or Repair Subscriptions" }).click();
+  await expect(page.getByText(/^Created 3\./)).toBeVisible();
+  await expect(page.getByText("Active", { exact: true })).toHaveCount(3);
+
+  await page.getByRole("button", { name: "Create or Repair Subscriptions" }).click();
+  await expect(page.getByText("All three subscriptions are already in place.")).toBeVisible();
+});
+
+test("an admin gives an anonymous gift from the review queue to a viewer", async ({ page, baseURL }) => {
+  const body = JSON.stringify({
+    subscription: { id: "e2e-sub", type: "channel.subscription.gift", version: "1", status: "enabled" },
+    event: { user_id: null, user_login: null, user_name: null, tier: "2000", total: 2, is_anonymous: true }
+  });
+  const messageId = "e2e-anonymous-gift";
+  const timestamp = new Date().toISOString();
+  const response = await page.request.post("/api/eventsub/webhook", {
+    data: body,
+    headers: {
+      "content-type": "application/json",
+      "twitch-eventsub-message-id": messageId,
+      "twitch-eventsub-message-timestamp": timestamp,
+      "twitch-eventsub-message-type": "notification",
+      "twitch-eventsub-message-signature": eventSubSignature(messageId, timestamp, Buffer.from(body), eventSubSecret("playwright-secret")!)
+    }
+  });
+  expect(response.status()).toBe(204);
+
+  await signIn(page.context(), baseURL, admin);
+  await page.goto("/admin/sub-picks");
+  await page.getByRole("tab", { name: "Twitch (1 to review)" }).click();
+  const gift = page.getByRole("listitem", { name: "Anonymous gift of 2 Tier 2 subs" });
+  await gift.getByRole("button", { name: "Give to a Viewer" }).click();
+  await gift.getByLabel("Twitch username").fill("PlaywrightSub");
+  await gift.getByRole("button", { name: "Look Up" }).click();
+  await gift.getByRole("button", { name: "Give to PlaywrightSub" }).click();
+  await expect(page.getByText("Nothing to review.")).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Twitch", exact: true })).toBeVisible();
+
+  await page.getByRole("tab", { name: "Entries" }).click();
+  await page.getByRole("button", { name: "PlaywrightSub" }).click();
+  await expect(page.getByRole("article", { name: /for PlaywrightSub/ }).filter({ hasText: "Anonymous gift given by PlaywrightAdmin" })).toContainText("Tier 2 · Gifted subs ×2 · 4 entries");
 });

@@ -8,6 +8,7 @@ type Timestamp = ColumnType<Date, Date | string | undefined, Date | string>;
 type NullableTimestamp = ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
 type DateOnly = ColumnType<string, string | Date, string | Date | null>;
 type Interval = ColumnType<unknown, unknown, unknown>;
+export type EventSubMessageStatus = "processed" | "ignored" | "failed" | "needs_review" | "resolved" | "dismissed";
 
 export interface Database {
   alternate_titles: {
@@ -31,6 +32,27 @@ export interface Database {
     game_id: number;
     vote_count: number;
     game_number: number;
+  };
+  eventsub_messages: {
+    message_id: string;
+    message_type: "notification" | "revocation";
+    subscription_type: string;
+    status: EventSubMessageStatus;
+    payload: JSONColumnType<Record<string, unknown> | null, Record<string, unknown> | null | undefined, Record<string, unknown> | null>;
+    error: string | null;
+    grant_id: number | null;
+    received_at: Timestamp;
+    resolved_by_user_id: number | null;
+    resolved_at: NullableTimestamp;
+  };
+  eventsub_state: {
+    id: number;
+    broadcaster_user_id: string | null;
+    authorized_at: NullableTimestamp;
+    authorized_by_user_id: number | null;
+    revoked_at: NullableTimestamp;
+    revoked_reason: string | null;
+    secret_fingerprint: string | null;
   };
   excluded_games: {
     exclusion_id: Generated<number>;

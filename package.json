@@ -25,7 +25,8 @@
     "start": "npm run start -w @ps2-challenge/server",
     "import:serials": "tsx scripts-ts/import-serial-numbers.ts",
     "import:alternate-titles": "tsx scripts-ts/import-alternate-titles.ts",
-    "import:wiki-serials": "tsx scripts-ts/import-wiki-serials.ts"
+    "import:wiki-serials": "tsx scripts-ts/import-wiki-serials.ts",
+    "eventsub:secret": "tsx scripts-ts/eventsub-secret.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.61.1",

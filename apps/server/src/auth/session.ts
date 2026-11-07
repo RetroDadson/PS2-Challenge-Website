@@ -21,6 +21,8 @@ export type OAuthState = {
   returnUrl?: string;
   redirectUri?: string;
   nonce: string;
+  purpose?: "eventsub-authorize";
+  adminTwitchId?: string;
 };
 
 function base64UrlEncode(value: string): string {

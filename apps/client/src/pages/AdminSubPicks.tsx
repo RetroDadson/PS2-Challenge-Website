@@ -29,11 +29,12 @@ import { useMemo, useState } from "react";
 import { api } from "../api.js";
 import { GamePicker } from "../components/GamePicker.js";
 import { Stat } from "../components/Stat.js";
+import { TwitchTab } from "./AdminSubPicksTwitch.js";
 import { Empty, ErrorMessage, Loading } from "../components/Status.js";
 import { useAsync } from "../hooks.js";
 import { entryStatusClass, entryStatusLabel, grantTypeLabels, tierLabels } from "../subPickLabels.js";
 
-type Tab = "entries" | "settings" | "audit";
+type Tab = "entries" | "twitch" | "settings" | "audit";
 type StatusMessage = { kind: "success" | "error"; message: string };
 type GrantChanges = { tier: SubTier; grantType: SubGrantType; giftCount: number; entryCount: number; notes: string | null };
 
@@ -51,13 +52,17 @@ type ViewerSummary = {
 
 const tabs: Array<{ id: Tab; label: string }> = [
   { id: "entries", label: "Entries" },
+  { id: "twitch", label: "Twitch" },
   { id: "settings", label: "Settings" },
   { id: "audit", label: "Audit Log" }
 ];
 
 export function AdminSubPicks() {
   const settings = useAsync(() => api.subPickSettings(), []);
-  const [tab, setTab] = useState<Tab>("entries");
+  const review = useAsync(() => api.eventSubReview(), []);
+  const reviewCount = review.data?.length ?? 0;
+  const [params] = useState(() => new URLSearchParams(globalThis.location.search));
+  const [tab, setTab] = useState<Tab>(() => initialTab(params.get("tab")));
 
   if (settings.loading) return <Loading />;
   if (settings.error === "Forbidden" || settings.error === "Unauthorized") {
@@ -93,7 +98,7 @@ export function AdminSubPicks() {
             className={tab === item.id ? undefined : "secondary"}
             onClick={() => setTab(item.id)}
           >
-            {item.label}
+            {item.id === "twitch" && reviewCount > 0 ? `${item.label} (${reviewCount} to review)` : item.label}
           </button>
         ))}
       </div>
@@ -101,6 +106,10 @@ export function AdminSubPicks() {
       <div role="tabpanel" id={`sub-picks-panel-${tab}`} aria-labelledby={`sub-picks-tab-${tab}`}>
         {tab === "entries" ? <EntriesTab settings={settings.data} /> : null}
         {tab === "settings" ? <SettingsTab settings={settings.data} onSaved={(next) => settings.setData(next)} /> : null}
+        {tab === "twitch" ? <TwitchTab
+            authorisationResult={params.get("eventsub")}
+            review={{ items: review.data ?? [], loading: review.loading, error: review.error, reload: () => review.reload() }}
+          /> : null}
         {tab === "audit" ? <AuditTab /> : null}
       </div>
     </section>
@@ -557,6 +566,10 @@ function AuditTab() {
       ) : null}
     </section>
   );
+}
+
+function initialTab(value: string | null): Tab {
+  return tabs.some((item) => item.id === value) ? (value as Tab) : "entries";
 }
 
 function needsAttention(entry: SubEntryDto): boolean {

@@ -49,6 +49,19 @@ Register callback URLs for each public host that should support login:
 https://<host>/api/auth/callback
 ```
 
+## Twitch EventSub
+
+The webhook is `POST https://<host>/api/eventsub/webhook`. Twitch only delivers to HTTPS on port 443, so it can't reach a local machine; use the Twitch CLI locally (see the development guide).
+
+Every message is checked with Twitch's HMAC-SHA256 signature, using a webhook secret the app works out from `TWITCH_CLIENT_SECRET` (there's no separate setting), and anything older than 10 minutes is rejected. Repeated deliveries are ignored by message ID. New subs, resubs shared in chat and gifted subs create entries; gift recipients don't, and anonymous gifts wait in the admin review queue.
+
+One-off setup, from Admin, Sub Picks, Twitch:
+
+1. In the same browser, log in to Twitch as the channel account, then click "Authorise Subscriptions" and accept the `channel:read:subscriptions` permission. This uses the existing `/api/auth/callback` redirect, so no new Twitch redirect URL is needed, and it doesn't change your site login.
+2. Click "Create or Repair Subscriptions". The three subscriptions should show as Active within a few seconds.
+
+If Twitch revokes access (for example after a password change), the Twitch tab shows a warning; repeat both steps. If you rotate the Twitch client secret, the Twitch tab warns that the subscriptions use the old one; click "Create or Repair Subscriptions" to replace them. Moving to a new host also needs step 2, which replaces subscriptions pointing at the old webhook.
+
 ## Docker
 
 Build the runtime image:
