@@ -83,6 +83,7 @@ describe("SubPicksMine page", () => {
 
     expect(await screen.findByText("Entries Earned")).toBeInTheDocument();
     expect(screen.getByText("50%")).toBeInTheDocument();
+    expect(screen.getByText("Draws Entered").parentElement).toHaveTextContent("3");
     expect(screen.getByText("Needs a pick")).toBeInTheDocument();
     expect(screen.getByText("In the 100s pool")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Change game for entry 3" })).not.toBeInTheDocument();
@@ -187,5 +188,5 @@ function summary(overrides: Partial<SubPicksSummaryDto> = {}): SubPicksSummaryDt
 }
 
 function mySubPicks(entries: SubEntryDto[]): MySubPicksDto {
-  return { entries, stats: { entriesEarned: entries.length, picksMade: entries.filter((item) => item.gameId).length, wins: 0, nextDrawOdds: 0.5 } };
+  return { entries, stats: { entriesEarned: entries.length, picksMade: entries.filter((item) => item.gameId).length, wins: 0, drawsEntered: 3, nextDrawOdds: 0.5 } };
 }

@@ -5,7 +5,9 @@ import { createDbClient } from "../src/db/client.js";
 import { createKyselyFromPool } from "../src/db/kysely.js";
 import { RealtimeHub } from "../src/realtime/hub.js";
 import { buildApp } from "../src/server.js";
+import { GameService } from "../src/services/gameService.js";
 import { SubDrawService } from "../src/services/subDrawService.js";
+import { SubPickStatsService } from "../src/services/subPickStatsService.js";
 import { SubPickService } from "../src/services/subPickService.js";
 import { seedGame, seedUser, startIntegrationDatabase, type IntegrationDatabase } from "./helpers/postgres.js";
 
@@ -347,6 +349,62 @@ describe("sub pick draws", () => {
     expect((await draws.history()).map((item) => item.id)).toEqual([draw.id, cancelledDraw.id]);
   });
 
+  it("works out the stats from draws, picks and how each sub-picked game went", async () => {
+    const stats = new SubPickStatsService(createKyselyFromPool(db.pool), draws, new GameService(db.pool));
+    expect(await stats.stats()).toEqual({
+      totals: { draws: 0, cancelledDraws: 0, spins: 0, respins: 0, entries: 0, viewers: 0 },
+      mostPickedNow: [],
+      mostPickedAllTime: [],
+      longestShot: null,
+      subPickedGames: []
+    });
+    await seedTensDraw();
+    await seedEntry(null, "NoPick");
+    const voided = await seedEntry(51, "Voided");
+    await db.pool.query("UPDATE sub_entries SET status = 'voided' WHERE entry_id = $1", [voided]);
+    expect((await stats.stats()).mostPickedNow).toEqual([
+      { gameId: 50, gameTitle: "Alpha", entries: 2 },
+      { gameId: 51, gameTitle: "Beta", entries: 1 }
+    ]);
+
+    const cancelled = await draws.open(admin);
+    await draws.cancel(admin, cancelled.id);
+    const first = await draws.open(admin);
+    afterReveal(await draws.spin(admin, first.id));
+    await draws.respin(admin, first.id);
+    afterReveal(await draws.spin(admin, first.id));
+    const { draw: firstResult } = await draws.accept(admin, first.id);
+    await db.pool.query("UPDATE progress SET date_finished = '2026-11-08', completion_time = '5 hours' WHERE progress_id = 10");
+
+    await db.pool.query(
+      `INSERT INTO games (game_id, title, developer, publisher, region_first_released_in, released_in_eu_or_na)
+       SELECT 1000 + n, 'Later ' || n, 'D', 'P', 'NA', true FROM generate_series(11, 19) AS n`
+    );
+    await db.pool.query("INSERT INTO progress (progress_id, game_id, date_started, platform) SELECT n, 1000 + n, '2024-01-01', 'Physical' FROM generate_series(11, 19) AS n");
+    await seedOwnedGame(60, "Zeta");
+    await seedEntry(60, "ViewerOne");
+    for (const viewer of ["CrowdOne", "CrowdTwo", "CrowdThree"]) await seedEntry(60, viewer);
+    const second = await draws.open(admin);
+    afterReveal(await draws.spin(admin, second.id));
+    const { draw: secondResult } = await draws.accept(admin, second.id);
+
+    const result = await stats.stats();
+
+    expect(result.totals).toEqual({ draws: 2, cancelledDraws: 1, spins: 3, respins: 1, entries: 8, viewers: 7 });
+    expect(result.subPickedGames.map((game) => [game.gameNumber, game.gameTitle, game.spins])).toEqual([
+      [20, "Zeta", 1],
+      [10, firstResult.winner!.gameTitle, 2]
+    ]);
+    const tens = result.subPickedGames.find((game) => game.gameNumber === 10)!;
+    expect(tens).toMatchObject({ kind: "10s", totalEntries: 3, odds: firstResult.winner!.odds, progress: { progressId: 10, dateFinished: "2026-11-08", completionTime: "05:00:00" } });
+    expect(result.subPickedGames[0]).toMatchObject({ gameId: 60, odds: secondResult.winner!.odds, progress: { progressId: 20, gameTitle: "Zeta" } });
+    expect(result.longestShot?.odds).toBe(Math.min(firstResult.winner!.odds, secondResult.winner!.odds));
+    expect(result.mostPickedAllTime[0]).toEqual({ gameId: 60, gameTitle: "Zeta", entries: 4 });
+    expect(result.mostPickedAllTime.some((game) => game.gameTitle === "Beta" && game.entries === 1)).toBe(true);
+    expect((await subPicks.myEntries("id-ViewerOne")).stats.drawsEntered).toBe(2);
+    expect((await subPicks.myEntries("id-NoPick")).stats.drawsEntered).toBe(0);
+  });
+
   it("refuses to spin a wheel whose picks have all become invalid", async () => {
     await seedPlayedGames(9);
     await seedOwnedGame(50, "Alpha");
@@ -412,6 +470,8 @@ describe("sub pick draws", () => {
       expect(hub.games).toBe(1);
       expect(hub.wheel).toBeGreaterThanOrEqual(6);
 
+      const statsResponse = await app.inject({ method: "GET", url: "/api/sub-picks/stats" });
+      expect(statsResponse.json()).toMatchObject({ totals: { draws: 1, spins: 2, respins: 1 }, subPickedGames: [{ gameNumber: 10, spins: 2 }] });
       const history = await app.inject({ method: "GET", url: "/api/sub-picks/history" });
       expect(history.statusCode).toBe(200);
       expect(history.json()).toMatchObject([{ id: drawId, status: "accepted", spins: [{ decision: "respun" }, { decision: "accepted" }] }]);

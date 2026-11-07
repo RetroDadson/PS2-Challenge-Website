@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { gameProgressSchema } from "./games.js";
 import { subDrawDueSchema, subDrawKindSchema, subEntryStatusSchema } from "./subPicks.js";
 
 export const subDrawStatusSchema = z.enum(["ready", "spun", "accepted", "cancelled"]);
@@ -91,6 +92,41 @@ export const subDrawHistorySchema = z.object({
   spins: z.array(subDrawHistorySpinSchema)
 });
 
+export const subPickGameCountSchema = z.object({
+  gameId: z.number().int().positive(),
+  gameTitle: z.string(),
+  entries: z.number().int().positive()
+});
+
+export const subPickedGameSchema = z.object({
+  drawId: z.number().int().positive(),
+  gameNumber: z.number().int().positive(),
+  kind: subDrawKindSchema,
+  gameId: z.number().int().positive().nullable(),
+  gameTitle: z.string(),
+  twitchDisplayName: z.string().nullable(),
+  entries: z.number().int().positive(),
+  totalEntries: z.number().int().min(0),
+  odds: z.number().min(0).max(1),
+  spins: z.number().int().min(0),
+  progress: gameProgressSchema.nullable()
+});
+
+export const subPickStatsSchema = z.object({
+  totals: z.object({
+    draws: z.number().int().min(0),
+    cancelledDraws: z.number().int().min(0),
+    spins: z.number().int().min(0),
+    respins: z.number().int().min(0),
+    entries: z.number().int().min(0),
+    viewers: z.number().int().min(0)
+  }),
+  mostPickedNow: z.array(subPickGameCountSchema),
+  mostPickedAllTime: z.array(subPickGameCountSchema),
+  longestShot: subPickedGameSchema.nullable(),
+  subPickedGames: z.array(subPickedGameSchema)
+});
+
 export type SubDrawStatus = z.infer<typeof subDrawStatusSchema>;
 export type SubDrawState = z.infer<typeof subDrawStateSchema>;
 export type SubDrawOutcome = z.infer<typeof subDrawOutcomeSchema>;
@@ -104,3 +140,6 @@ export type SubWheelDto = z.infer<typeof subWheelSchema>;
 export type SubDrawHistoryEntryDto = z.infer<typeof subDrawHistoryEntrySchema>;
 export type SubDrawHistorySpinDto = z.infer<typeof subDrawHistorySpinSchema>;
 export type SubDrawHistoryDto = z.infer<typeof subDrawHistorySchema>;
+export type SubPickGameCountDto = z.infer<typeof subPickGameCountSchema>;
+export type SubPickedGameDto = z.infer<typeof subPickedGameSchema>;
+export type SubPickStatsDto = z.infer<typeof subPickStatsSchema>;

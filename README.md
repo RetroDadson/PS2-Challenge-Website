@@ -12,6 +12,16 @@ A TypeScript web app for tracking progress through the PS2 challenge, managing t
 - **WebSocket hubs** at `/votesHub`, `/gamesHub`, `/subPicksHub` and `/wheelHub` for realtime updates
 - **Twitch OAuth** for authentication and `.PS2Challenge.Auth` cookies
 
+## Sub-Picked Games
+
+Every 10th game is picked by Twitch subs on a wheel, and every 100th game is a bigger draw from picks that lost along the way.
+
+- Subs earn entries automatically through Twitch EventSub, or an admin adds them by hand. Each entry is one pick and one slice on the wheel.
+- Viewers log in with Twitch and pick games at `/sub-picks/mine`. The public page `/sub-picks` shows the pools, odds and stats, and `/sub-picks/history` lists every finished draw.
+- When a draw is due, starting a game normally is blocked until an admin runs the draw from Admin, Sub Picks, Wheel (or chooses to start the game anyway, which is audit-logged).
+- The server picks the winner and keeps it hidden until the wheel stops. Admins can accept the result, which starts the game, respin, or cancel.
+- `/wheel-overlay` shows the wheel live on stream (and the next draw between draws), and `/sub-picks-overlay` is an explainer card that can be timed to pop up.
+
 ## Quick Start
 
 Prerequisites:

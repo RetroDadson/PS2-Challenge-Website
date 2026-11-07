@@ -62,6 +62,19 @@ One-off setup, from Admin, Sub Picks, Twitch:
 
 If Twitch revokes access (for example after a password change), the Twitch tab shows a warning; repeat both steps. If you rotate the Twitch client secret, the Twitch tab warns that the subscriptions use the old one; click "Create or Repair Subscriptions" to replace them. Moving to a new host also needs step 2, which replaces subscriptions pointing at the old webhook.
 
+## Sub Pick Draws
+
+Game numbers are now always the highest game number plus one, so a failed save can't leave a gap and every 10th game lines up with its draw. Gaps from before this change are left as they are.
+
+When the next game is a 10th or 100th game and subs have valid picks waiting, the progress modal and the vote archive refuse to start a game and offer "Start Anyway" instead. Run the draw from Admin, Sub Picks, Wheel. Accepting the result starts the winning game as that game number.
+
+Stream overlays for OBS (browser sources, transparent background):
+
+- `/wheel-overlay`: set the source to 1920x1080. It shows the wheel, the slice under the pointer and every game's entries while a draw is open, and the accepted result for 5 minutes afterwards. Between draws it shows a card with the next draw's game number, how many entries are on the wheel and the top pick.
+- `/sub-picks-overlay`: the explainer card. Build the link with timing options under Admin, Stream Overlays.
+
+Spin length is set on the Wheel tab (or Settings) and applies to the next spin.
+
 ## Docker
 
 Build the runtime image:

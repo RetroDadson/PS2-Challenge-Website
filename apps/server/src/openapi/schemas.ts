@@ -434,6 +434,46 @@ const openApiSchemas = [
     }
   },
   {
+    $id: "SubPickGameCount",
+    type: "object",
+    required: ["gameId", "gameTitle", "entries"],
+    properties: { gameId: positiveId, gameTitle: { type: "string" }, entries: positiveId }
+  },
+  {
+    $id: "SubPickedGame",
+    type: "object",
+    required: ["drawId", "gameNumber", "kind", "gameId", "gameTitle", "twitchDisplayName", "entries", "totalEntries", "odds", "spins", "progress"],
+    properties: {
+      drawId: positiveId,
+      gameNumber: positiveId,
+      kind: { type: "string", enum: ["10s", "100s"] },
+      gameId: { ...positiveId, nullable: true },
+      gameTitle: { type: "string" },
+      twitchDisplayName: stringNullable,
+      entries: positiveId,
+      totalEntries: count,
+      odds: { type: "number", minimum: 0, maximum: 1 },
+      spins: count,
+      progress: { ...ref("GameProgress"), nullable: true }
+    }
+  },
+  {
+    $id: "SubPickStats",
+    type: "object",
+    required: ["totals", "mostPickedNow", "mostPickedAllTime", "longestShot", "subPickedGames"],
+    properties: {
+      totals: {
+        type: "object",
+        required: ["draws", "cancelledDraws", "spins", "respins", "entries", "viewers"],
+        properties: { draws: count, cancelledDraws: count, spins: count, respins: count, entries: count, viewers: count }
+      },
+      mostPickedNow: arrayOf("SubPickGameCount"),
+      mostPickedAllTime: arrayOf("SubPickGameCount"),
+      longestShot: { ...ref("SubPickedGame"), nullable: true },
+      subPickedGames: arrayOf("SubPickedGame")
+    }
+  },
+  {
     $id: "SubWheel",
     type: "object",
     required: ["draw", "due", "spinDurationSeconds", "serverNow"],
@@ -457,8 +497,8 @@ const openApiSchemas = [
       entries: arrayOf("SubEntry"),
       stats: {
         type: "object",
-        required: ["entriesEarned", "picksMade", "wins", "nextDrawOdds"],
-        properties: { entriesEarned: count, picksMade: count, wins: count, nextDrawOdds: { type: "number" } }
+        required: ["entriesEarned", "picksMade", "wins", "drawsEntered", "nextDrawOdds"],
+        properties: { entriesEarned: count, picksMade: count, wins: count, drawsEntered: count, nextDrawOdds: { type: "number" } }
       }
     }
   },
@@ -1328,6 +1368,13 @@ export const subDrawRouteSchemas = {
     description: "Accepted and cancelled draws, newest first, with every spin and what happened to each entry. Open draws are left out so no result shows early.",
     operationId: "listSubDrawHistory",
     response: { 200: arrayOf("SubDrawHistory"), ...serverError }
+  }),
+  stats: route({
+    tags: ["Sub Picks"],
+    summary: "Get sub pick stats",
+    description: "Totals, the most picked games now and of all time, the biggest long shot, and how every sub-picked game went.",
+    operationId: "getSubPickStats",
+    response: { 200: ref("SubPickStats"), ...serverError }
   }),
   open: route({
     tags: ["Sub Picks Admin"],

@@ -1,6 +1,6 @@
 import { Dices, Skull } from "lucide-react";
 import { api } from "../api.js";
-import type { SubDrawDto } from "@ps2-challenge/shared";
+import type { SubDrawDto, SubDrawDueDto } from "@ps2-challenge/shared";
 import { useWheel, Wheel, wheelLabel, WheelReadout } from "../components/Wheel.js";
 import { formatOdds } from "../subPickLabels.js";
 import { useAsync, useRealtime } from "../hooks.js";
@@ -170,6 +170,7 @@ export function WheelOverlay() {
   return (
     <div className="stream-overlay wheel-overlay-frame" data-testid="wheel-overlay">
       {wheel.error ? <OverlayMessage>Error loading the wheel</OverlayMessage> : null}
+      {!visible && wheel.data && !wheel.error ? <NextDrawCard due={wheel.data.due} /> : null}
       {draw && visible ? (
         <div className="wheel-overlay-box">
           <div className="wheel-overlay-wheel">
@@ -182,6 +183,34 @@ export function WheelOverlay() {
           </div>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function NextDrawCard({ due }: Readonly<{ due: SubDrawDueDto | null }>) {
+  const summary = useAsync(() => api.subPicksSummary(), []);
+  const reload = () => void summary.reload();
+  useRealtime("/subPicksHub", reload);
+  useRealtime("/gamesHub", reload);
+  const data = summary.data;
+  if (!data) return null;
+  const { schedule, nextDrawPool } = data;
+  const topPick = nextDrawPool.games[0];
+
+  return (
+    <div className="wheel-overlay-box is-idle" data-testid="wheel-overlay-next-draw">
+      <div className="wheel-overlay-side">
+        <div className="wheel-overlay-heading"><Dices aria-hidden="true" />Sub Pick Draw</div>
+        <div className="wheel-overlay-next">
+          <OverlayStat
+            label={due ? "Draw due now" : `Next ${schedule.nextDrawKind} draw`}
+            value={`Game ${due?.gameNumber ?? schedule.nextDrawGameNumber}`}
+            detail={due ? "The wheel is coming up" : gamesToGo(schedule.gamesUntilNextDraw)}
+          />
+          <OverlayStat label="On the wheel" value={String(nextDrawPool.totalEntries)} detail={nextDrawPool.totalEntries === 1 ? "entry" : "entries"} />
+          <OverlayStat label="Top pick" value={topPick?.gameTitle ?? "No picks yet"} detail={topPick ? entriesLabel(topPick.entries) : "Sub to add one"} />
+        </div>
+      </div>
     </div>
   );
 }

@@ -311,9 +311,16 @@ export class SubPickService {
   }
 
   async myEntries(twitchUserId: string): Promise<MySubPicksDto> {
-    const [entries, summary] = await Promise.all([
+    const [entries, summary, draws] = await Promise.all([
       this.entryQuery(this.db).where("e.twitch_user_id", "=", twitchUserId).orderBy("e.entry_id").execute(),
-      this.summary()
+      this.summary(),
+      this.db
+        .selectFrom("sub_draw_entries as de")
+        .innerJoin("sub_draws as d", "d.draw_id", "de.draw_id")
+        .select((eb) => eb.fn.count<string>("de.draw_id").distinct().as("count"))
+        .where("de.twitch_user_id", "=", twitchUserId)
+        .where("d.status", "!=", "cancelled")
+        .executeTakeFirstOrThrow()
     ]);
     const dtos = entries.map(toEntryDto);
     const inNextDraw = dtos.filter((entry) => entry.pool === "next_draw" || (summary.schedule.nextDrawKind === "100s" && entry.pool === "100s_pool"));
@@ -323,6 +330,7 @@ export class SubPickService {
         entriesEarned: dtos.filter((entry) => entry.status !== "voided").length,
         picksMade: dtos.filter((entry) => entry.gameId !== null && entry.status !== "voided").length,
         wins: dtos.filter((entry) => entry.status === "won").length,
+        drawsEntered: Number(draws.count),
         nextDrawOdds: summary.nextDrawPool.totalEntries > 0 ? inNextDraw.length / summary.nextDrawPool.totalEntries : 0
       }
     };
