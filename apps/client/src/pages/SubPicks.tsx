@@ -1,5 +1,5 @@
 import type { SubPoolDto } from "@ps2-challenge/shared";
-import { CalendarClock, Dices, Gamepad2, Ticket } from "lucide-react";
+import { CalendarClock, Dices, Gamepad2, History, Ticket } from "lucide-react";
 import { Link } from "react-router-dom";
 import { api } from "../api.js";
 import { Stat } from "../components/Stat.js";
@@ -24,11 +24,14 @@ export function SubPicks() {
           <p>Picked by subs</p>
           <h1>Sub Picks</h1>
         </div>
-        {user.data?.isAuthenticated ? (
-          <Link className="button-link" to="/sub-picks/mine"><Ticket aria-hidden />My Entries</Link>
-        ) : (
-          <a className="button-link twitch" href="/api/auth/login?returnUrl=%2Fsub-picks%2Fmine">Login to Pick</a>
-        )}
+        <div className="actions">
+          <Link className="button-link secondary" to="/sub-picks/history"><History aria-hidden />Draw History</Link>
+          {user.data?.isAuthenticated ? (
+            <Link className="button-link" to="/sub-picks/mine"><Ticket aria-hidden />My Entries</Link>
+          ) : (
+            <a className="button-link twitch" href="/api/auth/login?returnUrl=%2Fsub-picks%2Fmine">Login to Pick</a>
+          )}
+        </div>
       </header>
 
       <div className="page-introduction">

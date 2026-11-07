@@ -1,10 +1,11 @@
-import type { DeathCounterDto, GameDto, GameProgressDto, GamesPageDataDto, UpdateProgressRequest } from "@ps2-challenge/shared";
+import type { DeathCounterDto, GameDto, GameProgressDto, GamesPageDataDto, SubDrawDueDto, UpdateProgressRequest } from "@ps2-challenge/shared";
 import { parseDurationToSeconds } from "@ps2-challenge/shared";
 import { sql, type Kysely, type RawBuilder } from "kysely";
 import type pg from "pg";
 import { createKyselyFromPool, type Database } from "../db/kysely.js";
 import { GameRepository } from "../repositories/gameRepository.js";
 import { mapAlternateTitle, mapDeathCounter, mapProgress } from "../utils/dbRows.js";
+import { insertProgress, type ProgressInsertOptions } from "./progressNumbers.js";
 
 const noReasonProvided = "No reason provided";
 
@@ -110,7 +111,10 @@ export class GameService {
     return this.repository.ownedTypesMap();
   }
 
-  async upsertProgress(request: UpdateProgressRequest) {
+  async upsertProgress(
+    request: UpdateProgressRequest,
+    options: Omit<ProgressInsertOptions, "overrideSubDraw"> = {}
+  ): Promise<GameProgressDto & { overriddenSubDraw: SubDrawDueDto | null }> {
     const game = await this.repository.findByTitle(request.title);
     if (!game) {
       throw new Error(`No game found with title '${request.title}'`);
@@ -130,22 +134,28 @@ export class GameService {
       ...(request.deathLabel === undefined ? {} : { death_label: request.deathLabel?.trim() || null })
     };
 
-    const progressId = await this.db.transaction().execute(async (transaction) => {
+    const saved = await this.db.transaction().execute(async (transaction) => {
       const existing = await transaction.selectFrom("progress").select("progress_id").where("game_id", "=", game.id).executeTakeFirst();
       const result = existing
-        ? await transaction.updateTable("progress").set(values).where("game_id", "=", game.id).returning("progress_id").executeTakeFirstOrThrow()
-        : await transaction.insertInto("progress").values({ game_id: game.id, ...values }).returning("progress_id").executeTakeFirstOrThrow();
+        ? await transaction
+            .updateTable("progress")
+            .set(values)
+            .where("game_id", "=", game.id)
+            .returning("progress_id")
+            .executeTakeFirstOrThrow()
+            .then((row) => ({ progressId: row.progress_id, overriddenSubDraw: null }))
+        : await insertProgress(transaction, { game_id: game.id, ...values }, { ...options, overrideSubDraw: request.overrideSubDraw === true });
       if (Object.keys(counterValues).length) {
         await transaction
           .insertInto("progress_death_counters")
-          .values({ progress_id: result.progress_id, ...counterValues })
+          .values({ progress_id: result.progressId, ...counterValues })
           .onConflict((oc) => oc.column("progress_id").doUpdateSet({ ...counterValues, updated_at: sql`CURRENT_TIMESTAMP` }))
           .execute();
       }
-      return result.progress_id;
+      return result;
     });
 
-    return this.getProgressById(progressId);
+    return { ...(await this.getProgressById(saved.progressId)), overriddenSubDraw: saved.overriddenSubDraw };
   }
 
   async currentDeathCounter(): Promise<DeathCounterDto | null> {

@@ -58,7 +58,7 @@ describe("VoteService parity", () => {
 
     const result = await voteService.archiveCurrentVotes("  Round notes  ");
 
-    expect(result).toEqual({ roundNumber: 1, archivedCount: 3, progressStartedGameTitle: "Top Game" });
+    expect(result).toEqual({ roundNumber: 1, archivedCount: 3, progressStartedGameTitle: "Top Game", overriddenSubDraw: null });
 
     const history = await historyRows(db.pool);
     expect(history).toHaveLength(3);

@@ -121,7 +121,8 @@ export const updateProgressRequestSchema = z.object({
   review: z.string().nullable().optional(),
   platform: requiredString("Platform"),
   deaths: deathCountSchema.optional(),
-  deathLabel: deathLabelSchema
+  deathLabel: deathLabelSchema,
+  overrideSubDraw: z.boolean().optional()
 });
 
 export const deathCounterSchema = z.object({

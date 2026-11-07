@@ -20,6 +20,9 @@ import type {
   RoleDto,
   SubEntryDto,
   SubGrantDto,
+  SubDrawDto,
+  SubDrawDueDto,
+  SubDrawHistoryDto,
   SubPickAuditDto,
   SubPickSettingsDto,
   SubPicksSummaryDto,
@@ -27,8 +30,10 @@ import type {
   UpdateSubGrantRequest,
   UpdateSubPickSettingsRequest,
   UserProfileDto,
+  SubWheelDto,
   VoteRoundDto
 } from "@ps2-challenge/shared";
+import { subDrawDueErrorCode } from "@ps2-challenge/shared";
 
 export type SerialNumberDto = {
   serialId: number;
@@ -115,7 +120,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   });
 
   if (!response.ok) {
-    throw new Error(await errorDetail(response));
+    throw await apiError(response);
   }
 
   if (response.status === 204) {
@@ -131,7 +136,7 @@ async function requestOrNullWhenMissing<T>(url: string): Promise<T | null> {
     return null;
   }
   if (!response.ok) {
-    throw new Error(await errorDetail(response));
+    throw await apiError(response);
   }
   return (await response.json()) as T;
 }
@@ -182,8 +187,11 @@ export const api = {
   currentVotes: () => request<CurrentVoteDto[]>("/api/votes/current"),
   setCurrentVotes: (votes: CurrentVoteDto[]) => request<{ inserted: number; updated: number }>("/api/votes/current", { method: "POST", body: JSON.stringify(votes) }),
   removeCurrentVote: (title: string) => request<{ message: string }>(`/api/votes/current/${encodeURIComponent(title)}`, { method: "DELETE" }),
-  archiveVotes: (notes?: string | null, manualPositions?: Record<number, number>) =>
-    request<{ message: string; round: number; archivedCount: number }>("/api/votes/archive", { method: "POST", body: JSON.stringify({ notes, manualPositions }) }),
+  archiveVotes: (notes?: string | null, manualPositions?: Record<number, number>, overrideSubDraw?: boolean) =>
+    request<{ message: string; round: number; archivedCount: number }>("/api/votes/archive", {
+      method: "POST",
+      body: JSON.stringify({ notes, manualPositions, ...(overrideSubDraw ? { overrideSubDraw } : {}) })
+    }),
   fillRandomVotes: (count: number) => request<{ message: string; addedGames: CurrentVoteDto[] }>("/api/votes/current/fill-random", { method: "POST", body: JSON.stringify({ count }) }),
   updateVoteByNumber: (gameNumber: number, voteCount: number) =>
     request("/api/votes/current/by-game-number", { method: "PUT", body: JSON.stringify({ gameNumber, voteCount }) }),
@@ -191,6 +199,11 @@ export const api = {
   roles: () => request<RoleDto[]>("/api/admin/roles"),
   updateRole: (userId: number, roleId: number) => request(`/api/admin/users/${userId}/role`, { method: "PUT", body: JSON.stringify({ roleId }) }),
   subPicksSummary: () => request<SubPicksSummaryDto>("/api/sub-picks/summary"),
+  subPickWheel: () => request<SubWheelDto>("/api/sub-picks/wheel"),
+  subDrawHistory: () => request<SubDrawHistoryDto[]>("/api/sub-picks/history"),
+  openSubDraw: () => request<SubDrawDto>("/api/admin/sub-picks/draws", { method: "POST", body: "{}" }),
+  subDrawAction: (drawId: number, action: "shuffle" | "spin" | "respin" | "accept" | "cancel") =>
+    request<SubDrawDto>(`/api/admin/sub-picks/draws/${drawId}/${action}`, { method: "POST", body: "{}" }),
   subPickEligibleGames: () => request<EligibleGameDto[]>("/api/sub-picks/eligible-games"),
   mySubPicks: () => request<MySubPicksDto>("/api/sub-picks/me"),
   setMySubPick: (entryId: number, gameId: number | null) =>
@@ -285,7 +298,7 @@ async function streamNdjson<TProgress, TResult>(
   });
 
   if (!response.ok) {
-    throw new Error(await errorDetail(response));
+    throw await apiError(response);
   }
 
   if (!response.body) {
@@ -333,12 +346,28 @@ function readNdjsonEvent<TProgress, TResult>(line: string, onProgress: (progress
   throw new Error(event.message);
 }
 
-async function errorDetail(response: Response): Promise<string> {
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code: string | null,
+    readonly subDraw: SubDrawDueDto | null
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
+export function subDrawDueFrom(error: unknown): SubDrawDueDto | null {
+  return error instanceof ApiError && error.code === subDrawDueErrorCode ? error.subDraw : null;
+}
+
+async function apiError(response: Response): Promise<ApiError> {
   const fallback = response.statusText || statusMessage(response.status);
   try {
-    const body = (await response.json()) as { message?: string; error?: string; errors?: string[] };
-    return body.message ?? body.error ?? body.errors?.[0] ?? fallback;
+    const body = (await response.json()) as { message?: string; error?: string; errors?: string[]; code?: string; subDraw?: SubDrawDueDto };
+    return new ApiError(body.message ?? body.error ?? body.errors?.[0] ?? fallback, response.status, body.code ?? null, body.subDraw ?? null);
   } catch {
-    return fallback;
+    return new ApiError(fallback, response.status, null, null);
   }
 }

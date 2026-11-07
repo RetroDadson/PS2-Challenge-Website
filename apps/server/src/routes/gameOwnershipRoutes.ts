@@ -11,6 +11,7 @@ import type { RequireAdmin } from "../auth/guards.js";
 import { gameRouteSchemas } from "../openapi/schemas.js";
 import type { RealtimeHub } from "../realtime/hub.js";
 import type { GameService } from "../services/gameService.js";
+import { SubDrawDueError } from "../services/progressNumbers.js";
 import { auditInfo } from "../utils/audit.js";
 import { errorMessage } from "../utils/errors.js";
 import { validationMessages } from "../utils/validation.js";
@@ -172,8 +173,15 @@ export function registerGameOwnershipRoutes(
       return reply.status(400).send({ errors: validationMessages(parsed.error) });
     }
     try {
-      const progress = await gameService.upsertProgress(parsed.data);
+      const progress = await gameService.upsertProgress(parsed.data, { actor: user });
       realtimeHub.broadcastGamesUpdated();
+      realtimeHub.broadcastSubPicksUpdated();
+      if (progress.overriddenSubDraw) {
+        auditInfo(request.log, user, `AUDIT: Admin ${user.username} started game ${progress.progressId} without the sub pick draw`, {
+          gameId: progress.gameId,
+          ...progress.overriddenSubDraw
+        });
+      }
       auditInfo(request.log, user, `AUDIT: Admin ${user.username} updated progress for game ID ${progress.gameId}: ${parsed.data.title}`, {
         gameId: progress.gameId,
         gameTitle: parsed.data.title,
@@ -196,6 +204,9 @@ export function registerGameOwnershipRoutes(
         message: `Progress for '${parsed.data.title}' has been updated`
       };
     } catch (error) {
+      if (error instanceof SubDrawDueError) {
+        return reply.status(error.statusCode).send({ message: error.message, code: error.code, subDraw: error.draw });
+      }
       return reply.status(404).send({ error: errorMessage(error) });
     }
   });

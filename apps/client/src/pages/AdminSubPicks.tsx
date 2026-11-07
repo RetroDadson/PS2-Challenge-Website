@@ -8,6 +8,7 @@ import {
   type SubGrantType,
   type SubPickSettingsDto,
   type SubTier,
+  type SubWheelDto,
   type TwitchUserLookupDto
 } from "@ps2-challenge/shared";
 import {
@@ -29,12 +30,14 @@ import { useMemo, useState } from "react";
 import { api } from "../api.js";
 import { GamePicker } from "../components/GamePicker.js";
 import { Stat } from "../components/Stat.js";
+import { useWheel } from "../components/Wheel.js";
 import { TwitchTab } from "./AdminSubPicksTwitch.js";
+import { WheelTab } from "./AdminSubPicksWheel.js";
 import { Empty, ErrorMessage, Loading } from "../components/Status.js";
 import { useAsync } from "../hooks.js";
 import { entryStatusClass, entryStatusLabel, grantTypeLabels, tierLabels } from "../subPickLabels.js";
 
-type Tab = "entries" | "twitch" | "settings" | "audit";
+type Tab = "entries" | "wheel" | "twitch" | "settings" | "audit";
 type StatusMessage = { kind: "success" | "error"; message: string };
 type GrantChanges = { tier: SubTier; grantType: SubGrantType; giftCount: number; entryCount: number; notes: string | null };
 
@@ -52,6 +55,7 @@ type ViewerSummary = {
 
 const tabs: Array<{ id: Tab; label: string }> = [
   { id: "entries", label: "Entries" },
+  { id: "wheel", label: "Wheel" },
   { id: "twitch", label: "Twitch" },
   { id: "settings", label: "Settings" },
   { id: "audit", label: "Audit Log" }
@@ -61,6 +65,7 @@ export function AdminSubPicks() {
   const settings = useAsync(() => api.subPickSettings(), []);
   const review = useAsync(() => api.eventSubReview(), []);
   const reviewCount = review.data?.length ?? 0;
+  const wheel = useWheel();
   const [params] = useState(() => new URLSearchParams(globalThis.location.search));
   const [tab, setTab] = useState<Tab>(() => initialTab(params.get("tab")));
 
@@ -98,13 +103,14 @@ export function AdminSubPicks() {
             className={tab === item.id ? undefined : "secondary"}
             onClick={() => setTab(item.id)}
           >
-            {item.id === "twitch" && reviewCount > 0 ? `${item.label} (${reviewCount} to review)` : item.label}
+            {tabLabel(item, reviewCount, wheelStatus(wheel.data))}
           </button>
         ))}
       </div>
 
       <div role="tabpanel" id={`sub-picks-panel-${tab}`} aria-labelledby={`sub-picks-tab-${tab}`}>
         {tab === "entries" ? <EntriesTab settings={settings.data} /> : null}
+        {tab === "wheel" ? <WheelTab wheel={wheel} settings={settings.data} onSettingsSaved={(next) => settings.setData(next)} /> : null}
         {tab === "settings" ? <SettingsTab settings={settings.data} onSaved={(next) => settings.setData(next)} /> : null}
         {tab === "twitch" ? <TwitchTab
             authorisationResult={params.get("eventsub")}
@@ -566,6 +572,18 @@ function AuditTab() {
       ) : null}
     </section>
   );
+}
+
+function wheelStatus(wheel: SubWheelDto | null): string | null {
+  const state = wheel?.draw?.state;
+  if (state === "ready" || state === "spinning" || state === "awaiting_decision") return "draw open";
+  return wheel?.due ? "draw due" : null;
+}
+
+function tabLabel(item: { id: Tab; label: string }, reviewCount: number, wheel: string | null): string {
+  if (item.id === "twitch" && reviewCount > 0) return `${item.label} (${reviewCount} to review)`;
+  if (item.id === "wheel" && wheel) return `${item.label} (${wheel})`;
+  return item.label;
 }
 
 function initialTab(value: string | null): Tab {

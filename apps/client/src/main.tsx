@@ -9,11 +9,12 @@ import { Games } from "./pages/Games.js";
 import { Home } from "./pages/Home.js";
 import { Login } from "./pages/Login.js";
 import { NotFound } from "./pages/NotFound.js";
-import { BlankOverlay, DeathCounterOverlay, ProgressOverlay, SubPicksOverlay, VoteCoversOverlay, VotesOverlay } from "./pages/Overlays.js";
+import { BlankOverlay, DeathCounterOverlay, ProgressOverlay, SubPicksOverlay, VoteCoversOverlay, VotesOverlay, WheelOverlay } from "./pages/Overlays.js";
 import { Progress } from "./pages/Progress.js";
 import { Statistics } from "./pages/Statistics.js";
 import { SubPicks } from "./pages/SubPicks.js";
 import { SubPicksMine } from "./pages/SubPicksMine.js";
+import { SubPicksHistory } from "./pages/SubPicksHistory.js";
 import { UserPage } from "./pages/User.js";
 import { Votes } from "./pages/Votes.js";
 import { ChallengeRunners } from "./pages/ChallengeRunners.js";
@@ -29,6 +30,7 @@ const router = createBrowserRouter([
       { path: "/statistics", element: <DocumentTitle title="Statistics - Dadson's PS2 Challenge"><Statistics /></DocumentTitle> },
       { path: "/votes", element: <DocumentTitle title="Vote History - Dadson's PS2 Tracker"><Votes /></DocumentTitle> },
       { path: "/sub-picks", element: <DocumentTitle title="Sub Picks - Dadson's PS2 Challenge"><SubPicks /></DocumentTitle> },
+      { path: "/sub-picks/history", element: <DocumentTitle title="Sub Pick Draw History - Dadson's PS2 Challenge"><SubPicksHistory /></DocumentTitle> },
       { path: "/sub-picks/mine", element: <DocumentTitle title="My Sub Pick Entries - Dadson's PS2 Challenge"><SubPicksMine /></DocumentTitle> },
       { path: "/runners", element: <DocumentTitle title="Challenge Runners - Dadson's PS2 Challenge"><ChallengeRunners /></DocumentTitle> },
       { path: "/login", element: <DocumentTitle title="Login - Dadson's PS2 Challenge"><Login /></DocumentTitle> },
@@ -43,7 +45,8 @@ const router = createBrowserRouter([
   { path: "/progress-overlay", element: <ProgressOverlay /> },
   { path: "/sub-picks-overlay", element: <SubPicksOverlay /> },
   { path: "/vote-covers-overlay", element: <VoteCoversOverlay /> },
-  { path: "/votes-overlay", element: <VotesOverlay /> }
+  { path: "/votes-overlay", element: <VotesOverlay /> },
+  { path: "/wheel-overlay", element: <WheelOverlay /> }
 ]);
 
 createRoot(document.getElementById("root")!).render(

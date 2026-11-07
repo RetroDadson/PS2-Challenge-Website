@@ -1,11 +1,12 @@
 import { Archive, Dice5, Plus, RefreshCw, Search, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
-import type { AlternateTitle, CurrentVoteDto, GameDto, VoteRoundDto } from "@ps2-challenge/shared";
-import { api } from "../api.js";
+import type { AlternateTitle, CurrentVoteDto, GameDto, SubDrawDueDto, VoteRoundDto } from "@ps2-challenge/shared";
+import { api, subDrawDueFrom } from "../api.js";
 import { AlternateTitleHint, EMPTY_ALTERNATE_TITLES } from "../components/AlternateTitleHint.js";
 import { CoverImage } from "../components/CoverImage.js";
 import { ModalDialog } from "../components/ModalDialog.js";
 import { SortButton, sortMarker } from "../components/SortButton.js";
+import { SubDrawDueNotice } from "../components/SubDrawDueNotice.js";
 import { Empty, ErrorMessage, Loading } from "../components/Status.js";
 import { useAsync, useCurrentUser, useRealtime } from "../hooks.js";
 import { fullCirclePath, PIE_CHART_COLORS, sectorPath, formatPathNumber } from "../pieChart.js";
@@ -697,16 +698,19 @@ function VoteArchiveModal({
   const [manualPositions, setManualPositions] = useState<Record<number, number>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [dueDraw, setDueDraw] = useState<SubDrawDueDto | null>(null);
   const sortedVotes = useMemo(() => [...currentVotes].sort((left, right) => right.voteCount - left.voteCount), [currentVotes]);
   const hasTies = useMemo(() => new Set(currentVotes.map((vote) => vote.voteCount)).size !== currentVotes.length, [currentVotes]);
 
-  const archive = async () => {
+  const archive = async (overrideSubDraw = false) => {
     setBusy(true);
     setError(null);
     try {
-      await api.archiveVotes(notes.trim() || null, Object.keys(manualPositions).length ? manualPositions : undefined);
+      await api.archiveVotes(notes.trim() || null, Object.keys(manualPositions).length ? manualPositions : undefined, overrideSubDraw);
+      setDueDraw(null);
       await onArchived();
     } catch (archiveError) {
+      setDueDraw(subDrawDueFrom(archiveError));
       setError(archiveError instanceof Error ? archiveError.message : String(archiveError));
     } finally {
       setBusy(false);
@@ -715,7 +719,10 @@ function VoteArchiveModal({
 
   return (
     <ModalDialog title="Archive Current Votes to History" onClose={onClose}>
-        {error ? <div className="status error">{error}</div> : null}
+        {dueDraw && error ? (
+          <SubDrawDueNotice draw={dueDraw} message={error} busy={busy} overrideLabel="Archive and Start Anyway" onOverride={() => void archive(true)} />
+        ) : null}
+        {error && !dueDraw ? <div className="status error">{error}</div> : null}
         {hasTies ? (
           <div className="modal-section">
             <h3>Tied Votes Detected</h3>
@@ -749,7 +756,7 @@ function VoteArchiveModal({
         <label><span>Notes</span><textarea rows={3} value={notes} onChange={(event) => setNotes(event.target.value)} /></label>
         <footer>
           <button type="button" className="secondary" onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="button" onClick={archive} disabled={busy}>{busy ? "Archiving..." : "Archive"}</button>
+          <button type="button" onClick={() => void archive()} disabled={busy}>{busy ? "Archiving..." : "Archive"}</button>
         </footer>
     </ModalDialog>
   );

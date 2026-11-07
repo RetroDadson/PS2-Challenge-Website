@@ -39,7 +39,8 @@ export const voteRoundSchema = z.object({
 
 export const archiveVotesRequestSchema = z.object({
   notes: z.string().nullable().optional(),
-  manualPositions: z.record(z.string(), z.number().int().min(1).max(3)).nullable().optional()
+  manualPositions: z.record(z.string(), z.number().int().min(1).max(3)).nullable().optional(),
+  overrideSubDraw: z.boolean().optional()
 });
 
 export const updateVoteByGameNumberRequestSchema = z.object({

@@ -11,6 +11,7 @@ import { createRequireAdmin } from "../auth/guards.js";
 import { registerOpenApiSchemas, voteRouteSchemas } from "../openapi/schemas.js";
 import type { UserRepository } from "../repositories/userRepository.js";
 import type { RealtimeHub } from "../realtime/hub.js";
+import { SubDrawDueError } from "../services/progressNumbers.js";
 import type { VoteService } from "../services/voteService.js";
 import { auditInfo } from "../utils/audit.js";
 import { errorMessage } from "../utils/errors.js";
@@ -103,9 +104,19 @@ export async function registerVotesRoutes(
     try {
       const result = await voteService.archiveCurrentVotes(
         parsed.success ? parsed.data.notes : null,
-        parsed.success ? (parsed.data.manualPositions as Record<number, number> | null | undefined) ?? undefined : undefined
+        parsed.success ? (parsed.data.manualPositions as Record<number, number> | null | undefined) ?? undefined : undefined,
+        { actor: user, overrideSubDraw: parsed.success && parsed.data.overrideSubDraw === true }
       );
       realtimeHub.broadcastVotesUpdated();
+      if (result.progressStartedGameTitle) {
+        realtimeHub.broadcastGamesUpdated();
+        realtimeHub.broadcastSubPicksUpdated();
+      }
+      if (result.overriddenSubDraw) {
+        auditInfo(request.log, user, `AUDIT: Admin ${user.username} started vote winner '${result.progressStartedGameTitle}' without the sub pick draw`, {
+          ...result.overriddenSubDraw
+        });
+      }
       auditInfo(request.log, user, `AUDIT: Admin ${user.username} archived current votes`, {
         round: result.roundNumber,
         archivedCount: result.archivedCount,
@@ -117,6 +128,9 @@ export async function registerVotesRoutes(
         archivedCount: result.archivedCount
       };
     } catch (error) {
+      if (error instanceof SubDrawDueError) {
+        return reply.status(error.statusCode).send({ message: error.message, code: error.code, subDraw: error.draw });
+      }
       return reply.status(400).send({ message: errorMessage(error) });
     }
   });

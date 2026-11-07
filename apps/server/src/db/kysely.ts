@@ -1,4 +1,14 @@
-import type { GameTablePreferencesDto, SubEntryStatus, SubGrantType, SubTier } from "@ps2-challenge/shared";
+import type {
+  GameTablePreferencesDto,
+  SubDrawKind,
+  SubDrawOddsDto,
+  SubDrawOutcome,
+  SubDrawStatus,
+  SubEntryStatus,
+  SubGrantType,
+  SubSpinDecision,
+  SubTier
+} from "@ps2-challenge/shared";
 import { Kysely, PostgresDialect, type ColumnType, type Generated, type JSONColumnType } from "kysely";
 import pg from "pg";
 
@@ -131,6 +141,48 @@ export interface Database {
     id: Generated<number>;
     name: string;
     description: string | null;
+  };
+  sub_draw_entries: {
+    draw_id: number;
+    entry_id: number;
+    game_id: number | null;
+    game_title: string;
+    twitch_user_id: string | null;
+    twitch_display_name: string | null;
+    entry_status: SubEntryStatus;
+    outcome: SubDrawOutcome | null;
+    played_game_number: number | null;
+  };
+  sub_draw_spins: {
+    spin_id: Generated<number>;
+    draw_id: number;
+    spin_number: number;
+    started_at: Timestamp;
+    duration_ms: number;
+    slice_order: JSONColumnType<number[], number[], number[]>;
+    odds: JSONColumnType<SubDrawOddsDto[], SubDrawOddsDto[], SubDrawOddsDto[]>;
+    winning_entry_id: number;
+    winning_slice_index: number;
+    stop_offset: number;
+    decision: Generated<SubSpinDecision>;
+    spun_by_user_id: number | null;
+    decided_by_user_id: number | null;
+    decided_at: NullableTimestamp;
+  };
+  sub_draws: {
+    draw_id: Generated<number>;
+    kind: SubDrawKind;
+    game_number: number;
+    status: Generated<SubDrawStatus>;
+    slice_order: JSONColumnType<number[], number[] | undefined, number[]>;
+    shuffle_count: Generated<number>;
+    created_by_user_id: number | null;
+    created_at: Timestamp;
+    first_spun_at: NullableTimestamp;
+    winning_entry_id: number | null;
+    winning_game_id: number | null;
+    finished_by_user_id: number | null;
+    finished_at: NullableTimestamp;
   };
   sub_entries: {
     entry_id: Generated<number>;

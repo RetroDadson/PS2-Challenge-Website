@@ -1,8 +1,10 @@
 import { Save } from "lucide-react";
 import { useEffect, useState } from "react";
-import { DEFAULT_DEATH_LABEL, type GameProgressDto } from "@ps2-challenge/shared";
+import { DEFAULT_DEATH_LABEL, type GameProgressDto, type SubDrawDueDto } from "@ps2-challenge/shared";
+import { subDrawDueFrom } from "../api.js";
 import { toDateInputValue } from "../dateUtils.js";
 import { ModalDialog } from "./ModalDialog.js";
+import { SubDrawDueNotice } from "./SubDrawDueNotice.js";
 
 type ProgressDraft = {
   title: string;
@@ -30,15 +32,32 @@ export function ProgressModal({
   onSave: (payload: Record<string, unknown>) => Promise<void>;
 }>) {
   const [draft, setDraft] = useState<ProgressDraft>(() => createDraft(progress));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [dueDraw, setDueDraw] = useState<SubDrawDueDto | null>(null);
   const isEditMode = !!progress;
 
   useEffect(() => {
     setDraft(createDraft(progress));
   }, [progress]);
 
-  const save = () => {
+  const save = async (overrideSubDraw = false) => {
+    setSaving(true);
+    setError(null);
+    try {
+      await onSave({ ...buildPayload(), ...(overrideSubDraw ? { overrideSubDraw } : {}) });
+      setDueDraw(null);
+    } catch (saveError) {
+      setDueDraw(subDrawDueFrom(saveError));
+      setError(saveError instanceof Error ? saveError.message : String(saveError));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const buildPayload = () => {
     const completionTime = buildCompletionTime(draft.completionHours, draft.completionMinutes, draft.completionSeconds);
-    return onSave({
+    return {
       title: draft.title.trim(),
       dateStarted: draft.dateStarted,
       dateFinished: draft.dateFinished || null,
@@ -48,7 +67,7 @@ export function ProgressModal({
       platform: draft.platform.trim() || "Physical",
       deaths: Math.max(0, Number.parseInt(draft.deaths, 10) || 0),
       deathLabel: draft.deathLabel.trim() || null
-    });
+    };
   };
 
   return (
@@ -137,9 +156,13 @@ export function ProgressModal({
             />
           </label>
         </fieldset>
+        {dueDraw && error ? (
+          <SubDrawDueNotice draw={dueDraw} message={error} busy={saving} overrideLabel="Start Anyway" onOverride={() => void save(true)} />
+        ) : null}
+        {error && !dueDraw ? <div className="status error" role="alert">{error}</div> : null}
         <footer>
           <button className="secondary" onClick={onClose}>Cancel</button>
-          <button onClick={() => void save()} disabled={!draft.title.trim() || !draft.dateStarted}>
+          <button onClick={() => void save()} disabled={saving || !draft.title.trim() || !draft.dateStarted}>
             <Save />{isEditMode ? "Update" : "Add"}
           </button>
         </footer>

@@ -1,5 +1,8 @@
 import { Dices, Skull } from "lucide-react";
 import { api } from "../api.js";
+import type { SubDrawDto } from "@ps2-challenge/shared";
+import { useWheel, Wheel, wheelLabel, WheelReadout } from "../components/Wheel.js";
+import { formatOdds } from "../subPickLabels.js";
 import { useAsync, useRealtime } from "../hooks.js";
 import { useEffect, useMemo, useState } from "react";
 
@@ -152,6 +155,108 @@ export function SubPicksOverlay() {
       ) : null}
     </div>
   );
+}
+
+const acceptedResultMs = 5 * 60 * 1000;
+
+export function WheelOverlay() {
+  const wheel = useWheel();
+  const draw = wheel.data?.draw ?? null;
+  const [pointer, setPointer] = useState(-1);
+  const hideAt = draw?.state === "accepted" && draw.finishedAt ? Date.parse(draw.finishedAt) + acceptedResultMs - wheel.clockOffsetMs : null;
+  const expired = useExpired(hideAt);
+  const visible = draw !== null && draw.state !== "cancelled" && !expired;
+
+  return (
+    <div className="stream-overlay wheel-overlay-frame" data-testid="wheel-overlay">
+      {wheel.error ? <OverlayMessage>Error loading the wheel</OverlayMessage> : null}
+      {draw && visible ? (
+        <div className="wheel-overlay-box">
+          <div className="wheel-overlay-wheel">
+            <Wheel draw={draw} clockOffsetMs={wheel.clockOffsetMs} label={wheelLabel(draw)} size={1000} onPointerChange={setPointer} />
+          </div>
+          <div className="wheel-overlay-side">
+            <div className="wheel-overlay-heading"><Dices aria-hidden="true" />Sub Pick Draw: Game {draw.gameNumber}</div>
+            <WheelReadout draw={draw} sliceIndex={pointer} />
+            <WheelEntryList draw={draw} pointerGameId={draw.slices[pointer]?.gameId ?? null} />
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+const maxListedGames = 12;
+
+function WheelEntryList({ draw, pointerGameId }: Readonly<{ draw: SubDrawDto; pointerGameId: number | null }>) {
+  const winnerGameId = shownResult(draw)?.gameId ?? null;
+  const activeGameId = winnerGameId ?? pointerGameId;
+  const pickers = pickersByGame(draw);
+  const listed = draw.odds.slice(0, maxListedGames);
+  const active = draw.odds.find((game) => game.gameId === activeGameId);
+  if (active && !listed.includes(active)) listed[listed.length - 1] = active;
+  const hidden = draw.odds.filter((game) => !listed.includes(game));
+  const hiddenEntries = hidden.reduce((sum, game) => sum + game.entries, 0);
+
+  return (
+    <div className="wheel-overlay-list">
+      <div className="wheel-overlay-list-header">
+        <span>{draw.slices.length} {draw.slices.length === 1 ? "entry" : "entries"} · {draw.odds.length} {draw.odds.length === 1 ? "game" : "games"}</span>
+        <span>Chance</span>
+      </div>
+      <ol>
+        {listed.map((game) => (
+          <li key={game.gameId ?? game.gameTitle} className={rowClass(game.gameId === activeGameId, winnerGameId !== null)}>
+            <div className="wheel-overlay-list-game">
+              <strong>{game.gameTitle}</strong>
+              <span>{pickers.get(game.gameId) ?? ""}</span>
+            </div>
+            <span className="wheel-overlay-list-count">{game.entries}</span>
+            <span className="wheel-overlay-list-chance">{formatOdds(game.odds)}</span>
+          </li>
+        ))}
+      </ol>
+      {hidden.length ? (
+        <p className="wheel-overlay-list-more">
+          +{hidden.length} more {hidden.length === 1 ? "game" : "games"} ({hiddenEntries} {hiddenEntries === 1 ? "entry" : "entries"})
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function rowClass(active: boolean, decided: boolean): string | undefined {
+  if (!active) return undefined;
+  return decided ? "is-winner" : "is-active";
+}
+
+function pickersByGame(draw: SubDrawDto): Map<number | null, string> {
+  const counts = new Map<number | null, Map<string, number>>();
+  for (const slice of draw.slices) {
+    const names = counts.get(slice.gameId) ?? new Map<string, number>();
+    const name = slice.twitchDisplayName ?? "Anonymous";
+    names.set(name, (names.get(name) ?? 0) + 1);
+    counts.set(slice.gameId, names);
+  }
+  return new Map(
+    [...counts].map(([gameId, names]) => [gameId, [...names].map(([name, count]) => (count > 1 ? `${name} ×${count}` : name)).join(", ")])
+  );
+}
+
+function shownResult(draw: SubDrawDto): SubDrawDto["winner"] {
+  if (draw.state === "accepted") return draw.winner;
+  return draw.state === "awaiting_decision" ? draw.spin?.result ?? null : null;
+}
+
+function useExpired(at: number | null): boolean {
+  const [expired, setExpired] = useState(() => at !== null && Date.now() >= at);
+  useEffect(() => {
+    setExpired(at !== null && Date.now() >= at);
+    if (at === null || Date.now() >= at) return undefined;
+    const timeout = globalThis.setTimeout(() => setExpired(true), at - Date.now());
+    return () => globalThis.clearTimeout(timeout);
+  }, [at]);
+  return expired;
 }
 
 export type OverlayTimer = { showMs: number; everyMs: number; alwaysVisible: boolean };

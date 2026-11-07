@@ -102,10 +102,20 @@ export const subPoolSchema = z.object({
   games: z.array(subPoolGameSchema)
 });
 
+export const subDrawKindSchema = z.enum(["10s", "100s"]);
+
+export const subDrawDueSchema = z.object({
+  gameNumber: z.number().int().positive(),
+  kind: subDrawKindSchema,
+  entryCount: z.number().int().positive()
+});
+
+export const subDrawDueErrorCode = "sub_draw_due";
+
 export const subDrawScheduleSchema = z.object({
   nextGameNumber: z.number().int().positive(),
   nextDrawGameNumber: z.number().int().positive(),
-  nextDrawKind: z.enum(["10s", "100s"]),
+  nextDrawKind: subDrawKindSchema,
   gamesUntilNextDraw: z.number().int().min(0),
   nextHundredDrawGameNumber: z.number().int().positive(),
   gamesUntilNextHundredDraw: z.number().int().min(0)
@@ -163,6 +173,8 @@ export type SubDrawScheduleDto = z.infer<typeof subDrawScheduleSchema>;
 export type SubPicksSummaryDto = z.infer<typeof subPicksSummarySchema>;
 export type MySubPicksDto = z.infer<typeof mySubPicksSchema>;
 export type EligibleGameDto = z.infer<typeof eligibleGameSchema>;
+export type SubDrawKind = z.infer<typeof subDrawKindSchema>;
+export type SubDrawDueDto = z.infer<typeof subDrawDueSchema>;
 export type SubPickAuditDto = z.infer<typeof subPickAuditSchema>;
 
 export function subTierEntryValue(tier: SubTier, settings: Pick<SubPickSettingsDto, "tier1Entries" | "tier2Entries" | "tier3Entries">): number {

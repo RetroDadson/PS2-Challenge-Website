@@ -1,0 +1,251 @@
+import type { FastifyInstance } from "fastify";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { createDbClient } from "../src/db/client.js";
+import { createKyselyFromPool } from "../src/db/kysely.js";
+import { buildApp } from "../src/server.js";
+import { GameService } from "../src/services/gameService.js";
+import { insertProgress, nextGameNumber, SubDrawDueError, subDrawDue } from "../src/services/progressNumbers.js";
+import { VoteService } from "../src/services/voteService.js";
+import { seedCurrentVote, seedGame, seedUser, startIntegrationDatabase, type IntegrationDatabase } from "./helpers/postgres.js";
+
+const adminApiKey = "admin-api-key";
+const adminHeaders = { "x-api-key": adminApiKey };
+
+describe("gap-free game numbers and the sub pick draw guard", () => {
+  let db: IntegrationDatabase;
+  let app: FastifyInstance;
+
+  beforeAll(async () => {
+    db = await startIntegrationDatabase();
+    app = await buildApp(
+      {
+        nodeEnv: "Testing",
+        port: 0,
+        databaseConnectionString: db.connectionString,
+        twitchClientId: "test-client",
+        twitchClientSecret: "test-secret",
+        publicBaseUrl: "http://localhost",
+        cookieSecret: "test-cookie-secret"
+      },
+      { dbClient: createDbClient({ databaseConnectionString: db.connectionString }) }
+    );
+  }, 120_000);
+
+  afterAll(async () => {
+    await app?.close();
+    await db?.stop();
+  });
+
+  beforeEach(async () => {
+    await db.reset();
+    await seedUser(db.pool, "Admin", adminApiKey);
+  });
+
+  async function seedPlayedGames(count: number): Promise<void> {
+    await db.pool.query(
+      `INSERT INTO games (game_id, title, developer, publisher, region_first_released_in, released_in_eu_or_na)
+       SELECT id, 'Played ' || id, 'D', 'P', 'NA', true FROM generate_series(1, $1::int) AS id`,
+      [count]
+    );
+    await db.pool.query(
+      `INSERT INTO progress (progress_id, game_id, date_started, platform)
+       SELECT id, id, '2024-01-01', 'Physical' FROM generate_series(1, $1::int) AS id`,
+      [count]
+    );
+  }
+
+  async function seedOwnedGame(id: number, title: string): Promise<void> {
+    await seedGame(db.pool, id, title);
+    await db.pool.query("INSERT INTO game_owned (game_id, own_physical_copy, type_owned) VALUES ($1, true, 'Base')", [id]);
+  }
+
+  async function seedEntry(gameId: number | null, status = "undrawn"): Promise<void> {
+    const grant = await db.pool.query<{ grant_id: number }>(
+      `INSERT INTO sub_entry_grants (twitch_user_id, twitch_login, twitch_display_name, tier, grant_type, entry_count, source)
+       VALUES ('1001', 'viewerone', 'ViewerOne', '1000', 'new', 1, 'manual') RETURNING grant_id`
+    );
+    await db.pool.query("INSERT INTO sub_entries (grant_id, twitch_user_id, game_id, status) VALUES ($1, '1001', $2, $3)", [
+      grant.rows[0]!.grant_id,
+      gameId,
+      status
+    ]);
+  }
+
+  async function progressIds(): Promise<number[]> {
+    const rows = await db.pool.query<{ progress_id: number }>("SELECT progress_id FROM progress ORDER BY progress_id");
+    return rows.rows.map((row) => row.progress_id);
+  }
+
+  it("numbers games from the highest game so failed inserts leave no gaps", async () => {
+    const kysely = createKyselyFromPool(db.pool);
+    await seedOwnedGame(1, "First");
+    await seedOwnedGame(2, "Second");
+    await db.pool.query("SELECT nextval(pg_get_serial_sequence('progress', 'progress_id')) FROM generate_series(1, 5)");
+
+    await expect(
+      kysely.transaction().execute(async (transaction) => {
+        await insertProgress(transaction, { game_id: 1, date_started: "2024-01-01", platform: "Physical" });
+        throw new Error("Rolled back");
+      })
+    ).rejects.toThrow("Rolled back");
+    const inserted = await kysely
+      .transaction()
+      .execute((transaction) => insertProgress(transaction, { game_id: 2, date_started: "2024-01-01", platform: "Physical" }));
+
+    expect(inserted).toEqual({ progressId: 1, overriddenSubDraw: null });
+    expect(await nextGameNumber(kysely)).toBe(2);
+    await seedGame(db.pool, 3, "Third");
+    const raw = await db.pool.query<{ progress_id: number }>(
+      "INSERT INTO progress (game_id, date_started, platform) VALUES (3, '2024-01-01', 'Physical') RETURNING progress_id"
+    );
+    expect(raw.rows[0]!.progress_id).toBe(2);
+  });
+
+  it("numbers games on databases where the game number is always generated", async () => {
+    const gameService = new GameService(db.pool);
+    await seedOwnedGame(1, "First");
+    await db.pool.query("ALTER TABLE progress ALTER COLUMN progress_id SET GENERATED ALWAYS");
+    try {
+      const started = await gameService.upsertProgress({ title: "First", dateStarted: "2024-01-01", platform: "Physical" });
+      expect(started.progressId).toBe(1);
+    } finally {
+      await db.pool.query("ALTER TABLE progress ALTER COLUMN progress_id SET GENERATED BY DEFAULT");
+    }
+  });
+
+  it("gives concurrent new games consecutive numbers", async () => {
+    const gameService = new GameService(db.pool);
+    for (let id = 1; id <= 6; id++) {
+      await seedOwnedGame(id, `Game ${id}`);
+    }
+
+    await Promise.all(
+      [1, 2, 3, 4, 5, 6].map((id) => gameService.upsertProgress({ title: `Game ${id}`, dateStarted: "2024-01-01", platform: "Physical" }))
+    );
+
+    expect(await progressIds()).toEqual([1, 2, 3, 4, 5, 6]);
+  });
+
+  it("only treats a draw as due when its pool has valid picks", async () => {
+    const kysely = createKyselyFromPool(db.pool);
+    await seedPlayedGames(9);
+    await seedOwnedGame(50, "Picked");
+    await seedOwnedGame(51, "Excluded");
+    await db.pool.query("INSERT INTO excluded_games (game_id, reason) VALUES (51, 'Testing')");
+
+    expect(await subDrawDue(kysely, 11)).toBeNull();
+    expect(await subDrawDue(kysely, 10)).toBeNull();
+    await seedEntry(null);
+    await seedEntry(51);
+    await seedEntry(3);
+    await seedEntry(50, "in_100s_pool");
+    expect(await subDrawDue(kysely, 10)).toBeNull();
+
+    await seedEntry(50);
+    expect(await subDrawDue(kysely, 10)).toEqual({ gameNumber: 10, kind: "10s", entryCount: 1 });
+    expect(await subDrawDue(kysely, 100)).toEqual({ gameNumber: 100, kind: "100s", entryCount: 2 });
+    await seedEntry(4, "in_100s_pool");
+    expect(await subDrawDue(kysely, 100)).toEqual({ gameNumber: 100, kind: "100s", entryCount: 2 });
+  });
+
+  it("refuses to start a new game when a draw is due unless overridden, and audits the override", async () => {
+    const gameService = new GameService(db.pool);
+    await seedPlayedGames(9);
+    await seedOwnedGame(50, "Picked");
+    await seedOwnedGame(60, "Chosen Anyway");
+    await seedEntry(50);
+
+    await expect(gameService.upsertProgress({ title: "Chosen Anyway", dateStarted: "2024-02-01", platform: "Physical" })).rejects.toBeInstanceOf(
+      SubDrawDueError
+    );
+    const updated = await gameService.upsertProgress({ title: "Played 9", dateStarted: "2024-02-01", platform: "Emulated" });
+    expect(updated).toMatchObject({ progressId: 9, platform: "Emulated", overriddenSubDraw: null });
+    expect(await progressIds()).toHaveLength(9);
+
+    const started = await gameService.upsertProgress(
+      { title: "Chosen Anyway", dateStarted: "2024-02-01", platform: "Physical", overrideSubDraw: true },
+      { actor: { id: 1, username: "Admin" } }
+    );
+
+    expect(started).toMatchObject({ progressId: 10, gameId: 60, overriddenSubDraw: { gameNumber: 10, kind: "10s", entryCount: 1 } });
+    const audit = await db.pool.query("SELECT actor_user_id, actor_username, action, target_type, target_id, details FROM sub_pick_audit");
+    expect(audit.rows).toEqual([
+      {
+        actor_user_id: 1,
+        actor_username: "Admin",
+        action: "draw.override",
+        target_type: "game",
+        target_id: 60,
+        details: { gameNumber: 10, kind: "10s", entryCount: 1 }
+      }
+    ]);
+  });
+
+  it("rolls back the whole vote archive when the winner would skip a due draw", async () => {
+    const voteService = new VoteService(db.pool);
+    await seedPlayedGames(9);
+    await seedOwnedGame(50, "Picked");
+    await seedOwnedGame(60, "Vote Winner");
+    await seedEntry(50);
+    await seedCurrentVote(db.pool, 60, 20, 1);
+
+    await expect(voteService.archiveCurrentVotes()).rejects.toBeInstanceOf(SubDrawDueError);
+    const current = await db.pool.query("SELECT game_id FROM current_vote");
+    expect(current.rows).toEqual([{ game_id: 60 }]);
+
+    const archived = await voteService.archiveCurrentVotes(null, undefined, { overrideSubDraw: true });
+
+    expect(archived).toMatchObject({ progressStartedGameTitle: "Vote Winner", overriddenSubDraw: { gameNumber: 10, kind: "10s", entryCount: 1 } });
+    expect(await progressIds()).toContain(10);
+    const audit = await db.pool.query("SELECT actor_user_id, actor_username FROM sub_pick_audit");
+    expect(audit.rows).toEqual([{ actor_user_id: null, actor_username: "System" }]);
+  });
+
+  it("returns a draw-due conflict from both admin routes and accepts the override flag", async () => {
+    await seedPlayedGames(9);
+    await seedOwnedGame(50, "Picked");
+    await seedOwnedGame(60, "Vote Winner");
+    await seedOwnedGame(61, "Manual Start");
+    await seedEntry(50);
+    await seedCurrentVote(db.pool, 60, 20, 1);
+    const conflictBody = {
+      message:
+        "Game 10 is a sub pick game and 1 entry is waiting for the 10s draw. Run the draw, or start this game anyway.",
+      code: "sub_draw_due",
+      subDraw: { gameNumber: 10, kind: "10s", entryCount: 1 }
+    };
+
+    const archive = await app.inject({ method: "POST", url: "/api/votes/archive", headers: adminHeaders, payload: {} });
+    expect(archive.statusCode).toBe(409);
+    expect(archive.json()).toEqual(conflictBody);
+
+    const progress = await app.inject({
+      method: "POST",
+      url: "/api/games/progress",
+      headers: adminHeaders,
+      payload: { title: "Manual Start", dateStarted: "2024-02-01", platform: "Physical" }
+    });
+    expect(progress.statusCode).toBe(409);
+    expect(progress.json()).toEqual(conflictBody);
+
+    const overridden = await app.inject({
+      method: "POST",
+      url: "/api/votes/archive",
+      headers: adminHeaders,
+      payload: { overrideSubDraw: true }
+    });
+    expect(overridden.statusCode).toBe(200);
+
+    const next = await app.inject({
+      method: "POST",
+      url: "/api/games/progress",
+      headers: adminHeaders,
+      payload: { title: "Manual Start", dateStarted: "2024-02-01", platform: "Physical" }
+    });
+    expect(next.statusCode).toBe(200);
+    expect(next.json()).toMatchObject({ progressId: 11, gameId: 61 });
+    expect(next.json()).not.toHaveProperty("overriddenSubDraw");
+    const audit = await db.pool.query("SELECT actor_username, action, target_id FROM sub_pick_audit");
+    expect(audit.rows).toEqual([{ actor_username: "AdminUser", action: "draw.override", target_id: 60 }]);
+  });
+});

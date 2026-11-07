@@ -15,6 +15,11 @@ test("anonymous visitors see the pools but must log in to pick", async ({ page }
   await expect(page.getByRole("link", { name: "Sub Picks" })).toHaveAttribute("aria-current", "page");
   await expect(page.getByText(/Tier 1 and Prime: 1 entry/)).toBeVisible();
 
+  await page.getByRole("link", { name: "Draw History" }).click();
+  await expect(page).toHaveURL(/\/sub-picks\/history$/);
+  await expect(page.getByRole("heading", { name: "Draw History" })).toBeVisible();
+  await expect(page.getByText("No draws have finished yet.")).toBeVisible();
+
   await page.goto("/sub-picks/mine");
   await expect(page.getByRole("heading", { name: "Not Logged In" })).toBeVisible();
 
