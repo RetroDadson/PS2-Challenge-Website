@@ -4,13 +4,16 @@ import { createBrowserRouter, RouterProvider } from "react-router-dom";
 import { DocumentTitle } from "./components/DocumentTitle.js";
 import { Layout } from "./components/Layout.js";
 import { Admin } from "./pages/Admin.js";
+import { AdminSubPicks } from "./pages/AdminSubPicks.js";
 import { Games } from "./pages/Games.js";
 import { Home } from "./pages/Home.js";
 import { Login } from "./pages/Login.js";
 import { NotFound } from "./pages/NotFound.js";
-import { BlankOverlay, DeathCounterOverlay, ProgressOverlay, VoteCoversOverlay, VotesOverlay } from "./pages/Overlays.js";
+import { BlankOverlay, DeathCounterOverlay, ProgressOverlay, SubPicksOverlay, VoteCoversOverlay, VotesOverlay } from "./pages/Overlays.js";
 import { Progress } from "./pages/Progress.js";
 import { Statistics } from "./pages/Statistics.js";
+import { SubPicks } from "./pages/SubPicks.js";
+import { SubPicksMine } from "./pages/SubPicksMine.js";
 import { UserPage } from "./pages/User.js";
 import { Votes } from "./pages/Votes.js";
 import { ChallengeRunners } from "./pages/ChallengeRunners.js";
@@ -25,16 +28,20 @@ const router = createBrowserRouter([
       { path: "/progress", element: <DocumentTitle title="Game Progress - Dadson's PS2 Tracker"><Progress /></DocumentTitle> },
       { path: "/statistics", element: <DocumentTitle title="Statistics - Dadson's PS2 Challenge"><Statistics /></DocumentTitle> },
       { path: "/votes", element: <DocumentTitle title="Vote History - Dadson's PS2 Tracker"><Votes /></DocumentTitle> },
+      { path: "/sub-picks", element: <DocumentTitle title="Sub Picks - Dadson's PS2 Challenge"><SubPicks /></DocumentTitle> },
+      { path: "/sub-picks/mine", element: <DocumentTitle title="My Sub Pick Entries - Dadson's PS2 Challenge"><SubPicksMine /></DocumentTitle> },
       { path: "/runners", element: <DocumentTitle title="Challenge Runners - Dadson's PS2 Challenge"><ChallengeRunners /></DocumentTitle> },
       { path: "/login", element: <DocumentTitle title="Login - Dadson's PS2 Challenge"><Login /></DocumentTitle> },
       { path: "/user", element: <DocumentTitle title="User Profile - Dadson's PS2 Challenge"><UserPage /></DocumentTitle> },
       { path: "/admin", element: <DocumentTitle title="Admin Panel - Dadson's PS2 Challenge"><Admin /></DocumentTitle> },
+      { path: "/admin/sub-picks", element: <DocumentTitle title="Sub Picks Admin - Dadson's PS2 Challenge"><AdminSubPicks /></DocumentTitle> },
       { path: "*", element: <DocumentTitle title="Not found"><NotFound /></DocumentTitle> }
     ]
   },
   { path: "/blank-overlay", element: <BlankOverlay /> },
   { path: "/deaths-overlay", element: <DeathCounterOverlay /> },
   { path: "/progress-overlay", element: <ProgressOverlay /> },
+  { path: "/sub-picks-overlay", element: <SubPicksOverlay /> },
   { path: "/vote-covers-overlay", element: <VoteCoversOverlay /> },
   { path: "/votes-overlay", element: <VotesOverlay /> }
 ]);

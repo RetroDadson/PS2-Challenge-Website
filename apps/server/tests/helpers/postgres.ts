@@ -38,6 +38,9 @@ export async function startIntegrationDatabase(): Promise<IntegrationDatabase> {
 async function resetDatabase(pool: pg.Pool): Promise<void> {
   await pool.query(`
     TRUNCATE
+      sub_pick_audit,
+      sub_entries,
+      sub_entry_grants,
       challenge_runners,
       twitch_stream_vods,
       vote_history,
@@ -52,6 +55,8 @@ async function resetDatabase(pool: pg.Pool): Promise<void> {
       users
     RESTART IDENTITY CASCADE
   `);
+  await pool.query("DELETE FROM sub_pick_settings");
+  await pool.query("INSERT INTO sub_pick_settings (id) VALUES (1)");
 }
 
 export async function seedGame(pool: pg.Pool, id: number, title: string): Promise<void> {

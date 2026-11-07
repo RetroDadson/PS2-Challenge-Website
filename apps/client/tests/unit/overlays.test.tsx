@@ -1,6 +1,6 @@
 import { act, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DeathCounterOverlay, ProgressOverlay, VoteCoversOverlay, VotesOverlay } from "../../src/pages/Overlays.js";
+import { DeathCounterOverlay, overlayTimer, ProgressOverlay, SubPicksOverlay, VoteCoversOverlay, VotesOverlay } from "../../src/pages/Overlays.js";
 
 type MockWebSocketEvent = {
   data?: string;
@@ -66,6 +66,96 @@ afterEach(() => {
   } catch {
     // Timers may not be enabled
   }
+});
+
+describe("sub picks overlay", () => {
+  afterEach(() => {
+    globalThis.history.pushState({}, "", "/");
+  });
+
+  it("parses show and hide timings from the URL", () => {
+    expect(overlayTimer("")).toEqual({ showMs: 20_000, everyMs: 900_000, alwaysVisible: true });
+    expect(overlayTimer("?scale=2")).toMatchObject({ alwaysVisible: true });
+    expect(overlayTimer("?show=5&every=60")).toEqual({ showMs: 5_000, everyMs: 60_000, alwaysVisible: false });
+    expect(overlayTimer("?show=30")).toEqual({ showMs: 30_000, everyMs: 900_000, alwaysVisible: false });
+    expect(overlayTimer("?every=120")).toEqual({ showMs: 20_000, everyMs: 120_000, alwaysVisible: false });
+    expect(overlayTimer("?every=0")).toMatchObject({ alwaysVisible: true });
+    expect(overlayTimer("?show=30&every=10")).toMatchObject({ alwaysVisible: true });
+    expect(overlayTimer("?show=abc&every=-4")).toEqual({ showMs: 20_000, everyMs: 900_000, alwaysVisible: false });
+    expect(overlayTimer("?show=0&every=")).toEqual({ showMs: 20_000, everyMs: 900_000, alwaysVisible: false });
+  });
+
+  it("shows the message and live numbers, then hides and reappears on the URL timer", async () => {
+    vi.useFakeTimers();
+    globalThis.history.pushState({}, "", "/sub-picks-overlay?show=5&every=60");
+    mockFetch({ "/api/sub-picks/summary": subPicksSummary() });
+
+    render(<SubPicksOverlay />);
+    await flushReact();
+
+    const overlay = screen.getByTestId("sub-picks-overlay");
+    expect(overlay).toHaveTextContent("Sub to add a game to the wheel.");
+    expect(overlay).toHaveTextContent("Next 10s drawGame 609 games to go");
+    expect(overlay).toHaveTextContent("On the wheel15entries");
+    expect(overlay).toHaveTextContent("Top pickGrand Theft Auto: San Andreas5 entries");
+    expect(overlay).not.toHaveClass("is-hidden");
+
+    act(() => {
+      vi.advanceTimersByTime(5_000);
+    });
+    expect(overlay).toHaveClass("is-hidden");
+    expect(overlay).toHaveAttribute("aria-hidden", "true");
+
+    act(() => {
+      vi.advanceTimersByTime(55_000);
+    });
+    expect(overlay).not.toHaveClass("is-hidden");
+
+    act(() => {
+      vi.advanceTimersByTime(5_000);
+    });
+    expect(overlay).toHaveClass("is-hidden");
+  });
+
+  it("stays visible when asked and refreshes on sub pick and game updates", async () => {
+    globalThis.history.pushState({}, "", "/sub-picks-overlay?every=0");
+    const fetchSpy = mockFetch({
+      "/api/sub-picks/summary": subPicksSummary({
+        schedule: { nextGameNumber: 100, nextDrawGameNumber: 100, nextDrawKind: "100s", gamesUntilNextDraw: 0, nextHundredDrawGameNumber: 100, gamesUntilNextHundredDraw: 0 },
+        nextDrawPool: { totalEntries: 1, games: [{ gameId: 1, gameTitle: "Amplitude", imageUrl: null, entries: 1, odds: 1 }] }
+      })
+    });
+
+    render(<SubPicksOverlay />);
+
+    const overlay = await screen.findByTestId("sub-picks-overlay");
+    expect(await screen.findByText("Next game!")).toBeInTheDocument();
+    expect(overlay).toHaveTextContent("Next 100s draw");
+    expect(overlay).toHaveTextContent("On the wheel1entry");
+    expect(overlay).toHaveTextContent("Amplitude1 entry");
+    expect(overlay).not.toHaveClass("is-hidden");
+
+    const before = fetchSpy.mock.calls.length;
+    act(() => {
+      MockWebSocket.instances.find((socket) => socket.url.endsWith("/subPicksHub"))?.emitMessage(JSON.stringify({ type: "SubPicksUpdated" }));
+      MockWebSocket.instances.find((socket) => socket.url.endsWith("/gamesHub"))?.emitMessage(JSON.stringify({ type: "GamesUpdated" }));
+    });
+    await flushReact();
+    expect(fetchSpy.mock.calls).toHaveLength(before + 2);
+  });
+
+  it("shows empty and error states", async () => {
+    mockFetch({ "/api/sub-picks/summary": subPicksSummary({ nextDrawPool: { totalEntries: 0, games: [] }, schedule: { ...subPicksSummary().schedule, gamesUntilNextDraw: 1 } }) });
+    const { unmount } = render(<SubPicksOverlay />);
+    expect(await screen.findByText("No picks yet")).toBeInTheDocument();
+    expect(screen.getByText("Sub to add one")).toBeInTheDocument();
+    expect(screen.getByText("1 game to go")).toBeInTheDocument();
+    unmount();
+
+    mockFetch({});
+    render(<SubPicksOverlay />);
+    expect(await screen.findByText("Error loading sub picks")).toBeInTheDocument();
+  });
 });
 
 describe("stream overlays", () => {
@@ -447,4 +537,22 @@ async function flushReact() {
     await Promise.resolve();
     await Promise.resolve();
   });
+}
+
+function subPicksSummary(overrides: Record<string, unknown> = {}) {
+  return {
+    schedule: { nextGameNumber: 51, nextDrawGameNumber: 60, nextDrawKind: "10s", gamesUntilNextDraw: 9, nextHundredDrawGameNumber: 100, gamesUntilNextHundredDraw: 49 },
+    nextDrawPool: {
+      totalEntries: 15,
+      games: [
+        { gameId: 1, gameTitle: "Grand Theft Auto: San Andreas", imageUrl: null, entries: 5, odds: 0.33 },
+        { gameId: 2, gameTitle: "Van Helsing", imageUrl: null, entries: 2, odds: 0.13 }
+      ]
+    },
+    tensPool: { totalEntries: 15, games: [] },
+    hundredsPool: { totalEntries: 4, games: [] },
+    overlayMessage: "Sub to add a game to the wheel.",
+    tierEntries: { tier1: 1, tier2: 2, tier3: 5 },
+    ...overrides
+  };
 }

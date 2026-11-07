@@ -7,6 +7,8 @@ import { registerAuthRoutes } from "../src/routes/authRoutes.js";
 import { registerChallengeRunnerRoutes } from "../src/routes/challengeRunnerRoutes.js";
 import { registerGamesRoutes } from "../src/routes/gamesRoutes.js";
 import { registerHealthRoutes } from "../src/routes/healthRoutes.js";
+import { registerSubPickAdminRoutes } from "../src/routes/subPickAdminRoutes.js";
+import { registerSubPickRoutes } from "../src/routes/subPickRoutes.js";
 import { registerTwitchRoutes } from "../src/routes/twitchRoutes.js";
 import { registerUserRoutes } from "../src/routes/userRoutes.js";
 import { registerVotesRoutes } from "../src/routes/votesRoutes.js";
@@ -55,6 +57,8 @@ describe("swagger docs", () => {
     await registerTwitchRoutes(app, fakeTwitchStatsService());
     await registerVotesRoutes(app, fakeVoteService(), userRepository, config, fakeRealtimeHub());
     await registerHealthRoutes(app, async () => undefined);
+    registerSubPickRoutes(app, {} as never, userRepository, config, fakeRealtimeHub());
+    registerSubPickAdminRoutes(app, {} as never, {} as never, userRepository, config, fakeRealtimeHub());
     await app.ready();
 
     const document = app.swagger() as any;
@@ -84,6 +88,11 @@ describe("swagger docs", () => {
     expect(document.paths["/api/user/preferences/game-table-columns"].put.requestBody).toBeDefined();
     expect(document.paths["/api/user/preferences/game-table-columns"].put.security).toEqual([{ ApiKey: [] }, { Cookie: [] }]);
     expect(document.paths["/api/health"].get.responses["503"]).toBeDefined();
+    expect(document.components.schemas.SubEntry.properties).toEqual(expect.objectContaining({ pool: expect.any(Object), canChangePick: expect.any(Object) }));
+    expect(document.paths["/api/sub-picks/summary"].get.responses["200"]).toBeDefined();
+    expect(document.paths["/api/sub-picks/me/entries/{id}/pick"].put.security).toEqual([{ ApiKey: [] }, { Cookie: [] }]);
+    expect(document.paths["/api/admin/sub-picks/grants"].post.requestBody).toBeDefined();
+    expect(document.paths["/api/admin/sub-picks/grants/{id}"].delete.responses["200"]).toBeDefined();
 
     for (const [path, item] of Object.entries<Record<string, any>>(document.paths)) {
       if (!path.startsWith("/api/") && path !== "/health") {

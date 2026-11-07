@@ -1,4 +1,4 @@
-import type { GameTablePreferencesDto } from "@ps2-challenge/shared";
+import type { GameTablePreferencesDto, SubEntryStatus, SubGrantType, SubTier } from "@ps2-challenge/shared";
 import { Kysely, PostgresDialect, type ColumnType, type Generated, type JSONColumnType } from "kysely";
 import pg from "pg";
 
@@ -109,6 +109,53 @@ export interface Database {
     id: Generated<number>;
     name: string;
     description: string | null;
+  };
+  sub_entries: {
+    entry_id: Generated<number>;
+    grant_id: number;
+    twitch_user_id: string | null;
+    game_id: number | null;
+    status: Generated<SubEntryStatus>;
+    played_game_number: number | null;
+    picked_at: NullableTimestamp;
+    pick_updated_by_user_id: number | null;
+    created_at: Timestamp;
+    updated_at: Timestamp;
+  };
+  sub_entry_grants: {
+    grant_id: Generated<number>;
+    twitch_user_id: string | null;
+    twitch_login: string | null;
+    twitch_display_name: string | null;
+    tier: SubTier;
+    grant_type: SubGrantType;
+    gift_count: Generated<number>;
+    entry_count: number;
+    source: "eventsub" | "manual";
+    notes: string | null;
+    created_by_user_id: number | null;
+    created_at: Timestamp;
+    updated_at: Timestamp;
+  };
+  sub_pick_audit: {
+    audit_id: Generated<number>;
+    actor_user_id: number | null;
+    actor_username: string | null;
+    action: string;
+    target_type: string;
+    target_id: number | null;
+    details: JSONColumnType<Record<string, unknown>, Record<string, unknown> | undefined, Record<string, unknown>>;
+    created_at: Timestamp;
+  };
+  sub_pick_settings: {
+    id: number;
+    tier1_entries: number;
+    tier2_entries: number;
+    tier3_entries: number;
+    spin_duration_seconds: number;
+    overlay_message: string;
+    updated_by_user_id: number | null;
+    updated_at: Timestamp;
   };
   ts_migration_baseline: {
     id: number;

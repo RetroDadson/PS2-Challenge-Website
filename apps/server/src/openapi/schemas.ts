@@ -168,6 +168,201 @@ const openApiSchemas = [
     }
   },
   {
+    $id: "SubPickSettings",
+    type: "object",
+    required: ["tier1Entries", "tier2Entries", "tier3Entries", "spinDurationSeconds", "overlayMessage"],
+    properties: {
+      tier1Entries: { type: "integer", minimum: 0, maximum: 100 },
+      tier2Entries: { type: "integer", minimum: 0, maximum: 100 },
+      tier3Entries: { type: "integer", minimum: 0, maximum: 100 },
+      spinDurationSeconds: { type: "integer", minimum: 1, maximum: 120 },
+      overlayMessage: { type: "string", maxLength: 300 }
+    }
+  },
+  {
+    $id: "UpdateSubPickSettingsRequest",
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      tier1Entries: { type: "integer", minimum: 0, maximum: 100 },
+      tier2Entries: { type: "integer", minimum: 0, maximum: 100 },
+      tier3Entries: { type: "integer", minimum: 0, maximum: 100 },
+      spinDurationSeconds: { type: "integer", minimum: 1, maximum: 120 },
+      overlayMessage: { type: "string", minLength: 1, maxLength: 300 }
+    }
+  },
+  {
+    $id: "TwitchUserLookupRequest",
+    type: "object",
+    additionalProperties: false,
+    required: ["login"],
+    properties: { login: { type: "string", pattern: String.raw`^\w{1,25}$` } }
+  },
+  {
+    $id: "TwitchUserLookup",
+    type: "object",
+    required: ["twitchUserId", "login", "displayName", "profileImageUrl"],
+    properties: { twitchUserId: { type: "string" }, login: { type: "string" }, displayName: { type: "string" }, profileImageUrl: stringNullable }
+  },
+  {
+    $id: "CreateSubGrantRequest",
+    type: "object",
+    additionalProperties: false,
+    required: ["twitchUserId", "twitchLogin", "twitchDisplayName", "tier", "grantType"],
+    properties: {
+      twitchUserId: { type: "string", pattern: String.raw`^\d{1,20}$` },
+      twitchLogin: { type: "string", pattern: String.raw`^\w{1,25}$` },
+      twitchDisplayName: { type: "string", minLength: 1, maxLength: 255 },
+      tier: { type: "string", enum: ["prime", "1000", "2000", "3000"] },
+      grantType: { type: "string", enum: ["new", "resub", "gift"] },
+      giftCount: { type: "integer", minimum: 1, maximum: 1000 },
+      entryCount: { type: "integer", minimum: 0, maximum: 5000, description: "Overrides the entry count calculated from the tier values" },
+      notes: { type: "string", maxLength: 500, nullable: true }
+    }
+  },
+  {
+    $id: "UpdateSubGrantRequest",
+    type: "object",
+    additionalProperties: false,
+    properties: {
+      tier: { type: "string", enum: ["prime", "1000", "2000", "3000"] },
+      grantType: { type: "string", enum: ["new", "resub", "gift"] },
+      giftCount: { type: "integer", minimum: 1, maximum: 1000 },
+      entryCount: { type: "integer", minimum: 0, maximum: 5000 },
+      notes: { type: "string", maxLength: 500, nullable: true }
+    }
+  },
+  {
+    $id: "SetSubEntryPickRequest",
+    type: "object",
+    additionalProperties: false,
+    required: ["gameId"],
+    properties: { gameId: { ...positiveId, nullable: true } }
+  },
+  {
+    $id: "SubEntry",
+    type: "object",
+    required: ["id", "grantId", "twitchUserId", "twitchDisplayName", "gameId", "gameTitle", "status", "pool", "canChangePick", "playedGameNumber", "createdAt"],
+    properties: {
+      id: positiveId,
+      grantId: positiveId,
+      twitchUserId: stringNullable,
+      twitchDisplayName: stringNullable,
+      gameId: { type: "integer", nullable: true },
+      gameTitle: stringNullable,
+      status: { type: "string", enum: ["undrawn", "in_100s_pool", "won", "lost", "removed_played", "voided"] },
+      pool: { type: "string", enum: ["awaiting_pick", "needs_new_pick", "next_draw", "100s_pool", "finished"] },
+      canChangePick: { type: "boolean" },
+      playedGameNumber: { type: "integer", nullable: true },
+      createdAt: dateTime
+    }
+  },
+  {
+    $id: "SubGrant",
+    type: "object",
+    required: ["id", "twitchUserId", "twitchLogin", "twitchDisplayName", "tier", "grantType", "giftCount", "entryCount", "source", "notes", "createdBy", "createdAt", "entries"],
+    properties: {
+      id: positiveId,
+      twitchUserId: stringNullable,
+      twitchLogin: stringNullable,
+      twitchDisplayName: stringNullable,
+      tier: { type: "string", enum: ["prime", "1000", "2000", "3000"] },
+      grantType: { type: "string", enum: ["new", "resub", "gift"] },
+      giftCount: count,
+      entryCount: count,
+      source: { type: "string", enum: ["eventsub", "manual"] },
+      notes: stringNullable,
+      createdBy: stringNullable,
+      createdAt: dateTime,
+      entries: arrayOf("SubEntry")
+    }
+  },
+  {
+    $id: "SubPool",
+    type: "object",
+    required: ["totalEntries", "games"],
+    properties: {
+      totalEntries: count,
+      games: {
+        type: "array",
+        items: {
+          type: "object",
+          required: ["gameId", "gameTitle", "imageUrl", "entries", "odds"],
+          properties: { gameId: positiveId, gameTitle: { type: "string" }, imageUrl: stringNullable, entries: count, odds: { type: "number" } }
+        }
+      }
+    }
+  },
+  {
+    $id: "SubPicksSummary",
+    type: "object",
+    required: ["schedule", "nextDrawPool", "tensPool", "hundredsPool", "overlayMessage", "tierEntries"],
+    properties: {
+      schedule: {
+        type: "object",
+        required: ["nextGameNumber", "nextDrawGameNumber", "nextDrawKind", "gamesUntilNextDraw", "nextHundredDrawGameNumber", "gamesUntilNextHundredDraw"],
+        properties: {
+          nextGameNumber: positiveId,
+          nextDrawGameNumber: positiveId,
+          nextDrawKind: { type: "string", enum: ["10s", "100s"] },
+          gamesUntilNextDraw: count,
+          nextHundredDrawGameNumber: positiveId,
+          gamesUntilNextHundredDraw: count
+        }
+      },
+      nextDrawPool: ref("SubPool"),
+      tensPool: ref("SubPool"),
+      hundredsPool: ref("SubPool"),
+      overlayMessage: { type: "string" },
+      tierEntries: { type: "object", properties: { tier1: count, tier2: count, tier3: count } }
+    }
+  },
+  {
+    $id: "MySubPicks",
+    type: "object",
+    required: ["entries", "stats"],
+    properties: {
+      entries: arrayOf("SubEntry"),
+      stats: {
+        type: "object",
+        required: ["entriesEarned", "picksMade", "wins", "nextDrawOdds"],
+        properties: { entriesEarned: count, picksMade: count, wins: count, nextDrawOdds: { type: "number" } }
+      }
+    }
+  },
+  {
+    $id: "EligibleGame",
+    type: "object",
+    required: ["id", "title", "imageUrl"],
+    properties: { id: positiveId, title: { type: "string" }, imageUrl: stringNullable }
+  },
+  {
+    $id: "SubGrantDeleteResult",
+    type: "object",
+    required: ["deleted", "voidedEntries"],
+    properties: { deleted: { type: "boolean" }, voidedEntries: count }
+  },
+  {
+    $id: "SubEntryDeleteResult",
+    type: "object",
+    required: ["deleted"],
+    properties: { deleted: { type: "boolean", description: "False when the entry was voided to keep draw history" } }
+  },
+  {
+    $id: "SubPickAudit",
+    type: "object",
+    required: ["id", "actor", "action", "targetType", "targetId", "details", "createdAt"],
+    properties: {
+      id: positiveId,
+      actor: stringNullable,
+      action: { type: "string" },
+      targetType: { type: "string" },
+      targetId: { type: "integer", nullable: true },
+      details: { type: "object", additionalProperties: true },
+      createdAt: dateTime
+    }
+  },
+  {
     $id: "ChallengeRunnerLogoRefreshResult",
     type: "object",
     required: ["message", "total", "updated", "unchanged", "errors"],
@@ -761,6 +956,121 @@ export const challengeRunnerRouteSchemas = {
     security: adminSecurity,
     params: ref("IdParams"),
     response: { 200: ref("MessageResponse"), ...unauthorizedForbidden, ...notFound, ...serverError }
+  })
+} as const;
+
+export const subPickRouteSchemas = {
+  summary: route({
+    tags: ["Sub Picks"],
+    summary: "Get the draw schedule and current sub pick pools",
+    operationId: "getSubPicksSummary",
+    response: { 200: ref("SubPicksSummary"), ...serverError }
+  }),
+  eligibleGames: route({
+    tags: ["Sub Picks"],
+    summary: "List games that can be picked",
+    description: "Games that are owned, included in the challenge and not started.",
+    operationId: "listSubPickEligibleGames",
+    response: { 200: arrayOf("EligibleGame"), ...serverError }
+  }),
+  mine: route({
+    tags: ["Sub Picks"],
+    summary: "Get the signed-in viewer's sub pick entries",
+    operationId: "getMySubPicks",
+    security: authenticatedSecurity,
+    response: { 200: ref("MySubPicks"), 401: ref("ErrorResponse"), ...serverError }
+  }),
+  setMyPick: route({
+    tags: ["Sub Picks"],
+    summary: "Pick or change the game on one of your entries",
+    operationId: "setMySubPick",
+    security: authenticatedSecurity,
+    params: ref("IdParams"),
+    body: ref("SetSubEntryPickRequest"),
+    response: { 200: ref("SubEntry"), ...badRequest, 401: ref("ErrorResponse"), ...notFound, ...conflict, ...serverError }
+  })
+} as const;
+
+export const subPickAdminRouteSchemas = {
+  settings: route({
+    tags: ["Sub Picks Admin"],
+    summary: "Get sub pick settings",
+    operationId: "getSubPickSettings",
+    security: adminSecurity,
+    response: { 200: ref("SubPickSettings"), ...unauthorizedForbidden, ...serverError }
+  }),
+  updateSettings: route({
+    tags: ["Sub Picks Admin"],
+    summary: "Update sub pick settings",
+    operationId: "updateSubPickSettings",
+    security: adminSecurity,
+    body: ref("UpdateSubPickSettingsRequest"),
+    response: { 200: ref("SubPickSettings"), ...badRequest, ...unauthorizedForbidden, ...serverError }
+  }),
+  twitchLookup: route({
+    tags: ["Sub Picks Admin"],
+    summary: "Look up a Twitch user ID by username",
+    operationId: "lookupTwitchUser",
+    security: adminSecurity,
+    body: ref("TwitchUserLookupRequest"),
+    response: { 200: ref("TwitchUserLookup"), ...badRequest, ...unauthorizedForbidden, ...notFound, 502: ref("ErrorResponse") }
+  }),
+  listGrants: route({
+    tags: ["Sub Picks Admin"],
+    summary: "List sub entry grants and their entries",
+    operationId: "listSubGrants",
+    security: adminSecurity,
+    response: { 200: arrayOf("SubGrant"), ...unauthorizedForbidden, ...serverError }
+  }),
+  createGrant: route({
+    tags: ["Sub Picks Admin"],
+    summary: "Add sub entries by hand",
+    operationId: "createSubGrant",
+    security: adminSecurity,
+    body: ref("CreateSubGrantRequest"),
+    response: { 201: ref("SubGrant"), ...badRequest, ...unauthorizedForbidden, ...serverError }
+  }),
+  updateGrant: route({
+    tags: ["Sub Picks Admin"],
+    summary: "Edit a sub entry grant",
+    operationId: "updateSubGrant",
+    security: adminSecurity,
+    params: ref("IdParams"),
+    body: ref("UpdateSubGrantRequest"),
+    response: { 200: ref("SubGrant"), ...badRequest, ...unauthorizedForbidden, ...notFound, ...conflict, ...serverError }
+  }),
+  deleteGrant: route({
+    tags: ["Sub Picks Admin"],
+    summary: "Remove a sub entry grant",
+    description: "Deletes the grant when none of its entries have been drawn, otherwise voids its remaining entries.",
+    operationId: "deleteSubGrant",
+    security: adminSecurity,
+    params: ref("IdParams"),
+    response: { 200: ref("SubGrantDeleteResult"), ...unauthorizedForbidden, ...notFound, ...serverError }
+  }),
+  setPick: route({
+    tags: ["Sub Picks Admin"],
+    summary: "Set the pick on a viewer's entry",
+    operationId: "setSubPickForViewer",
+    security: adminSecurity,
+    params: ref("IdParams"),
+    body: ref("SetSubEntryPickRequest"),
+    response: { 200: ref("SubEntry"), ...badRequest, ...unauthorizedForbidden, ...notFound, ...conflict, ...serverError }
+  }),
+  removeEntry: route({
+    tags: ["Sub Picks Admin"],
+    summary: "Remove a single sub entry",
+    operationId: "deleteSubEntry",
+    security: adminSecurity,
+    params: ref("IdParams"),
+    response: { 200: ref("SubEntryDeleteResult"), ...unauthorizedForbidden, ...notFound, ...conflict, ...serverError }
+  }),
+  audit: route({
+    tags: ["Sub Picks Admin"],
+    summary: "List recent sub pick admin and viewer changes",
+    operationId: "listSubPickAudit",
+    security: adminSecurity,
+    response: { 200: arrayOf("SubPickAudit"), ...unauthorizedForbidden, ...serverError }
   })
 } as const;
 

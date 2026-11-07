@@ -16,7 +16,8 @@ const expectedMigrationRecords = [
   "005_add_howlongtobeat_sync_state",
   "006_add_user_game_table_preferences",
   "007_add_challenge_runners",
-  "008_add_progress_death_counter"
+  "008_add_progress_death_counter",
+  "009_add_sub_pick_entries"
 ];
 
 describe("database migrations", () => {
@@ -52,6 +53,14 @@ describe("database migrations", () => {
       expect(tables.rows.map((row) => row.table_name)).toContain("game_howlongtobeat_sync_state");
       expect(tables.rows.map((row) => row.table_name)).toContain("challenge_runners");
       expect(tables.rows.map((row) => row.table_name)).toContain("progress_death_counters");
+      expect(tables.rows.map((row) => row.table_name)).toEqual(expect.arrayContaining(["sub_pick_settings", "sub_entry_grants", "sub_entries", "sub_pick_audit"]));
+
+      const subPickSettings = await pool.query("SELECT tier1_entries, tier2_entries, tier3_entries, spin_duration_seconds FROM sub_pick_settings");
+      expect(subPickSettings.rows).toEqual([{ tier1_entries: 1, tier2_entries: 2, tier3_entries: 5, spin_duration_seconds: 10 }]);
+      await expect(pool.query("INSERT INTO sub_pick_settings (id) VALUES (2)")).rejects.toThrow(/chk_sub_pick_settings_singleton/);
+      await expect(pool.query("INSERT INTO sub_entry_grants (tier, grant_type, entry_count, source) VALUES ('4000', 'new', 1, 'manual')")).rejects.toThrow(
+        /chk_sub_entry_grants_tier/
+      );
 
       const progressColumns = await pool.query<{ column_name: string }>(
         "SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'progress' ORDER BY ordinal_position"

@@ -10,6 +10,11 @@ import { POSTGRES_TEST_IMAGE } from "../../apps/server/tests/helpers/postgresIma
 const port = Number.parseInt(process.env.PLAYWRIGHT_FULLSTACK_PORT ?? "4173", 10);
 const cookieSecret = process.env.PLAYWRIGHT_COOKIE_SECRET ?? "playwright-cookie-secret";
 
+const playwrightSub = { twitchUserId: "424242", login: "playwrightsub", displayName: "PlaywrightSub", profileImageUrl: null };
+const twitchUserLookup = {
+  getUserByLogin: async (login: string) => (login.toLocaleLowerCase("en-GB") === playwrightSub.login ? playwrightSub : null)
+};
+
 let dbClient: DbClient | undefined;
 let container: Awaited<ReturnType<PostgreSqlContainer["start"]>> | undefined;
 let app: Awaited<ReturnType<typeof buildApp>> | undefined;
@@ -35,7 +40,7 @@ async function main() {
       logLevel: "silent",
       trustProxy: true
     },
-    { dbClient }
+    { dbClient, twitchUserLookup }
   );
 
   await app.listen({ port, host: "127.0.0.1" });
@@ -67,6 +72,15 @@ async function seedDatabase(client: DbClient) {
         created_at: "2024-01-02T10:00:00",
         last_login_at: "2024-01-09T10:00:00",
         api_key: hashApiKey("playwright-user-api-key")
+      },
+      {
+        twitch_id: playwrightSub.twitchUserId,
+        twitch_username: playwrightSub.displayName,
+        profile_image_url: null,
+        role_id: userRole.id,
+        created_at: "2024-01-03T10:00:00",
+        last_login_at: "2024-01-08T10:00:00",
+        api_key: hashApiKey("playwright-sub-api-key")
       }
     ])
     .execute();

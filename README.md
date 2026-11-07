@@ -9,7 +9,7 @@ A TypeScript web app for tracking progress through the PS2 challenge, managing t
 - **React + Vite** frontend served by Fastify in production
 - **Fastify TypeScript API** for REST, auth, health checks, Swagger UI, sitemap, and static assets
 - **PostgreSQL** for persistence
-- **WebSocket hubs** at `/votesHub` and `/gamesHub` for realtime updates
+- **WebSocket hubs** at `/votesHub`, `/gamesHub` and `/subPicksHub` for realtime updates
 - **Twitch OAuth** for authentication and `.PS2Challenge.Auth` cookies
 
 ## Quick Start
@@ -130,4 +130,4 @@ To take a new Azure Monitor release, update `@azure/monitor-opentelemetry` and i
 - Swagger UI: `/swagger`
 - OpenAPI JSON: `/swagger/json`
 - Robots and sitemap: `/robots.txt` and `/sitemap.xml`
-- Realtime WebSocket endpoints: `/votesHub` and `/gamesHub`
+- Realtime WebSocket endpoints: `/votesHub`, `/gamesHub` and `/subPicksHub`
