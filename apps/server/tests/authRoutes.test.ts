@@ -225,7 +225,7 @@ describe("EventSub authorisation", () => {
 async function authApp(repository: object, eventSubAuthorization?: EventSubAuthorization) {
   const app = fastify({ logger: false });
   await app.register(cookie);
-  await registerAuthRoutes(app, repository as never, config, eventSubAuthorization);
+  registerAuthRoutes(app, repository as never, config, eventSubAuthorization);
   return app;
 }
 

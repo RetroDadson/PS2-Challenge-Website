@@ -51,7 +51,7 @@ describe("swagger docs", () => {
     registerOpenApiSchemas(app);
 
     const userRepository = {} as never;
-    await registerAuthRoutes(app, userRepository, config);
+    registerAuthRoutes(app, userRepository, config);
     await registerUserRoutes(app, userRepository, config);
     await registerAdminRoutes(app, userRepository, config, fakeTwitchStatsService());
     await registerChallengeRunnerRoutes(app, {} as never, {} as never, {} as never, userRepository, config);

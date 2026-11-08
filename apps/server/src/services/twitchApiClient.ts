@@ -30,7 +30,7 @@ export class TwitchApiError extends Error {
     readonly status: number,
     readonly detail: string | null
   ) {
-    super(`Twitch API request failed: ${status}${detail ? ` (${detail})` : ""}`);
+    super(detail ? `Twitch API request failed: ${status} (${detail})` : `Twitch API request failed: ${status}`);
     this.name = "TwitchApiError";
   }
 }

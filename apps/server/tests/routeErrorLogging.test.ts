@@ -52,7 +52,7 @@ describe("route error logging", () => {
     app = fastify({ logger: false });
     const errorLog = vi.spyOn(app.log, "error");
     await app.register(cookie);
-    await registerAuthRoutes(
+    registerAuthRoutes(
       app,
       {
         getByTwitchId: vi.fn(async () => {
