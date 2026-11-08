@@ -50,7 +50,7 @@ describe("cover image parity", () => {
     await seedUser(db.pool, "Admin", adminApiKey);
   });
 
-  it("generates cover URLs from normalized serial numbers and applies C# region priority", async () => {
+  it("generates cover URLs from normalized serial numbers and prefers PAL over NTSC-U and NTSC-J", async () => {
     await seedGame(db.pool, 1, "No Serial Game");
     await seedGame(db.pool, 2, "Single Serial Game");
     await seedGame(db.pool, 3, "Priority Game");
@@ -63,22 +63,52 @@ describe("cover image parity", () => {
 
     await expect(service.getCoverUrl(1)).resolves.toBeNull();
     await expect(service.getCoverUrl(2)).resolves.toBe(`${coverBaseUrl}/SLUS-20062.jpg`);
-    await expect(service.getCoverUrl(3)).resolves.toBe(`${coverBaseUrl}/SLUS-99999.jpg`);
+    await expect(service.getCoverUrl(3)).resolves.toBe(`${coverBaseUrl}/SCES-54321.jpg`);
   });
 
-  it("returns batch cover URLs only for games with serial numbers", async () => {
+  it("returns batch cover URL candidates only for games with serial numbers", async () => {
     await seedGame(db.pool, 1, "Game One");
     await seedGame(db.pool, 2, "Game Two");
     await seedGame(db.pool, 3, "Game Three");
     await addSerial(1, "SLUS-11111", "NTSC-U");
     await addSerial(2, "SCES-22222", "PAL");
+    await addSerial(2, "SLUS-22222", "NTSC-U");
 
-    const result = await new GameCoverService(db.pool).getCoverUrls([1, 2, 3]);
+    const result = await new GameCoverService(db.pool).getCoverUrlCandidatesForGames([1, 2, 3]);
 
     expect(result).toEqual({
-      1: `${coverBaseUrl}/SLUS-11111.jpg`,
-      2: `${coverBaseUrl}/SCES-22222.jpg`
+      1: [`${coverBaseUrl}/SLUS-11111.jpg`],
+      2: [`${coverBaseUrl}/SCES-22222.jpg`, `${coverBaseUrl}/SLUS-22222.jpg`]
     });
+  });
+
+  it("falls back to the next serial when the preferred serial has no cover", async () => {
+    const existingCover = `${coverBaseUrl}/SLUS-21151.jpg`;
+    const fetchCover = vi.fn(async (url: string) => new Response(null, { status: url === existingCover ? 200 : 404 }));
+    vi.stubGlobal("fetch", fetchCover);
+    await seedGame(db.pool, 1, "Cars");
+    await addSerial(1, "SLES-53624", "PAL");
+    await addSerial(1, "NPUD-21151", "NTSC-U");
+    await addSerial(1, "SLUS-21151", "NTSC-U");
+
+    const updated = await new CoverImageRefreshService(db.pool).refreshCoverImages();
+
+    expect(updated).toBe(1);
+    await expectImageUrl(1, existingCover);
+    expect(fetchCover).toHaveBeenCalledTimes(3);
+  });
+
+  it("keeps the existing cover when no serial is confirmed and one check is inconclusive", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => new Response(null, { status: url.endsWith("NPUD-21151.jpg") ? 404 : 503 })));
+    await seedGame(db.pool, 1, "Cars");
+    await addSerial(1, "NPUD-21151", "NTSC-U");
+    await addSerial(1, "SLUS-21151", "NTSC-U");
+    await setImageUrl(1, "old-url");
+
+    const updated = await new CoverImageRefreshService(db.pool).refreshCoverImages();
+
+    expect(updated).toBe(0);
+    await expectImageUrl(1, "old-url");
   });
 
   it("refreshes changed and missing cover URLs while skipping unchanged games", async () => {

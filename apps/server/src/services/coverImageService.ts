@@ -46,19 +46,23 @@ export class GameCoverService {
   }
 
   async getCoverUrl(gameId: number): Promise<string | null> {
+    return (await this.getCoverUrlCandidates(gameId))[0] ?? null;
+  }
+
+  async getCoverUrlCandidates(gameId: number): Promise<string[]> {
     const rows = await this.db
       .selectFrom("game_serial_numbers")
       .select(["serial_number", "region"])
       .where("game_id", "=", gameId)
       .execute();
     const sortedRows = [...rows].sort((left, right) => regionPriority(left.region) - regionPriority(right.region));
-    const serial = sortedRows[0]?.serial_number;
-    return serial ? `${coverRepositoryPath}/${serial.trim().toUpperCase()}.jpg` : null;
+    const serials = sortedRows.map((row) => row.serial_number.trim().toUpperCase()).filter((serial) => serial.length > 0);
+    return [...new Set(serials)].map((serial) => `${coverRepositoryPath}/${serial}.jpg`);
   }
 
-  async getCoverUrls(gameIds: number[]): Promise<Record<number, string>> {
-    const entries = await Promise.all(gameIds.map(async (id) => [id, await this.getCoverUrl(id)] as const));
-    return Object.fromEntries(entries.filter((entry): entry is readonly [number, string] => !!entry[1]));
+  async getCoverUrlCandidatesForGames(gameIds: number[]): Promise<Record<number, string[]>> {
+    const entries = await Promise.all(gameIds.map(async (id) => [id, await this.getCoverUrlCandidates(id)] as const));
+    return Object.fromEntries(entries.filter(([, urls]) => urls.length > 0));
   }
 
   async checkCoverUrl(url: string, signal?: AbortSignal): Promise<CoverUrlStatus> {
@@ -116,14 +120,14 @@ export class CoverImageRefreshService {
     };
     await emitProgress(onProgress, progress);
 
-    const urls = await this.coverService.getCoverUrls(games.map((game) => game.id));
+    const candidateUrls = await this.coverService.getCoverUrlCandidatesForGames(games.map((game) => game.id));
     for (const game of games) {
       if (signal?.aborted) {
         break;
       }
       await this.markChecking(progress, game, onProgress);
 
-      const outcome = await this.refreshGameCover(game, urls[game.id] ?? null, progress, signal);
+      const outcome = await this.refreshGameCover(game, candidateUrls[game.id] ?? [], progress, signal);
       if (outcome === abortedCoverRefresh) {
         break;
       }
@@ -155,12 +159,12 @@ export class CoverImageRefreshService {
 
   private async refreshGameCover(
     game: GameDto,
-    candidateUrl: string | null,
+    candidateUrls: string[],
     progress: CoverImageRefreshProgress,
     signal?: AbortSignal
   ): Promise<"processed" | typeof abortedCoverRefresh> {
     try {
-      const nextUrl = await this.resolveCoverUrl(game, candidateUrl, signal);
+      const nextUrl = await this.resolveCoverUrl(game, candidateUrls, signal);
       if (nextUrl === abortedCoverRefresh) {
         return abortedCoverRefresh;
       }
@@ -173,21 +177,21 @@ export class CoverImageRefreshService {
 
   private async resolveCoverUrl(
     game: GameDto,
-    candidateUrl: string | null,
+    candidateUrls: string[],
     signal?: AbortSignal
   ): Promise<string | null | typeof abortedCoverRefresh> {
-    if (!candidateUrl) {
-      return null;
+    let inconclusive = false;
+    for (const candidateUrl of candidateUrls) {
+      const coverStatus = await this.coverService.checkCoverUrl(candidateUrl, signal);
+      if (signal?.aborted) {
+        return abortedCoverRefresh;
+      }
+      if (coverStatus === "exists") {
+        return candidateUrl;
+      }
+      inconclusive ||= coverStatus === "unknown";
     }
-
-    const coverStatus = await this.coverService.checkCoverUrl(candidateUrl, signal);
-    if (signal?.aborted) {
-      return abortedCoverRefresh;
-    }
-    if (coverStatus === "missing") {
-      return null;
-    }
-    return coverStatus === "unknown" ? game.imageUrl ?? null : candidateUrl;
+    return inconclusive ? (game.imageUrl ?? null) : null;
   }
 
   private async applyCoverRefresh(game: GameDto, nextUrl: string | null, progress: CoverImageRefreshProgress): Promise<void> {
@@ -257,10 +261,10 @@ function coverStatusFromResponse(response: Response): CoverUrlStatus {
 }
 
 function regionPriority(region: string | null): number {
-  if (region?.startsWith("NTSC-U")) {
+  if (region?.startsWith("PAL")) {
     return 0;
   }
-  if (region?.startsWith("PAL")) {
+  if (region?.startsWith("NTSC-U")) {
     return 1;
   }
   if (region?.startsWith("NTSC-J")) {
