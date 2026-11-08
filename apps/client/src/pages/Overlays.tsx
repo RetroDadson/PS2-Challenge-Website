@@ -136,8 +136,10 @@ export function SubPicksOverlay() {
       {summary.error ? <OverlayMessage>Error loading sub picks</OverlayMessage> : null}
       {data ? (
         <div className="sub-picks-overlay-box">
-          <div className="sub-picks-overlay-heading"><Dices aria-hidden="true" />Sub Picks</div>
-          <p className="sub-picks-overlay-message">{data.overlayMessage}</p>
+          <div className="sub-picks-overlay-intro">
+            <div className="sub-picks-overlay-heading"><Dices aria-hidden="true" />Sub Picks</div>
+            <p className="sub-picks-overlay-message">{data.overlayMessage}</p>
+          </div>
           <div className="sub-picks-overlay-stats">
             <OverlayStat
               label={`Next ${data.schedule.nextDrawKind} draw`}
