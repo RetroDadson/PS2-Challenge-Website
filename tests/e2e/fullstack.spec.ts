@@ -20,6 +20,13 @@ test("public pages load seeded data through Fastify and Postgres", async ({ page
   await expect(page.getByText("Excluded", { exact: true }).first()).toBeVisible();
   await expect(page).toHaveScreenshot("games-seeded.png", { animations: "disabled", fullPage: false, maxDiffPixelRatio: 0.08 });
 
+  await expect(page.getByLabel("Hide Completed Games")).not.toBeChecked();
+  await expect(page.getByLabel("Amplitude. Alternate titles: Amplitude: Special Edition")).toBeVisible();
+  await page.getByLabel("Hide Completed Games").check();
+  await expect(page.getByLabel("Amplitude. Alternate titles: Amplitude: Special Edition")).toBeHidden();
+  await expect(page.getByText(/Showing 5 of 6 games/)).toBeVisible();
+  await page.getByLabel("Hide Completed Games").uncheck();
+
   await page.getByRole("button", { name: "Customise Columns" }).click();
   const columnDialog = page.getByRole("dialog", { name: "Customise Game Columns" });
   await columnDialog.getByLabel("Drag Status column").dragTo(columnDialog.getByLabel("Drag How Long To Beat Time column"));
