@@ -226,7 +226,7 @@ export async function buildApp(config: AppConfig, dependencies: AppDependencies 
   app.get("/wheelHub", { websocket: true }, (socket) => realtimeHub.register("wheel", socket));
 
   await registerHealthRoutes(app, () => dbClient.db.selectFrom("platform_types").select("platform").limit(1).executeTakeFirst());
-  await registerAuthRoutes(app, userRepository, config, eventSubAdminService);
+  registerAuthRoutes(app, userRepository, config, eventSubAdminService);
   await registerUserRoutes(app, userRepository, config);
   await registerAdminRoutes(app, userRepository, config, twitchStatsService, realtimeHub);
   await registerChallengeRunnerRoutes(

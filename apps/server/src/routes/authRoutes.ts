@@ -45,7 +45,7 @@ type TwitchUserResponse = {
   }>;
 };
 
-export async function registerAuthRoutes(
+export function registerAuthRoutes(
   app: FastifyInstance,
   userRepository: UserRepository,
   config: AppConfig,
