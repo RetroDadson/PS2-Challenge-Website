@@ -38,6 +38,7 @@ export function Games() {
   const [search, setSearch] = useState("");
   const [showOwnedOnly, setShowOwnedOnly] = useState(localStorage.getItem("showOwnedOnly") === "true");
   const [showExcludedGames, setShowExcludedGames] = useState(localStorage.getItem("showExcludedGames") === "true");
+  const [hideCompletedGames, setHideCompletedGames] = useState(localStorage.getItem("hideCompletedGames") === "true");
   const [sortColumn, setSortColumn] = useState<SortColumn>("Title");
   const [sortAscending, setSortAscending] = useState(true);
   const [editing, setEditing] = useState<GameDto | null | undefined>(undefined);
@@ -88,11 +89,12 @@ export function Games() {
     const visible = games.filter((game) => {
       if (showOwnedOnly && !game.isOwned) return false;
       if (!showExcludedGames && game.isExcluded) return false;
+      if (hideCompletedGames && getCompletionStatus(completionStatus, game.id) === "Completed") return false;
       if (!searchLower) return true;
       return matchesSearchIndex(searchIndex, game.id, searchLower);
     });
     return sortGames(visible, sortColumn, sortAscending, completionStatus);
-  }, [completionStatus, games, search, searchIndex, showExcludedGames, showOwnedOnly, sortAscending, sortColumn]);
+  }, [completionStatus, games, hideCompletedGames, search, searchIndex, showExcludedGames, showOwnedOnly, sortAscending, sortColumn]);
 
   const totalColumnCount = visibleColumns.length + (isAdmin ? 1 : 0);
   const { virtualRows, paddingTop, paddingBottom, measureElement } = useWindowRowVirtualizer<HTMLTableRowElement>({
@@ -175,6 +177,17 @@ export function Games() {
               }}
             />
             <span>Show Excluded Games</span>
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={hideCompletedGames}
+              onChange={(event) => {
+                setHideCompletedGames(event.target.checked);
+                localStorage.setItem("hideCompletedGames", String(event.target.checked));
+              }}
+            />
+            <span>Hide Completed Games</span>
           </label>
           <GameTableColumnSettings
             preferences={columnPreferences}

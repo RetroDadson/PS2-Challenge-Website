@@ -57,6 +57,29 @@ describe("Games page", () => {
     expect(within(rows[0]!).getByText("Game One")).toBeInTheDocument();
   });
 
+  it("shows completed games by default and hides them when Hide Completed Games is ticked", async () => {
+    mockFetch({
+      "GET /api/auth/user": { isAuthenticated: false },
+      "GET /api/games/page-data": gamesPageData()
+    });
+
+    const firstRender = render(<Games />);
+    expect(await screen.findByText("Game One")).toBeInTheDocument();
+    expect(screen.getByLabelText("Hide Completed Games")).not.toBeChecked();
+
+    fireEvent.click(screen.getByLabelText("Hide Completed Games"));
+    expect(localStorage.getItem("hideCompletedGames")).toBe("true");
+    expect(screen.queryByText("Game One")).not.toBeInTheDocument();
+    expect(screen.getByText("Game Three")).toBeInTheDocument();
+    expect(screen.getByText(/^Showing 1 of 3 games/)).toBeInTheDocument();
+
+    firstRender.unmount();
+    render(<Games />);
+    expect(await screen.findByText("Game Three")).toBeInTheDocument();
+    expect(screen.getByLabelText("Hide Completed Games")).toBeChecked();
+    expect(screen.queryByText("Game One")).not.toBeInTheDocument();
+  });
+
   it("shows add and edit actions only for admins", async () => {
     mockFetch({
       "GET /api/auth/user": { isAuthenticated: true, username: "AdminUser", role: "Admin" },
