@@ -186,6 +186,7 @@ export async function buildApp(config: AppConfig, dependencies: AppDependencies 
 
   const dbClient = dependencies.dbClient ?? createDbClient(config);
   const pool = dbClient.pool;
+  pool.on("error", (error) => app.log.warn({ err: error }, "The database closed an idle connection; the pool will open a new one when needed"));
   const realtimeHub = dependencies.realtimeHub ?? new RealtimeHub(app.log);
   realtimeHub.setLogger(app.log);
   const userRepository = new UserRepository(dbClient.db);

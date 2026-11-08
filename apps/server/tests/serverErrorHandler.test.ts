@@ -18,7 +18,7 @@ const config: AppConfig = {
 
 function stubDbClient() {
   return {
-    pool: { end: async () => undefined },
+    pool: { end: async () => undefined, on: () => undefined },
     db: {
       selectFrom: () => {
         throw new Error("connection to internal-db.example failed for user postgres");

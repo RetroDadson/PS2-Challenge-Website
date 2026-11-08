@@ -5,6 +5,7 @@ import { hashApiKey } from "../../src/repositories/userRepository.js";
 import { POSTGRES_TEST_IMAGE } from "./postgresImage.js";
 
 const { Pool } = pg;
+const adminShutdownCode = "57P01";
 
 export type IntegrationDatabase = {
   connectionString: string;
@@ -19,6 +20,9 @@ export async function startIntegrationDatabase(): Promise<IntegrationDatabase> {
   await migrateDatabase(connectionString);
 
   const pool = new Pool({ connectionString });
+  pool.on("error", (error: Error & { code?: string }) => {
+    if (error.code !== adminShutdownCode) throw error;
+  });
 
   return {
     connectionString,
