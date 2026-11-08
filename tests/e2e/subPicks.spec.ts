@@ -111,14 +111,17 @@ test("the wheel overlay shows when the next draw is between draws", async ({ pag
   await page.screenshot({ path: test.info().outputPath("wheel-overlay-next-draw.png") });
 });
 
-test("the sub picks overlay renders on a transparent background with live numbers", async ({ page }) => {
-  await page.setViewportSize({ width: 1100, height: 400 });
+test("the sub picks overlay fills a solid 1242 by 97 strip with live numbers", async ({ page }) => {
+  await page.setViewportSize({ width: 1242, height: 97 });
   await page.goto("/sub-picks-overlay");
   const overlay = page.getByTestId("sub-picks-overlay");
   await expect(overlay.getByText("Sub to add a game to the wheel. Every 10th game is picked by subs.")).toBeVisible();
   await expect(overlay.getByText("On the wheel")).toBeVisible();
   await expect(overlay).not.toHaveClass(/is-hidden/);
-  expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe("rgba(0, 0, 0, 0)");
+  const box = page.locator(".sub-picks-overlay-box");
+  expect(await box.boundingBox()).toEqual({ x: 0, y: 0, width: 1242, height: 97 });
+  expect(await box.evaluate((element) => getComputedStyle(element).backgroundColor)).toMatch(/^rgb\(/);
+  expect(await box.evaluate((element) => getComputedStyle(element).backgroundImage)).not.toContain("rgba");
   if (process.env.SUB_PICKS_OVERLAY_SCREENSHOT) {
     await page.screenshot({ path: process.env.SUB_PICKS_OVERLAY_SCREENSHOT, omitBackground: true });
   }

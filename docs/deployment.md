@@ -71,7 +71,7 @@ When the next game is a 10th or 100th game and subs have valid picks waiting, th
 Stream overlays for OBS (browser sources, transparent background):
 
 - `/wheel-overlay`: set the source to 1920x1080. It shows the wheel, the slice under the pointer and every game's entries while a draw is open, and the accepted result for 5 minutes afterwards. Between draws it shows a card with the next draw's game number, how many entries are on the wheel and the top pick.
-- `/sub-picks-overlay`: the explainer card. Build the link with timing options under Admin, Stream Overlays.
+- `/sub-picks-overlay`: set the source to 1242x97. It is a solid strip with the overlay message, the next draw, how many entries are on the wheel and the top pick. Build the link with timing options under Admin, Stream Overlays.
 
 Spin length is set on the Wheel tab (or Settings) and applies to the next spin.
 
