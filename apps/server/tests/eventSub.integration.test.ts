@@ -144,6 +144,51 @@ describe("Twitch EventSub webhook", () => {
     expect(audit[0]).toMatchObject({ actor: "Twitch", action: "grant.eventsub", targetType: "grant" });
   });
 
+  it("gives one renewal entries once when Twitch sends both the subscribe and the resub message", async () => {
+    const renewal = { user_id: "1001", user_login: "viewerone", user_name: "ViewerOne", tier: "1000" };
+    await send(notification("channel.subscribe", { ...renewal, is_gift: false }));
+    await send(notification("channel.subscription.message", { ...renewal, cumulative_months: 16 }));
+    await send(notification("channel.subscription.message", { user_id: "1002", user_login: "viewertwo", user_name: "ViewerTwo", tier: "1000", cumulative_months: 3 }));
+    await send(notification("channel.subscribe", { user_id: "1002", user_login: "viewertwo", user_name: "ViewerTwo", tier: "1000", is_gift: false }));
+
+    const created = await grants();
+    expect(created.map((grant: Record<string, unknown>) => [grant.twitchDisplayName, grant.grantType, grant.entryCount, grant.notes])).toEqual([
+      ["ViewerTwo", "resub", 1, "Resub, 3 months"],
+      ["ViewerOne", "resub", 1, "Resub, 16 months"]
+    ]);
+    const handled = await messages();
+    expect(handled.map((row) => [row.subscription_type, row.status, row.error])).toEqual([
+      ["channel.subscribe", "processed", null],
+      ["channel.subscription.message", "processed", "Same renewal as an earlier Twitch event, so no extra entries"],
+      ["channel.subscription.message", "processed", null],
+      ["channel.subscribe", "processed", "Same renewal as an earlier Twitch event, so no extra entries"]
+    ]);
+    expect(handled[0].grant_id).toBe(handled[1].grant_id);
+    expect(handled[2].grant_id).toBe(handled[3].grant_id);
+    expect((await db.pool.query("SELECT count(*)::int AS count FROM sub_entries")).rows[0].count).toBe(2);
+    expect(realtimeHub.subPickUpdates).toBe(4);
+  });
+
+  it("gives entries again for a later renewal and for events outside the pairing window", async () => {
+    const renewal = { user_id: "1001", user_login: "viewerone", user_name: "ViewerOne", tier: "1000" };
+    await send(notification("channel.subscribe", { ...renewal, is_gift: false }));
+    await send(notification("channel.subscription.message", { ...renewal, cumulative_months: 16 }));
+    await send(notification("channel.subscribe", { ...renewal, is_gift: false }));
+    await db.pool.query("UPDATE sub_entry_grants SET created_at = created_at - interval '32 days'");
+    await send(notification("channel.subscription.message", { ...renewal, cumulative_months: 17 }));
+    await db.pool.query("UPDATE sub_entry_grants SET created_at = created_at - interval '2 hours'");
+    await send(notification("channel.subscribe", { ...renewal, is_gift: false }));
+
+    const created = await grants();
+    expect(created.map((grant: Record<string, unknown>) => [grant.grantType, grant.notes])).toEqual([
+      ["new", null],
+      ["resub", "Resub, 17 months"],
+      ["new", null],
+      ["resub", "Resub, 16 months"]
+    ]);
+    expect((await messages()).filter((row) => row.error !== null)).toHaveLength(1);
+  });
+
   it("ignores repeated deliveries of the same message", async () => {
     const event = notification("channel.subscribe", { user_id: "1001", user_login: "viewerone", user_name: "ViewerOne", tier: "1000", is_gift: false });
     expect((await send(event, { messageId: "repeat-me" })).statusCode).toBe(204);
