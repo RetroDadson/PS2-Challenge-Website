@@ -53,7 +53,7 @@ https://<host>/api/auth/callback
 
 The webhook is `POST https://<host>/api/eventsub/webhook`. Twitch only delivers to HTTPS on port 443, so it can't reach a local machine; use the Twitch CLI locally (see the development guide).
 
-Every message is checked with Twitch's HMAC-SHA256 signature, using a webhook secret the app works out from `TWITCH_CLIENT_SECRET` (there's no separate setting), and anything older than 10 minutes is rejected. Repeated deliveries are ignored by message ID. New subs, resubs shared in chat and gifted subs create entries; gift recipients don't, and anonymous gifts wait in the admin review queue.
+Every message is checked with Twitch's HMAC-SHA256 signature, using a webhook secret the app works out from `TWITCH_CLIENT_SECRET` (there's no separate setting), and anything older than 10 minutes is rejected. Repeated deliveries are ignored by message ID. New subs, resubs shared in chat and gifted subs create entries; gift recipients don't, and anonymous gifts wait in the admin review queue. Twitch often sends a renewal twice, once as a subscribe and again as a resub message when the viewer shares it in chat, so a resub message from the same viewer within 31 days of their subscribe (or a subscribe within an hour of a resub message) is linked to the first event's entries instead of adding more.
 
 One-off setup, from Admin, Sub Picks, Twitch:
 

@@ -1,14 +1,24 @@
 import { subTierSchema, type AssignEventSubReviewRequest, type EventSubReviewItemDto, type EventSubReviewResultDto } from "@ps2-challenge/shared";
-import type { Kysely, Transaction } from "kysely";
+import { sql, type Kysely, type Transaction } from "kysely";
 import type { Database, EventSubMessageStatus } from "../db/kysely.js";
 import type { EventSubGrantInput, SubPickService } from "./subPickService.js";
 
 export const eventSubSubscriptionTypes = ["channel.subscribe", "channel.subscription.message", "channel.subscription.gift"] as const;
 
+type EventSubSubscriptionType = (typeof eventSubSubscriptionTypes)[number];
+
+const renewalLockKey = 72_001;
+
+const renewalPartners: Partial<Record<string, { partner: EventSubSubscriptionType; window: string }>> = {
+  "channel.subscription.message": { partner: "channel.subscribe", window: "31 days" },
+  "channel.subscribe": { partner: "channel.subscription.message", window: "1 hour" }
+};
+
 export type EventSubOutcome = Extract<EventSubMessageStatus, "processed" | "ignored" | "failed" | "needs_review"> | "duplicate";
 
 export type EventSubDecision =
   | { kind: "grant"; grant: EventSubGrantInput }
+  | { kind: "renewal"; grantId: number; reason: string }
   | { kind: "ignored"; reason: string }
   | { kind: "review"; reason: string };
 
@@ -42,8 +52,8 @@ export class EventSubService {
     }
     try {
       return await this.db.transaction().execute(async (transaction) => {
-        const decision = decideEventSubNotification(subscriptionType, event);
-        const grantId = decision.kind === "grant" ? await this.subPicks.createEventSubGrant(transaction, decision.grant) : null;
+        const decision = await this.matchRenewal(transaction, subscriptionType, decideEventSubNotification(subscriptionType, event));
+        const grantId = await this.grantFor(transaction, decision);
         const status = outcomeStatus(decision);
         await transaction
           .insertInto("eventsub_messages")
@@ -53,7 +63,7 @@ export class EventSubService {
             subscription_type: subscriptionType,
             status,
             payload: status === "needs_review" ? event : null,
-            error: decision.kind === "grant" ? null : decision.reason,
+            error: decisionError(decision),
             grant_id: grantId
           })
           .execute();
@@ -156,18 +166,49 @@ export class EventSubService {
       }
       let decision: EventSubDecision;
       try {
-        decision = decideEventSubNotification(row.subscription_type, row.payload ?? {});
+        decision = await this.matchRenewal(transaction, row.subscription_type, decideEventSubNotification(row.subscription_type, row.payload ?? {}));
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         await transaction.updateTable("eventsub_messages").set({ error: message }).where("message_id", "=", messageId).execute();
         return { messageId, status: "failed", grantId: null, error: message };
       }
-      const grantId = decision.kind === "grant" ? await this.subPicks.createEventSubGrant(transaction, decision.grant) : null;
+      const grantId = await this.grantFor(transaction, decision);
       const status = outcomeStatus(decision);
-      const error = decision.kind === "grant" ? null : decision.reason;
+      const error = decisionError(decision);
       await this.resolve(transaction, actor, messageId, { status, grant_id: grantId, error, keepPayload: status === "needs_review" }, "eventsub.review.retry", { status, grantId });
       return { messageId, status, grantId, error };
     });
+  }
+
+  private grantFor(transaction: Transaction<Database>, decision: EventSubDecision): Promise<number | null> {
+    if (decision.kind === "grant") return this.subPicks.createEventSubGrant(transaction, decision.grant);
+    return Promise.resolve(decision.kind === "renewal" ? decision.grantId : null);
+  }
+
+  private async matchRenewal(transaction: Transaction<Database>, subscriptionType: string, decision: EventSubDecision): Promise<EventSubDecision> {
+    const pairing = renewalPartners[subscriptionType];
+    if (!pairing || decision.kind !== "grant") return decision;
+    const { twitchUserId, notes } = decision.grant;
+    await transaction.selectNoFrom((eb) => eb.fn("pg_advisory_xact_lock", [eb.val(renewalLockKey), eb.fn("hashtext", [eb.val(twitchUserId)])]).as("locked")).execute();
+    const match = await transaction
+      .selectFrom("sub_entry_grants as grant")
+      .innerJoin("eventsub_messages as message", "message.grant_id", "grant.grant_id")
+      .select("grant.grant_id")
+      .where("grant.twitch_user_id", "=", twitchUserId)
+      .where("grant.source", "=", "eventsub")
+      .where("message.subscription_type", "=", pairing.partner)
+      .where("grant.created_at", ">=", sql<Date>`now() - ${pairing.window}::interval`)
+      .where(({ not, exists, selectFrom }) =>
+        not(exists(selectFrom("eventsub_messages as other").select("other.message_id").whereRef("other.grant_id", "=", "grant.grant_id").whereRef("other.message_id", "<>", "message.message_id")))
+      )
+      .orderBy("grant.created_at", "desc")
+      .limit(1)
+      .executeTakeFirst();
+    if (!match) return decision;
+    if (decision.grant.grantType === "resub") {
+      await transaction.updateTable("sub_entry_grants").set({ grant_type: "resub", notes: notes ?? null, updated_at: new Date() }).where("grant_id", "=", match.grant_id).execute();
+    }
+    return { kind: "renewal", grantId: match.grant_id, reason: "Same renewal as an earlier Twitch event, so no extra entries" };
   }
 
   private async lockReviewItem(transaction: Transaction<Database>, messageId: string) {
@@ -215,7 +256,7 @@ export class EventSubService {
   }
 }
 
-const decisions: Record<(typeof eventSubSubscriptionTypes)[number], (event: EventPayload) => EventSubDecision> = {
+const decisions: Record<EventSubSubscriptionType, (event: EventPayload) => EventSubDecision> = {
   "channel.subscribe": decideNewSub,
   "channel.subscription.message": decideResub,
   "channel.subscription.gift": decideGift
@@ -267,8 +308,12 @@ function tier(event: EventPayload): EventSubGrantInput["tier"] {
   return parsed.data;
 }
 
+function decisionError(decision: EventSubDecision): string | null {
+  return decision.kind === "grant" ? null : decision.reason;
+}
+
 function outcomeStatus(decision: EventSubDecision): Exclude<EventSubOutcome, "duplicate" | "failed"> {
-  if (decision.kind === "grant") return "processed";
+  if (decision.kind === "grant" || decision.kind === "renewal") return "processed";
   return decision.kind === "review" ? "needs_review" : "ignored";
 }
 
