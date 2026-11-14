@@ -127,6 +127,7 @@ To take a new Azure Monitor release, update `@azure/monitor-opentelemetry` and i
 `.trivyignore` lists vulnerabilities that CI's Trivy scan skips. Each entry needs a reason here and an `exp:` date so it is re-checked:
 
 - `CVE-2026-109461` (`@azure/msal-node` 6.0.1, expires 2026-12-23): the package arrives via `@azure/monitor-opentelemetry` → `@azure/identity` 4.14.0. The fix is only in msal-node 7.1.0, and no `@azure/identity` release supports msal-node 7 yet. The vulnerable MSAL authorization-code flow is never used: telemetry authenticates with a connection string, not an Entra ID credential. Remove the entry once `@azure/identity` depends on msal-node 7.1.0 or later.
+- `CVE-2026-128080` (`@opentelemetry/instrumentation-http` 0.221.0, expires 2026-11-28): incoming request spans record the raw query string, so the `code` and `state` from the Twitch login callback reach Application Insights. The code is single-use and exchanged straight away, which keeps the exposure small. The fix is in 0.222.0, but `@azure/monitor-opentelemetry` 1.21.0 only accepts 0.221.x, and the 2.0.0 release that moves to the unaffected OpenTelemetry 3.x line is merged upstream but not yet published. Remove the entry when upgrading to `@azure/monitor-opentelemetry` 2.0.0.
 
 ## Documentation
 
