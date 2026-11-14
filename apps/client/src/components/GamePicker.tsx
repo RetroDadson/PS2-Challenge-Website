@@ -22,6 +22,7 @@ export function GamePicker({
     const needle = query.trim().toLocaleLowerCase("en-GB");
     return needle ? games.filter((game) => game.title.toLocaleLowerCase("en-GB").includes(needle)) : games;
   }, [games, query]);
+  const choice = matches.some((game) => game.id === selected) ? selected : null;
 
   return (
     <div className="game-picker">
@@ -34,16 +35,17 @@ export function GamePicker({
       <select
         id={`${id}-game`}
         size={Math.min(8, Math.max(2, matches.length))}
-        value={selected ?? ""}
+        value={choice ?? ""}
         onChange={(event) => setSelected(event.target.value ? Number(event.target.value) : null)}
       >
+        <option value="" hidden disabled />
         {matches.map((game) => (
           <option key={game.id} value={game.id}>{game.title}</option>
         ))}
       </select>
       {matches.length === 0 ? <p className="muted">No games match that search.</p> : null}
       <div className="game-picker-actions">
-        <button type="button" disabled={busy || selected === null} onClick={() => onSave(selected)}>Save Pick</button>
+        <button type="button" disabled={busy || choice === null} onClick={() => onSave(choice)}>Save Pick</button>
         {currentGameId === null ? null : (
           <button type="button" className="secondary" disabled={busy} onClick={() => onSave(null)}>Clear Pick</button>
         )}
