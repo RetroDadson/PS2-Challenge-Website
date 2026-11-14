@@ -29,4 +29,29 @@ describe("GamePicker", () => {
     expect(screen.getAllByRole("option")).toHaveLength(100);
     expect(screen.getByRole("option", { name: "Game 1499" })).toBeInTheDocument();
   });
+
+  it("does not show a lone search match as selected before it is chosen", () => {
+    const onSave = vi.fn();
+    render(<GamePicker games={games} currentGameId={null} busy={false} onSave={onSave} onCancel={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText("Search games"), { target: { value: "game 0042" } });
+
+    const option = screen.getByRole<HTMLOptionElement>("option", { name: "Game 0042" });
+    expect(option.selected).toBe(false);
+    expect(screen.getByRole("button", { name: "Save Pick" })).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText("Game"), { target: { value: "42" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save Pick" }));
+
+    expect(onSave).toHaveBeenCalledWith(42);
+  });
+
+  it("does not save a choice that the search has filtered out", () => {
+    render(<GamePicker games={games} currentGameId={null} busy={false} onSave={vi.fn()} onCancel={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText("Game"), { target: { value: "7" } });
+    fireEvent.change(screen.getByLabelText("Search games"), { target: { value: "game 0042" } });
+
+    expect(screen.getByRole("button", { name: "Save Pick" })).toBeDisabled();
+  });
 });
