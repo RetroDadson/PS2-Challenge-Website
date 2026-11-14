@@ -47,7 +47,7 @@
     "vitest": "^5.0.0"
   },
   "dependencies": {
-    "@azure/monitor-opentelemetry": "1.20.1",
+    "@azure/monitor-opentelemetry": "1.21.0",
     "@fastify/compress": "^9.2.0",
     "@fastify/cookie": "^11.0.2",
     "@fastify/formbody": "^9.0.0",
@@ -109,6 +109,6 @@
     "@opentelemetry/sql-common": "0.42.0",
     "@opentelemetry/winston-transport": "0.31.0",
     "protobufjs": "8.8.1",
-    "ws": "8.22.1"
+    "ws": "8.22.2"
   }
 }
