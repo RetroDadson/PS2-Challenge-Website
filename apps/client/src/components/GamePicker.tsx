@@ -34,7 +34,7 @@ export function GamePicker({
       <label className="visually-hidden" htmlFor={`${id}-game`}>Game</label>
       <select
         id={`${id}-game`}
-        size={Math.min(8, Math.max(2, matches.length))}
+        size={8}
         value={choice ?? ""}
         onChange={(event) => setSelected(event.target.value ? Number(event.target.value) : null)}
       >
