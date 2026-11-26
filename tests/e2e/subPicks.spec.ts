@@ -12,7 +12,7 @@ test.describe.configure({ mode: "serial" });
 test("anonymous visitors see the pools but must log in to pick", async ({ page }) => {
   await page.goto("/sub-picks");
   await expect(page.getByRole("heading", { name: "Sub Picks" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Sub Picks" })).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("link", { name: "All Picks" })).toHaveAttribute("aria-current", "page");
   await expect(page.getByText(/Tier 1 and Prime: 1 entry/)).toBeVisible();
 
   const stats = page.getByRole("region", { name: "Stats" });
