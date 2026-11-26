@@ -12,6 +12,15 @@ export function Layout() {
   const navigationReady = !user.loading;
   const closeSidebar = () => setSidebarOpen(false);
 
+  // Added SubPicks sub-menu for easier access to "My Picks" which
+  // was previously buried in the sub picks page, and not easily findable.
+  const onSubPicks = location.pathname.startsWith("/sub-picks");
+  const [subPicksOpen, setSubPicksOpen] = useState(onSubPicks);
+
+  useEffect(() => {
+    if (onSubPicks) setSubPicksOpen(true);
+  }, [onSubPicks]);
+
   useEffect(() => {
     setSidebarOpen(false);
   }, [location.pathname]);
@@ -41,8 +50,17 @@ export function Layout() {
           <NavLink to="/progress" onClick={closeSidebar}><Trophy aria-hidden />Progress</NavLink>
           <NavLink to="/statistics" onClick={closeSidebar}><LineChart aria-hidden />Statistics</NavLink>
           <NavLink to="/votes" onClick={closeSidebar}><Vote aria-hidden />Votes</NavLink>
-          <NavLink to="/sub-picks" onClick={closeSidebar}><Dices aria-hidden />Sub Picks</NavLink>
-          <NavLink to="/runners" onClick={closeSidebar}><Users aria-hidden />Challenge Runners</NavLink>
+          <details
+            className="sidebar-social-menu sidebar-subpicks-menu"
+            open={subPicksOpen}
+            onToggle={(event) => setSubPicksOpen(event.currentTarget.open)}
+          >
+            <summary className={onSubPicks ? "active" : undefined}><Dices aria-hidden />Sub Picks</summary>
+            <div className="sidebar-social-links">
+              <NavLink to="/sub-picks" end onClick={closeSidebar}>All Picks</NavLink>
+              {isAuthenticated ? <NavLink to="/sub-picks/mine" onClick={closeSidebar}>My Picks</NavLink> : null}
+            </div>
+          </details>          <NavLink to="/runners" onClick={closeSidebar}><Users aria-hidden />Challenge Runners</NavLink>
           {isAuthenticated ? <NavLink to="/user" onClick={closeSidebar}><User aria-hidden />Profile</NavLink> : <NavLink to="/login" onClick={closeSidebar}><LogIn aria-hidden />Login</NavLink>}
           {isAdmin ? <NavLink to="/admin" onClick={closeSidebar}><Shield aria-hidden />Admin</NavLink> : null}
           <details className="sidebar-social-menu">
